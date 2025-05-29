@@ -455,15 +455,63 @@ export async function registerRoutes(app: Express): Promise<HttpServer> {
   });
   app.post('/api/copies/generate', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
-      const { product, audience, objective, tone, platform } = req.body;
-      if (!product || !audience || !objective || !tone || !platform) return res.status(400).json({ error: "Campos obrigatórios ausentes." });
-      const generatedCopies = [
-        { type: 'headline', content: `[${platform.toUpperCase()}] Descubra ${product} para ${audience} focados em ${objective}! Estilo: ${tone}.`, platform },
-        { type: 'body', content: `Cansado de não atingir ${objective}? Com ${product}, ${audience} podem finalmente... Tom: ${tone}.`, platform },
-        { type: 'cta', content: `Compre ${product} Agora e veja a mágica acontecer para ${audience}!`, platform },
+      const { product, audience, objective, tone } = req.body;
+      if (!product || !audience || !objective || !tone) {
+        return res.status(400).json({ error: "Campos obrigatórios ausentes." });
+      }
+
+      if (!genAI) {
+        return res.status(500).json({ error: "Serviço de IA não disponível." });
+      }
+
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+      
+      const prompts = [
+        {
+          type: 'headline',
+          platform: 'Facebook',
+          prompt: `Crie um headline persuasivo para Facebook sobre "${product}" direcionado para "${audience}" com objetivo de "${objective}" em tom "${tone}". Máximo 60 caracteres. Seja direto e impactante.`
+        },
+        {
+          type: 'cta',
+          platform: 'Google',
+          prompt: `Crie um call-to-action (CTA) convincente para Google Ads sobre "${product}" direcionado para "${audience}" com objetivo de "${objective}" em tom "${tone}". Máximo 30 palavras.`
+        },
+        {
+          type: 'description',
+          platform: 'Instagram',
+          prompt: `Crie uma descrição persuasiva para Instagram sobre "${product}" direcionado para "${audience}" com objetivo de "${objective}" em tom "${tone}". Máximo 125 caracteres.`
+        }
       ];
+
+      const generatedCopies = [];
+      
+      for (const promptData of prompts) {
+        try {
+          const result = await model.generateContent(promptData.prompt);
+          const content = result.response.text().trim();
+          
+          generatedCopies.push({
+            type: promptData.type,
+            content: content,
+            platform: promptData.platform
+          });
+        } catch (error) {
+          console.error(`[GEMINI] Erro ao gerar ${promptData.type}:`, error);
+          // Fallback para conteúdo padrão em caso de erro
+          generatedCopies.push({
+            type: promptData.type,
+            content: `${promptData.type === 'headline' ? '🚀' : promptData.type === 'cta' ? 'Clique aqui e descubra como' : 'Solução perfeita para'} ${audience} ${promptData.type === 'headline' ? 'com nossa solução inovadora para' : promptData.type === 'cta' ? 'estão revolucionando seus resultados com' : 'que buscam'} ${objective.toLowerCase()}${promptData.type === 'headline' ? '!' : promptData.type === 'cta' ? '!' : '. Com nosso'} ${promptData.type !== 'headline' ? product + (promptData.type === 'description' ? ', você alcança resultados extraordinários em tempo recorde.' : '!') : product + '!'}`,
+            platform: promptData.platform
+          });
+        }
+      }
+
       res.json(generatedCopies);
-    } catch (error) { next(error); }
+    } catch (error) { 
+      console.error('[COPIES] Erro na geração:', error);
+      next(error); 
+    }
   });
 
   app.get('/api/alerts', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {

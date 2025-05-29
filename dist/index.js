@@ -1265,15 +1265,53 @@ async function registerRoutes(app2) {
   });
   app2.post("/api/copies/generate", authenticateToken, async (req, res, next) => {
     try {
-      const { product, audience, objective, tone, platform } = req.body;
-      if (!product || !audience || !objective || !tone || !platform) return res.status(400).json({ error: "Campos obrigat\xF3rios ausentes." });
-      const generatedCopies = [
-        { type: "headline", content: `[${platform.toUpperCase()}] Descubra ${product} para ${audience} focados em ${objective}! Estilo: ${tone}.`, platform },
-        { type: "body", content: `Cansado de n\xE3o atingir ${objective}? Com ${product}, ${audience} podem finalmente... Tom: ${tone}.`, platform },
-        { type: "cta", content: `Compre ${product} Agora e veja a m\xE1gica acontecer para ${audience}!`, platform }
+      const { product, audience, objective, tone } = req.body;
+      if (!product || !audience || !objective || !tone) {
+        return res.status(400).json({ error: "Campos obrigat\xF3rios ausentes." });
+      }
+      if (!genAI) {
+        return res.status(500).json({ error: "Servi\xE7o de IA n\xE3o dispon\xEDvel." });
+      }
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+      const prompts = [
+        {
+          type: "headline",
+          platform: "Facebook",
+          prompt: `Crie um headline persuasivo para Facebook sobre "${product}" direcionado para "${audience}" com objetivo de "${objective}" em tom "${tone}". M\xE1ximo 60 caracteres. Seja direto e impactante.`
+        },
+        {
+          type: "cta",
+          platform: "Google",
+          prompt: `Crie um call-to-action (CTA) convincente para Google Ads sobre "${product}" direcionado para "${audience}" com objetivo de "${objective}" em tom "${tone}". M\xE1ximo 30 palavras.`
+        },
+        {
+          type: "description",
+          platform: "Instagram",
+          prompt: `Crie uma descri\xE7\xE3o persuasiva para Instagram sobre "${product}" direcionado para "${audience}" com objetivo de "${objective}" em tom "${tone}". M\xE1ximo 125 caracteres.`
+        }
       ];
+      const generatedCopies = [];
+      for (const promptData of prompts) {
+        try {
+          const result = await model.generateContent(promptData.prompt);
+          const content = result.response.text().trim();
+          generatedCopies.push({
+            type: promptData.type,
+            content,
+            platform: promptData.platform
+          });
+        } catch (error) {
+          console.error(`[GEMINI] Erro ao gerar ${promptData.type}:`, error);
+          generatedCopies.push({
+            type: promptData.type,
+            content: `${promptData.type === "headline" ? "\u{1F680}" : promptData.type === "cta" ? "Clique aqui e descubra como" : "Solu\xE7\xE3o perfeita para"} ${audience} ${promptData.type === "headline" ? "com nossa solu\xE7\xE3o inovadora para" : promptData.type === "cta" ? "est\xE3o revolucionando seus resultados com" : "que buscam"} ${objective.toLowerCase()}${promptData.type === "headline" ? "!" : promptData.type === "cta" ? "!" : ". Com nosso"} ${promptData.type !== "headline" ? product + (promptData.type === "description" ? ", voc\xEA alcan\xE7a resultados extraordin\xE1rios em tempo recorde." : "!") : product + "!"}`,
+            platform: promptData.platform
+          });
+        }
+      }
       res.json(generatedCopies);
     } catch (error) {
+      console.error("[COPIES] Erro na gera\xE7\xE3o:", error);
       next(error);
     }
   });
