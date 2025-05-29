@@ -9,12 +9,10 @@ export default defineConfig({
   out: "./migrations",
   schema: "./shared/schema.ts",
   dialect: "postgresql",
-  // Change driver back to "pg"
-  driver: "pg",
+  // REMOVE the driver line entirely
+  // driver: "pg", // <--- Remove this line
   dbCredentials: {
-    // Change 'url' back to 'connectionString'
     connectionString: process.env.DATABASE_URL!,
-    // Set ssl to rejectUnauthorized: false
     ssl: { rejectUnauthorized: false }
   },
   verbose: true,
