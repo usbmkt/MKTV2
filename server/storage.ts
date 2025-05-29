@@ -150,7 +150,7 @@ export interface IStorage {
   deleteCreative(id: number, userId: number): Promise<boolean>;
 
   getMetricsForCampaign(campaignId: number, userId: number): Promise<Metric[]>;
-  createMetric(metric: InsertMetric): Promise<Metric>;
+  createMetric(metricData: InsertMetric): Promise<Metric>;
 
   getMessages(userId: number, contactNumber?: string): Promise<WhatsappMessage[]>;
   createMessage(messageData: InsertWhatsappMessage): Promise<WhatsappMessage>;
@@ -186,7 +186,8 @@ export interface IStorage {
   addChatMessage(messageData: InsertChatMessage): Promise<ChatMessage>;
   getChatMessages(sessionId: number, userId: number): Promise<ChatMessage[]>;
 
-  getDashboardData(userId: number, timeRange: string = '30d'): Promise<any>; // Definir o tipo de retorno mais detalhado no frontend
+  // CORREÇÃO: REMOVEMOS o valor padrão da interface
+  getDashboardData(userId: number, timeRange: string): Promise<any>; // <--- CORRIGIDO AQUI
 }
 
 export class DatabaseStorage implements IStorage {
@@ -525,7 +526,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   // --- Funções para o Dashboard ---
-  async getDashboardData(userId: number, timeRange: string) {
+  // AQUI na IMPLEMENTAÇÃO da classe, o valor padrão PODE ficar
+  async getDashboardData(userId: number, timeRange: string = '30d') {
     // Lógica para calcular o intervalo de tempo com base em timeRange
     const now = new Date();
     let startDate = new Date();
@@ -551,6 +553,7 @@ export class DatabaseStorage implements IStorage {
     const activeCampaigns = activeCampaignsResult[0]?.count || 0;
 
     // CORREÇÃO AQUI: CAST da coluna spentAmount para DECIMAL antes de somar
+    // Este CAST resolve o erro "function sum(text) does not exist"
     const totalSpentResult = await db.select({
         total: sum(sql<number>`CAST(${budgets.spentAmount} AS DECIMAL)`)
     })
@@ -561,6 +564,7 @@ export class DatabaseStorage implements IStorage {
     const totalSpent = parseFloat(totalSpentResult[0]?.total || '0') || 0;
 
     // As somas em 'metrics' devem funcionar se as colunas forem INTEGER/DECIMAL no schema
+    // Aplicamos filtro de tempo a estas consultas
     const totalConversionsResult = await db.select({ total: sum(metrics.conversions) })
       .from(metrics)
       .where(metricsTimeCondition); // Aplicar filtro de tempo
@@ -590,15 +594,15 @@ export class DatabaseStorage implements IStorage {
     const clicks = parseFloat(totalClicksResult[0]?.total || '0') || 0;
 
     const ctr = clicks > 0 && impressions > 0 ? parseFloat(((clicks / impressions) * 100).toFixed(2)) : 0;
-    // CPC deve usar o totalSpent do período correspondente às métricas (cost)
-    // Se totalSpent acima for o total histórico, o CPC pode não ser preciso para o período.
-    // Idealmente, o CPC do período usaria o totalCost do período.
+    // CPC deve usar o totalCost do período correspondente às métricas (cost)
     const cpc = clicks > 0 && totalCost > 0 ? parseFloat((totalCost / clicks).toFixed(2)) : 0;
 
 
     const metricsData = {
       activeCampaigns: activeCampaigns,
-      totalSpent: totalSpent, // Este é o total histórico ou total no período? A query atual é histórica.
+      totalSpent: totalSpent, // Este é o total histórico de spentAmount em todos os orçamentos.
+                               // Se 'totalSpent' no dashboard deve ser o gasto NO PERÍODO,
+                               // você deve usar 'totalCost' (que já é do período) ou ajustar a query de budgets.
       conversions: conversions, // Estas são do período
       avgROI: avgROI, // Este é do período
       impressions: impressions, // Estas são do período
@@ -607,16 +611,8 @@ export class DatabaseStorage implements IStorage {
       cpc: cpc // Este é do período (usando totalCost do período)
     };
 
-    // TODO: Ajustar a query de totalSpent para filtrar pelo timeRange se necessário
-    // Se 'totalSpent' no dashboard deve ser o gasto NO PERÍODO, a query precisa ser modificada.
-    // O schema 'budgets' não tem uma coluna de data diária ou de registro de gasto pontual,
-    // então somar 'spentAmount' da tabela 'budgets' parece somar o campo 'spentAmount' de todos os registros de orçamento do usuário,
-    // o que pode não ser o total gasto no período.
-    // Você precisará revisar como 'spentAmount' em 'budgets' é usado e se 'metrics.cost'
-    // representa o gasto diário real para o dashboard.
-    // Se 'metrics.cost' é o gasto diário, então o 'totalCost' calculado acima JÁ É o gasto no período.
-    // Nesse caso, talvez 'totalSpent' no dashboard devesse ser renomeado para 'totalCostInPeriod'
-    // e a query de 'budgets.spentAmount' pode ser desnecessária para este KPI.
+    // TODO: Revisar se 'totalSpent' no dashboard deve ser o total histórico de budgets.spentAmount
+    // ou o 'totalCost' do período. Se for o custo do período, basta renomear 'totalCost' no metricsData.
 
 
     // 2. Tendências (simuladas, pois histórico real é complexo de gerar sem dados)
@@ -641,35 +637,25 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(campaigns.createdAt))
       .limit(3);
 
+    // CORREÇÃO: Converter 'budget' e 'dailyBudget' (TEXT/VARCHAR) para Number
+    // Nota: O CAST aqui é na conversão da STRING para NUMBER no JS, não na query SQL.
+    // Se precisar SOMAR budget/dailyBudget em SQL, precisará do CAST SQL lá.
     const recentCampaigns = recentCampaignsRaw.map(c => ({
       id: c.id,
       name: c.name,
       description: c.description || 'Nenhuma descrição',
       status: c.status,
       platforms: c.platforms || [], // Já é JSONB, então deve ser array
-      // CORREÇÃO AQUI: Converter 'budget' e 'dailyBudget' (TEXT) para Number usando CAST
-      budget: parseFloat(c.budget ? sql<number>`CAST(${campaigns.budget} AS DECIMAL)` : '0') || 0, // CAST no Drizzle
-      spent: parseFloat(c.dailyBudget ? sql<number>`CAST(${campaigns.dailyBudget} AS DECIMAL)` : '0') || 0, // CAST no Drizzle (usando dailyBudget como "spent" para o mock)
+      // Converter a string do banco para número em JS
+      budget: parseFloat(c.budget || '0') || 0,
+      spent: parseFloat(c.dailyBudget || '0') || 0, // Usando dailyBudget como "spent" para o mock
       performance: Math.floor(Math.random() * (95 - 60 + 1)) + 60 // Performance aleatória entre 60-95%
     }));
 
-     // CORREÇÃO: As conversões de budget/dailyBudget acima no map podem estar erradas.
-     // O CAST deve ser feito na QUERY Drizzle, não no map após buscar.
-     // Se você precisar somar budget/dailyBudget agregadamente em outra parte,
-     // precisará de CAST lá também. No map, basta parseFloat no valor retornado,
-     // que já virá como string do banco mesmo sendo DECIMAL/NUMERIC.
-     // Exemplo correto no map (assumindo que a query de recentCampaigns buscou as colunas budget e dailyBudget):
-     // budget: parseFloat(c.budget || '0') || 0,
-     // spent: parseFloat(c.dailyBudget || '0') || 0, // Usando dailyBudget como "spent" para o mock
-
-    // Se o erro `function sum(text) does not exist` persistir,
-    // VERIFIQUE se a coluna 'budget' ou 'dailyBudget' da tabela 'campaigns'
-    // está sendo usada em ALGUMA OUTRA SOMA agregada na função getDashboardData
-    // que eu não identifiquei. A consulta 'recentCampaignsRaw' apenas SELECIONA essas colunas,
-    // não as SOMA. O erro veio de uma função SUM().
 
     // 4. Dados para os Gráficos (ainda simulados, mas a partir do backend)
     // Estes dados são simulados e não vêm do banco, então não causam o erro de soma.
+    // Eles usam o timeRange apenas para definir a quantidade de pontos (7 ou 30).
     const timeSeriesData = generateSimulatedLineChartData('Desempenho Geral', 1000, timeRange === '30d' ? 30 : 7, 50, chartColors.palette[0]);
     const channelPerformanceData = generateSimulatedDoughnutChartData(['Meta Ads', 'Google Ads', 'LinkedIn', 'TikTok'], 20, 10, chartColors.palette);
     const conversionData = generateSimulatedLineChartData('Conversões', 200, timeRange === '30d' ? 30 : 7, 30, chartColors.palette[1]);
