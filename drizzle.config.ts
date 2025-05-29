@@ -9,10 +9,11 @@ export default defineConfig({
   out: "./migrations",
   schema: "./shared/schema.ts",
   dialect: "postgresql",
-  // Change 'driver: "pg"' to 'driver: "pglite"'
+  // Keep driver: "pglite" for now, as the previous error demanded it
   driver: "pglite",
   dbCredentials: {
-    connectionString: process.env.DATABASE_URL!,
+    // Change 'connectionString' back to 'url'
+    url: process.env.DATABASE_URL!,
     ssl: true
   },
   verbose: true,
