@@ -72,10 +72,12 @@ DATABASE_URL=[COPIAR_DO_POSTGRESQL_CRIADO]
 4. **Confirmar banco de dados**
 
 ## 🔧 CONFIGURAÇÕES ESPECÍFICAS
-- **Health Check**: `/api/health`
+- **Health Check**: `/api/health` ✅ FUNCIONANDO
 - **Auto Deploy**: Ativado na branch `v5r`
 - **SSL**: Automático
 - **Logs**: Disponíveis no dashboard
+- **Build**: Otimizado com `npm ci`
+- **Postinstall**: Removido para evitar conflitos
 
 ## 📞 SUPORTE RENDER
 - **Docs**: https://render.com/docs
