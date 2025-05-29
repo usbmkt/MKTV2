@@ -1,5 +1,5 @@
 {
-  "id": "32187adf-928c-4c1b-bfc0-8488f07109f5",
+  "id": "3fb38a96-3398-44e8-bcff-7c0909a2769d",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -118,13 +118,13 @@
         },
         "total_budget": {
           "name": "total_budget",
-          "type": "numeric(10, 2)",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         },
         "spent_amount": {
           "name": "spent_amount",
-          "type": "numeric(10, 2)",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
           "default": "'0'"
@@ -242,13 +242,13 @@
         },
         "budget": {
           "name": "budget",
-          "type": "numeric(10, 2)",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
         "daily_budget": {
           "name": "daily_budget",
-          "type": "numeric(10, 2)",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
@@ -278,7 +278,7 @@
         },
         "avg_ticket": {
           "name": "avg_ticket",
-          "type": "numeric(10, 2)",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
@@ -632,6 +632,161 @@
         "creatives_campaign_id_campaigns_id_fk": {
           "name": "creatives_campaign_id_campaigns_id_fk",
           "tableFrom": "creatives",
+          "tableTo": "campaigns",
+          "columnsFrom": [
+            "campaign_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.funnel_stages": {
+      "name": "funnel_stages",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "funnel_id": {
+          "name": "funnel_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "order": {
+          "name": "order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "funnel_stages_funnel_id_funnels_id_fk": {
+          "name": "funnel_stages_funnel_id_funnels_id_fk",
+          "tableFrom": "funnel_stages",
+          "tableTo": "funnels",
+          "columnsFrom": [
+            "funnel_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.funnels": {
+      "name": "funnels",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "campaign_id": {
+          "name": "campaign_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "funnels_user_id_users_id_fk": {
+          "name": "funnels_user_id_users_id_fk",
+          "tableFrom": "funnels",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "funnels_campaign_id_campaigns_id_fk": {
+          "name": "funnels_campaign_id_campaigns_id_fk",
+          "tableFrom": "funnels",
           "tableTo": "campaigns",
           "columnsFrom": [
             "campaign_id"
