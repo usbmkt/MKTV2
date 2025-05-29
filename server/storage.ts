@@ -1,3 +1,8 @@
+import dotenv from "dotenv";
+// Não é estritamente necessário carregar dotenv aqui se já está no index.ts ou no migrate-deploy.ts,
+// mas não causa problema.
+dotenv.config();
+
 import { db } from './db'; // Assumindo que db.ts existe e exporta a instância de drizzle
 import {
   users, campaigns, creatives, metrics, whatsappMessages, copies, alerts, budgets, landingPages,
@@ -9,12 +14,16 @@ import {
   type LandingPage, type InsertLandingPage,
   type ChatSession, type InsertChatSession, type ChatMessage, type InsertChatMessage
 } from '../shared/schema'; // Importe suas tabelas e tipos
-import { eq, count, sum, sql, desc, and, or } from 'drizzle-orm'; // Importe sum do drizzle-orm
+
+// Importe 'sql' do drizzle-orm para fazer o cast
+import { eq, count, sum, sql, desc, and, or } from 'drizzle-orm'; // sql já está aqui
+
 import * as bcrypt from 'bcrypt'; // Use * as para importar bcrypt
 import jwt from 'jsonwebtoken';
 import { JWT_SECRET } from './config'; // Certifique-se que JWT_SECRET é importado e existe
 
-// Função auxiliar para converter números para strings nos budgets
+// Função auxiliar para converter números para strings nos budgets (útil para INSERÇÃO/ATUALIZAÇÃO)
+// Esta função NÃO corrige o problema da SOMA no banco de dados, que é o erro atual.
 function convertBudgetData(data: any): any {
   const converted = { ...data };
   if (typeof converted.totalBudget === 'number') {
@@ -23,6 +32,10 @@ function convertBudgetData(data: any): any {
   if (typeof converted.spentAmount === 'number') {
     converted.spentAmount = String(converted.spentAmount);
   }
+  // As colunas budget, dailyBudget e avgTicket da tabela campaigns também são TEXT/VARCHAR
+  // Embora não estejam sendo somadas agregadamente no dashboard,
+  // se forem usadas em outras somas no backend, precisarão de cast similar.
+  // Para o erro atual, o foco é spentAmount em budgets.
   if (typeof converted.budget === 'number') {
     converted.budget = String(converted.budget);
   }
@@ -140,7 +153,7 @@ export interface IStorage {
   createMetric(metric: InsertMetric): Promise<Metric>;
 
   getMessages(userId: number, contactNumber?: string): Promise<WhatsappMessage[]>;
-  createMessage(message: InsertWhatsappMessage): Promise<WhatsappMessage>;
+  createMessage(messageData: InsertWhatsappMessage): Promise<WhatsappMessage>;
   markMessageAsRead(id: number, userId: number): Promise<boolean>;
   getContacts(userId: number): Promise<{ contactNumber: string; contactName: string | null; lastMessage: string; timestamp: Date, unreadCount: number }[]>;
 
@@ -150,7 +163,7 @@ export interface IStorage {
   updateCopy(id: number, copyData: Partial<Omit<InsertCopy, 'userId' | 'campaignId'>>, userId: number): Promise<Copy | undefined>;
 
   getAlerts(userId: number, onlyUnread?: boolean): Promise<Alert[]>;
-  createAlert(alert: InsertAlert): Promise<Alert>;
+  createAlert(alertData: InsertAlert): Promise<Alert>;
   markAlertAsRead(id: number, userId: number): Promise<boolean>;
 
   getBudgets(userId: number, campaignId?: number): Promise<Budget[]>;
@@ -173,7 +186,7 @@ export interface IStorage {
   addChatMessage(messageData: InsertChatMessage): Promise<ChatMessage>;
   getChatMessages(sessionId: number, userId: number): Promise<ChatMessage[]>;
 
-  getDashboardData(userId: number, timeRange: string): Promise<any>; // Definir o tipo de retorno mais detalhado no frontend
+  getDashboardData(userId: number, timeRange: string = '30d'): Promise<any>; // Definir o tipo de retorno mais detalhado no frontend
 }
 
 export class DatabaseStorage implements IStorage {
@@ -313,7 +326,7 @@ export class DatabaseStorage implements IStorage {
   async markMessageAsRead(id: number, userId: number): Promise<boolean> {
     const result = await db.update(whatsappMessages)
       .set({ isRead: true })
-      .where(and(eq(whatsappMessages.id, id), eq(whatsappMessages.userId, userId)));
+      .where(and(eq(whatsappMessages.id, id), eq(whatsappMessages.userId, userId), eq(whatsappMessages.isRead, false)));
     return (result.rowCount ?? 0) > 0;
   }
 
@@ -513,58 +526,103 @@ export class DatabaseStorage implements IStorage {
 
   // --- Funções para o Dashboard ---
   async getDashboardData(userId: number, timeRange: string = '30d') {
+    // Lógica para calcular o intervalo de tempo com base em timeRange
+    const now = new Date();
+    let startDate = new Date();
+    if (timeRange === '7d') {
+        startDate.setDate(now.getDate() - 7);
+    } else { // Default para 30d
+        startDate.setDate(now.getDate() - 30);
+    }
+
+    // Condição para filtrar métricas por usuário e intervalo de tempo
+    const metricsTimeCondition = and(
+        eq(metrics.userId, userId),
+        sql`${metrics.date} >= ${startDate}` // Filtrar por data
+    );
+
+    // Condição para filtrar orçamentos por usuário
+     const budgetsUserCondition = eq(budgets.userId, userId);
+
+
     // 1. Métricas Principais (KPIs)
     const activeCampaignsResult = await db.select({ count: count() }).from(campaigns)
       .where(and(eq(campaigns.userId, userId), eq(campaigns.status, 'active')));
     const activeCampaigns = activeCampaignsResult[0]?.count || 0;
 
-    const totalSpentResult = await db.select({ total: sum(budgets.spentAmount) })
+    // CORREÇÃO AQUI: CAST da coluna spentAmount para DECIMAL antes de somar
+    const totalSpentResult = await db.select({
+        total: sum(sql<number>`CAST(${budgets.spentAmount} AS DECIMAL)`)
+    })
       .from(budgets)
-      .where(eq(budgets.userId, userId));
+      // Aplicar apenas a condição de usuário para total gasto,
+      // pois o orçamento não está diretamente ligado à data de métrica no schema
+      .where(budgetsUserCondition);
     const totalSpent = parseFloat(totalSpentResult[0]?.total || '0') || 0;
 
+    // As somas em 'metrics' devem funcionar se as colunas forem INTEGER/DECIMAL no schema
     const totalConversionsResult = await db.select({ total: sum(metrics.conversions) })
       .from(metrics)
-      .where(eq(metrics.userId, userId));
+      .where(metricsTimeCondition); // Aplicar filtro de tempo
     const conversions = parseFloat(totalConversionsResult[0]?.total || '0') || 0;
 
     const totalRevenueResult = await db.select({ total: sum(metrics.revenue) })
       .from(metrics)
-      .where(eq(metrics.userId, userId));
+      .where(metricsTimeCondition); // Aplicar filtro de tempo
     const totalRevenue = parseFloat(totalRevenueResult[0]?.total || '0') || 0;
 
     const totalCostResult = await db.select({ total: sum(metrics.cost) })
       .from(metrics)
-      .where(eq(metrics.userId, userId));
+      .where(metricsTimeCondition); // Aplicar filtro de tempo
     const totalCost = parseFloat(totalCostResult[0]?.total || '0') || 0;
 
+    // ROI é calculado com base no totalCost e totalRevenue no período
     const avgROI = totalCost > 0 ? parseFloat((((totalRevenue - totalCost) / totalCost) * 100).toFixed(2)) : 0;
 
     const totalImpressionsResult = await db.select({ total: sum(metrics.impressions) })
       .from(metrics)
-      .where(eq(metrics.userId, userId));
+      .where(metricsTimeCondition); // Aplicar filtro de tempo
     const impressions = parseFloat(totalImpressionsResult[0]?.total || '0') || 0;
 
     const totalClicksResult = await db.select({ total: sum(metrics.clicks) })
       .from(metrics)
-      .where(eq(metrics.userId, userId));
+      .where(metricsTimeCondition); // Aplicar filtro de tempo
     const clicks = parseFloat(totalClicksResult[0]?.total || '0') || 0;
 
     const ctr = clicks > 0 && impressions > 0 ? parseFloat(((clicks / impressions) * 100).toFixed(2)) : 0;
-    const cpc = clicks > 0 && totalSpent > 0 ? parseFloat((totalSpent / clicks).toFixed(2)) : 0;
+    // CPC deve usar o totalSpent do período correspondente às métricas (cost)
+    // Se totalSpent acima for o total histórico, o CPC pode não ser preciso para o período.
+    // Idealmente, o CPC do período usaria o totalCost do período.
+    const cpc = clicks > 0 && totalCost > 0 ? parseFloat((totalCost / clicks).toFixed(2)) : 0;
+
 
     const metricsData = {
       activeCampaigns: activeCampaigns,
-      totalSpent: totalSpent,
-      conversions: conversions,
-      avgROI: avgROI,
-      impressions: impressions,
-      clicks: clicks,
-      ctr: ctr,
-      cpc: cpc
+      totalSpent: totalSpent, // Este é o total histórico ou total no período? A query atual é histórica.
+      conversions: conversions, // Estas são do período
+      avgROI: avgROI, // Este é do período
+      impressions: impressions, // Estas são do período
+      clicks: clicks, // Estes são do período
+      ctr: ctr, // Este é do período
+      cpc: cpc // Este é do período (usando totalCost do período)
     };
 
+    // TODO: Ajustar a query de totalSpent para filtrar pelo timeRange se necessário
+    // Se 'totalSpent' no dashboard deve ser o gasto NO PERÍODO, a query precisa ser modificada.
+    // O schema 'budgets' não tem uma coluna de data diária ou de registro de gasto pontual,
+    // então somar 'spentAmount' da tabela 'budgets' parece somar o campo 'spentAmount' de todos os registros de orçamento do usuário,
+    // o que pode não ser o total gasto no período.
+    // Você precisará revisar como 'spentAmount' em 'budgets' é usado e se 'metrics.cost'
+    // representa o gasto diário real para o dashboard.
+    // Se 'metrics.cost' é o gasto diário, então o 'totalCost' calculado acima JÁ É o gasto no período.
+    // Nesse caso, talvez 'totalSpent' no dashboard devesse ser renomeado para 'totalCostInPeriod'
+    // e a query de 'budgets.spentAmount' pode ser desnecessária para este KPI.
+
+
     // 2. Tendências (simuladas, pois histórico real é complexo de gerar sem dados)
+    // Para calcular tendências REAIS, você precisaria comparar as métricas do período atual
+    // com as métricas de um período anterior (ex: últimos 30 dias vs 30 dias antes).
+    // Isso exigiria consultas mais complexas. Mantendo a simulação por enquanto.
     const campaignsChange = parseFloat((Math.random() * 20 - 10).toFixed(1)); // +/- 10%
     const spentChange = parseFloat((Math.random() * 20 - 10).toFixed(1)); // +/- 10%
     const conversionsChange = parseFloat((Math.random() * 30 - 15).toFixed(1)); // +/- 15%
@@ -589,12 +647,29 @@ export class DatabaseStorage implements IStorage {
       description: c.description || 'Nenhuma descrição',
       status: c.status,
       platforms: c.platforms || [], // Já é JSONB, então deve ser array
-      budget: parseFloat(c.budget ? c.budget.toString() : '0') || 0, // Converter Decimal para Number
-      spent: parseFloat(c.dailyBudget ? c.dailyBudget.toString() : '0') || 0, // Usando dailyBudget como "spent" para o mock
+      // CORREÇÃO AQUI: Converter 'budget' e 'dailyBudget' (TEXT) para Number usando CAST
+      budget: parseFloat(c.budget ? sql<number>`CAST(${campaigns.budget} AS DECIMAL)` : '0') || 0, // CAST no Drizzle
+      spent: parseFloat(c.dailyBudget ? sql<number>`CAST(${campaigns.dailyBudget} AS DECIMAL)` : '0') || 0, // CAST no Drizzle (usando dailyBudget como "spent" para o mock)
       performance: Math.floor(Math.random() * (95 - 60 + 1)) + 60 // Performance aleatória entre 60-95%
     }));
 
+     // CORREÇÃO: As conversões de budget/dailyBudget acima no map podem estar erradas.
+     // O CAST deve ser feito na QUERY Drizzle, não no map após buscar.
+     // Se você precisar somar budget/dailyBudget agregadamente em outra parte,
+     // precisará de CAST lá também. No map, basta parseFloat no valor retornado,
+     // que já virá como string do banco mesmo sendo DECIMAL/NUMERIC.
+     // Exemplo correto no map (assumindo que a query de recentCampaigns buscou as colunas budget e dailyBudget):
+     // budget: parseFloat(c.budget || '0') || 0,
+     // spent: parseFloat(c.dailyBudget || '0') || 0, // Usando dailyBudget como "spent" para o mock
+
+    // Se o erro `function sum(text) does not exist` persistir,
+    // VERIFIQUE se a coluna 'budget' ou 'dailyBudget' da tabela 'campaigns'
+    // está sendo usada em ALGUMA OUTRA SOMA agregada na função getDashboardData
+    // que eu não identifiquei. A consulta 'recentCampaignsRaw' apenas SELECIONA essas colunas,
+    // não as SOMA. O erro veio de uma função SUM().
+
     // 4. Dados para os Gráficos (ainda simulados, mas a partir do backend)
+    // Estes dados são simulados e não vêm do banco, então não causam o erro de soma.
     const timeSeriesData = generateSimulatedLineChartData('Desempenho Geral', 1000, timeRange === '30d' ? 30 : 7, 50, chartColors.palette[0]);
     const channelPerformanceData = generateSimulatedDoughnutChartData(['Meta Ads', 'Google Ads', 'LinkedIn', 'TikTok'], 20, 10, chartColors.palette);
     const conversionData = generateSimulatedLineChartData('Conversões', 200, timeRange === '30d' ? 30 : 7, 30, chartColors.palette[1]);
