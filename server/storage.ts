@@ -6,24 +6,22 @@ dotenv.config();
 import { db } from './db'; // Assumindo que db.ts existe e exporta a instância de drizzle
 import {
   users, campaigns, creatives, metrics, whatsappMessages, copies, alerts, budgets, landingPages,
-  chatSessions, chatMessages,
+  chatSessions, chatMessages, funnels, funnelStages, // Adicionado funnels e funnelStages
   type User, type InsertUser, type Campaign, type InsertCampaign,
   type Creative, type InsertCreative, type Metric, type InsertMetric,
   type WhatsappMessage, type InsertWhatsappMessage, type Copy, type InsertCopy,
   type Alert, type InsertAlert, type Budget, type InsertBudget,
   type LandingPage, type InsertLandingPage,
-  type ChatSession, type InsertChatSession, type ChatMessage, type InsertChatMessage
-} from '../shared/schema'; // Importe suas tabelas e tipos
+  type ChatSession, type InsertChatSession, type ChatMessage, type InsertChatMessage,
+  type Funnel, type InsertFunnel, type FunnelStage, type InsertFunnelStage // Adicionado tipos de Funil
+} from '../shared/schema';
 
-// Importe 'sql' do drizzle-orm para fazer o cast
-import { eq, count, sum, sql, desc, and, or } from 'drizzle-orm'; // sql já está aqui
+import { eq, count, sum, sql, desc, and, or, asc } from 'drizzle-orm';
 
-import * as bcrypt from 'bcrypt'; // Use * as para importar bcrypt
+import * as bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { JWT_SECRET } from './config'; // Certifique-se que JWT_SECRET é importado e existe
+import { JWT_SECRET } from './config';
 
-// Função auxiliar para converter números para strings nos budgets (útil para INSERÇÃO/ATUALIZAÇÃO)
-// Esta função NÃO corrige o problema da SOMA no banco de dados, que é o erro atual.
 function convertBudgetData(data: any): any {
   const converted = { ...data };
   if (typeof converted.totalBudget === 'number') {
@@ -32,10 +30,6 @@ function convertBudgetData(data: any): any {
   if (typeof converted.spentAmount === 'number') {
     converted.spentAmount = String(converted.spentAmount);
   }
-  // As colunas budget, dailyBudget e avgTicket da tabela campaigns também são TEXT/VARCHAR
-  // Embora não estejam sendo somadas agregadamente no dashboard,
-  // se forem usadas em outras somas no backend, precisarão de cast similar.
-  // Para o erro atual, o foco é spentAmount em budgets.
   if (typeof converted.budget === 'number') {
     converted.budget = String(converted.budget);
   }
@@ -48,87 +42,50 @@ function convertBudgetData(data: any): any {
   return converted;
 }
 
-// Assumindo que chartColors é importado do frontend ou definido globalmente
-// Para o backend, podemos simular ou usar uma paleta fixa
 const chartColors = {
   palette: [
-    'rgba(75, 192, 192, 1)', // Verde-água
-    'rgba(255, 99, 132, 1)', // Vermelho
-    'rgba(54, 162, 235, 1)', // Azul
-    'rgba(255, 206, 86, 1)', // Amarelo
-    'rgba(153, 102, 255, 1)',// Roxo
-    'rgba(255, 159, 64, 1)', // Laranja
-    'rgba(200, 200, 200, 1)' // Cinza
+    'rgba(75, 192, 192, 1)', 'rgba(255, 99, 132, 1)', 'rgba(54, 162, 235, 1)',
+    'rgba(255, 206, 86, 1)', 'rgba(153, 102, 255, 1)', 'rgba(255, 159, 64, 1)',
+    'rgba(200, 200, 200, 1)'
   ],
   background: [
-    'rgba(75, 192, 192, 0.2)',
-    'rgba(255, 99, 132, 0.2)',
-    'rgba(54, 162, 235, 0.2)',
-    'rgba(255, 206, 86, 0.2)',
-    'rgba(153, 102, 255, 0.2)',
-    'rgba(255, 159, 64, 0.2)',
+    'rgba(75, 192, 192, 0.2)', 'rgba(255, 99, 132, 0.2)', 'rgba(54, 162, 235, 0.2)',
+    'rgba(255, 206, 86, 0.2)', 'rgba(153, 102, 255, 0.2)', 'rgba(255, 159, 64, 0.2)',
     'rgba(200, 200, 200, 0.2)'
   ]
 };
 
-// Função auxiliar para gerar dados de gráfico de linha simulados
 function generateSimulatedLineChartData(label: string, startValue: number, count: number, maxFluctuation: number, color: string): { labels: string[], datasets: { label: string, data: number[], borderColor: string, backgroundColor: string, fill: boolean, tension: number }[] } {
   const data = [];
   const labels = [];
   let currentValue = startValue;
-
   for (let i = 0; i < count; i++) {
-    labels.push(`Dia ${i + 1}`); // Ou mês, semana, etc.
+    labels.push(`Dia ${i + 1}`);
     data.push(Math.round(currentValue));
     currentValue += (Math.random() * maxFluctuation * 2) - maxFluctuation;
-    if (currentValue < 0) currentValue = 0; // Evita valores negativos
+    if (currentValue < 0) currentValue = 0;
   }
-
   return {
     labels: labels,
-    datasets: [
-      {
-        label: label,
-        data: data,
-        borderColor: color,
-        backgroundColor: color.replace('1)', '0.2)'), // Cor de fundo com opacidade
-        fill: true,
-        tension: 0.4,
-      },
-    ],
+    datasets: [{ label: label, data: data, borderColor: color, backgroundColor: color.replace('1)', '0.2)'), fill: true, tension: 0.4 }],
   };
 }
 
-// Função auxiliar para gerar dados de gráfico de barra simulados
 function generateSimulatedBarChartData(label: string, categories: string[], baseValue: number, maxFluctuation: number, colors: string[]): { labels: string[], datasets: { label: string, data: number[], backgroundColor: string[] }[] } {
   const data = categories.map(() => Math.round(baseValue + (Math.random() * maxFluctuation * 2) - maxFluctuation));
   return {
     labels: categories,
-    datasets: [
-      {
-        label: label,
-        data: data,
-        backgroundColor: colors,
-      },
-    ],
+    datasets: [{ label: label, data: data, backgroundColor: colors }],
   };
 }
 
-// Função auxiliar para gerar dados de gráfico de rosca simulados
 function generateSimulatedDoughnutChartData(labels: string[], baseValue: number, maxFluctuation: number, colors: string[]): { labels: string[], datasets: { data: number[], backgroundColor: string[], borderWidth: number }[] } {
   const data = labels.map(() => Math.round(baseValue + (Math.random() * maxFluctuation * 2) - maxFluctuation));
   return {
     labels: labels,
-    datasets: [
-      {
-        data: data,
-        backgroundColor: colors.map(color => color.replace('1)', '0.8)')), // Fundo com opacidade para Doughnut
-        borderWidth: 0,
-      },
-    ],
+    datasets: [{ data: data, backgroundColor: colors.map(color => color.replace('1)', '0.8)')), borderWidth: 0 }],
   };
 }
-
 
 export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
@@ -159,7 +116,7 @@ export interface IStorage {
 
   getCopies(userId: number, campaignId?: number): Promise<Copy[]>;
   createCopy(copy: InsertCopy): Promise<Copy>;
-  deleteCopy(id: number, userId: number): Promise<boolean>; // userId agora é number
+  deleteCopy(id: number, userId: number): Promise<boolean>;
   updateCopy(id: number, copyData: Partial<Omit<InsertCopy, 'userId' | 'campaignId'>>, userId: number): Promise<Copy | undefined>;
 
   getAlerts(userId: number, onlyUnread?: boolean): Promise<Alert[]>;
@@ -173,7 +130,7 @@ export interface IStorage {
   getLandingPages(userId: number): Promise<LandingPage[]>;
   getLandingPage(id: number, userId: number): Promise<LandingPage | undefined>;
   getLandingPageBySlug(slug: string): Promise<LandingPage | undefined>;
-  getLandingPageByStudioProjectId(studioProjectId: string, userId: number): Promise<LandingPage | undefined>; // Adicionado userId
+  getLandingPageByStudioProjectId(studioProjectId: string, userId: number): Promise<LandingPage | undefined>;
   createLandingPage(lpData: InsertLandingPage): Promise<LandingPage>;
   updateLandingPage(id: number, lpData: Partial<Omit<InsertLandingPage, 'userId'>>, userId: number): Promise<LandingPage | undefined>;
   deleteLandingPage(id: number, userId: number): Promise<boolean>;
@@ -185,9 +142,21 @@ export interface IStorage {
   deleteChatSession(sessionId: number, userId: number): Promise<boolean>;
   addChatMessage(messageData: InsertChatMessage): Promise<ChatMessage>;
   getChatMessages(sessionId: number, userId: number): Promise<ChatMessage[]>;
+  
+  getDashboardData(userId: number, timeRange: string): Promise<any>;
 
-  // CORREÇÃO: REMOVEMOS o valor padrão da interface
-  getDashboardData(userId: number, timeRange: string): Promise<any>; // <--- CORRIGIDO AQUI
+  // Métodos para Funis
+  createFunnel(funnelData: InsertFunnel): Promise<Funnel>;
+  getFunnels(userId: number): Promise<Funnel[]>;
+  getFunnelWithStages(funnelId: number, userId: number): Promise<(Funnel & { stages: FunnelStage[] }) | undefined>;
+  updateFunnel(funnelId: number, funnelData: Partial<InsertFunnel>, userId: number): Promise<Funnel | undefined>;
+  deleteFunnel(funnelId: number, userId: number): Promise<boolean>;
+  
+  // Métodos para Etapas do Funil
+  createFunnelStage(stageData: InsertFunnelStage, userId: number): Promise<FunnelStage | undefined>; // userId para verificar permissão no funil pai
+  getFunnelStages(funnelId: number, userId: number): Promise<FunnelStage[]>;
+  updateFunnelStage(stageId: number, stageData: Partial<InsertFunnelStage>, userId: number): Promise<FunnelStage | undefined>;
+  deleteFunnelStage(stageId: number, userId: number): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -459,7 +428,7 @@ export class DatabaseStorage implements IStorage {
 
   async getLandingPageByStudioProjectId(studioProjectId: string, userId: number): Promise<LandingPage | undefined> {
     const [lp] = await db.select().from(landingPages)
-      .where(and(eq(landingPages.studioProjectId, studioProjectId), eq(landingPages.userId, userId))) // Adicionado userId na query
+      .where(and(eq(landingPages.studioProjectId, studioProjectId), eq(landingPages.userId, userId)))
       .limit(1);
     return lp;
   }
@@ -512,7 +481,6 @@ export class DatabaseStorage implements IStorage {
   async addChatMessage(messageData: InsertChatMessage): Promise<ChatMessage> {
     const [newMessage] = await db.insert(chatMessages).values({ ...messageData, timestamp: new Date() }).returning();
     if (!newMessage) throw new Error("Falha ao adicionar mensagem ao chat.");
-    // Atualiza o timestamp da sessão para que as sessões mais recentes apareçam no topo
     await db.update(chatSessions).set({ updatedAt: new Date() }).where(eq(chatSessions.id, messageData.sessionId));
     return newMessage;
   }
@@ -524,138 +492,97 @@ export class DatabaseStorage implements IStorage {
     }
     return db.select().from(chatMessages).where(eq(chatMessages.sessionId, sessionId)).orderBy(chatMessages.timestamp);
   }
-
-  // --- Funções para o Dashboard ---
-  // AQUI na IMPLEMENTAÇÃO da classe, o valor padrão PODE ficar
+  
   async getDashboardData(userId: number, timeRange: string = '30d') {
-    // Lógica para calcular o intervalo de tempo com base em timeRange
     const now = new Date();
     let startDate = new Date();
     if (timeRange === '7d') {
         startDate.setDate(now.getDate() - 7);
-    } else { // Default para 30d
+    } else { 
         startDate.setDate(now.getDate() - 30);
     }
 
-    // Condição para filtrar métricas por usuário e intervalo de tempo
     const metricsTimeCondition = and(
         eq(metrics.userId, userId),
-        sql`${metrics.date} >= ${startDate}` // Filtrar por data
+        sql`${metrics.date} >= ${startDate}`
     );
+    const budgetsUserCondition = eq(budgets.userId, userId);
 
-    // Condição para filtrar orçamentos por usuário
-     const budgetsUserCondition = eq(budgets.userId, userId);
-
-
-    // 1. Métricas Principais (KPIs)
     const activeCampaignsResult = await db.select({ count: count() }).from(campaigns)
       .where(and(eq(campaigns.userId, userId), eq(campaigns.status, 'active')));
     const activeCampaigns = activeCampaignsResult[0]?.count || 0;
 
-    // CORREÇÃO AQUI: CAST da coluna spentAmount para DECIMAL antes de somar
-    // Este CAST resolve o erro "function sum(text) does not exist"
     const totalSpentResult = await db.select({
         total: sum(sql<number>`CAST(${budgets.spentAmount} AS DECIMAL)`)
     })
       .from(budgets)
-      // Aplicar apenas a condição de usuário para total gasto,
-      // pois o orçamento não está diretamente ligado à data de métrica no schema
       .where(budgetsUserCondition);
     const totalSpent = parseFloat(totalSpentResult[0]?.total || '0') || 0;
 
-    // As somas em 'metrics' devem funcionar se as colunas forem INTEGER/DECIMAL no schema
-    // Aplicamos filtro de tempo a estas consultas
     const totalConversionsResult = await db.select({ total: sum(metrics.conversions) })
       .from(metrics)
-      .where(metricsTimeCondition); // Aplicar filtro de tempo
+      .where(metricsTimeCondition); 
     const conversions = parseFloat(totalConversionsResult[0]?.total || '0') || 0;
 
     const totalRevenueResult = await db.select({ total: sum(metrics.revenue) })
       .from(metrics)
-      .where(metricsTimeCondition); // Aplicar filtro de tempo
+      .where(metricsTimeCondition);
     const totalRevenue = parseFloat(totalRevenueResult[0]?.total || '0') || 0;
 
     const totalCostResult = await db.select({ total: sum(metrics.cost) })
       .from(metrics)
-      .where(metricsTimeCondition); // Aplicar filtro de tempo
+      .where(metricsTimeCondition); 
     const totalCost = parseFloat(totalCostResult[0]?.total || '0') || 0;
 
-    // ROI é calculado com base no totalCost e totalRevenue no período
     const avgROI = totalCost > 0 ? parseFloat((((totalRevenue - totalCost) / totalCost) * 100).toFixed(2)) : 0;
 
     const totalImpressionsResult = await db.select({ total: sum(metrics.impressions) })
       .from(metrics)
-      .where(metricsTimeCondition); // Aplicar filtro de tempo
+      .where(metricsTimeCondition);
     const impressions = parseFloat(totalImpressionsResult[0]?.total || '0') || 0;
 
     const totalClicksResult = await db.select({ total: sum(metrics.clicks) })
       .from(metrics)
-      .where(metricsTimeCondition); // Aplicar filtro de tempo
+      .where(metricsTimeCondition);
     const clicks = parseFloat(totalClicksResult[0]?.total || '0') || 0;
 
     const ctr = clicks > 0 && impressions > 0 ? parseFloat(((clicks / impressions) * 100).toFixed(2)) : 0;
-    // CPC deve usar o totalCost do período correspondente às métricas (cost)
     const cpc = clicks > 0 && totalCost > 0 ? parseFloat((totalCost / clicks).toFixed(2)) : 0;
-
 
     const metricsData = {
       activeCampaigns: activeCampaigns,
-      totalSpent: totalSpent, // Este é o total histórico de spentAmount em todos os orçamentos.
-                               // Se 'totalSpent' no dashboard deve ser o gasto NO PERÍODO,
-                               // você deve usar 'totalCost' (que já é do período) ou ajustar a query de budgets.
-      conversions: conversions, // Estas são do período
-      avgROI: avgROI, // Este é do período
-      impressions: impressions, // Estas são do período
-      clicks: clicks, // Estes são do período
-      ctr: ctr, // Este é do período
-      cpc: cpc // Este é do período (usando totalCost do período)
+      totalSpent: totalSpent, 
+      conversions: conversions, 
+      avgROI: avgROI, 
+      impressions: impressions, 
+      clicks: clicks, 
+      ctr: ctr, 
+      cpc: cpc 
     };
 
-    // TODO: Revisar se 'totalSpent' no dashboard deve ser o total histórico de budgets.spentAmount
-    // ou o 'totalCost' do período. Se for o custo do período, basta renomear 'totalCost' no metricsData.
+    const campaignsChange = parseFloat((Math.random() * 20 - 10).toFixed(1)); 
+    const spentChange = parseFloat((Math.random() * 20 - 10).toFixed(1)); 
+    const conversionsChange = parseFloat((Math.random() * 30 - 15).toFixed(1));
+    const roiChange = parseFloat((Math.random() * 10 - 5).toFixed(1)); 
 
+    const trends = { campaignsChange, spentChange, conversionsChange, roiChange };
 
-    // 2. Tendências (simuladas, pois histórico real é complexo de gerar sem dados)
-    // Para calcular tendências REAIS, você precisaria comparar as métricas do período atual
-    // com as métricas de um período anterior (ex: últimos 30 dias vs 30 dias antes).
-    // Isso exigiria consultas mais complexas. Mantendo a simulação por enquanto.
-    const campaignsChange = parseFloat((Math.random() * 20 - 10).toFixed(1)); // +/- 10%
-    const spentChange = parseFloat((Math.random() * 20 - 10).toFixed(1)); // +/- 10%
-    const conversionsChange = parseFloat((Math.random() * 30 - 15).toFixed(1)); // +/- 15%
-    const roiChange = parseFloat((Math.random() * 10 - 5).toFixed(1)); // +/- 5%
-
-    const trends = {
-      campaignsChange,
-      spentChange,
-      conversionsChange,
-      roiChange,
-    };
-
-    // 3. Campanhas Recentes
     const recentCampaignsRaw = await db.select().from(campaigns)
       .where(eq(campaigns.userId, userId))
       .orderBy(desc(campaigns.createdAt))
       .limit(3);
 
-    // CORREÇÃO: Converter 'budget' e 'dailyBudget' (TEXT/VARCHAR) para Number
-    // Nota: O CAST aqui é na conversão da STRING para NUMBER no JS, não na query SQL.
-    // Se precisar SOMAR budget/dailyBudget em SQL, precisará do CAST SQL lá.
     const recentCampaigns = recentCampaignsRaw.map(c => ({
       id: c.id,
       name: c.name,
       description: c.description || 'Nenhuma descrição',
       status: c.status,
-      platforms: c.platforms || [], // Já é JSONB, então deve ser array
-      // Converter a string do banco para número em JS
+      platforms: c.platforms || [], 
       budget: parseFloat(c.budget || '0') || 0,
-      spent: parseFloat(c.dailyBudget || '0') || 0, // Usando dailyBudget como "spent" para o mock
-      performance: Math.floor(Math.random() * (95 - 60 + 1)) + 60 // Performance aleatória entre 60-95%
+      spent: parseFloat(c.dailyBudget || '0') || 0, 
+      performance: Math.floor(Math.random() * (95 - 60 + 1)) + 60
     }));
 
-
-    // 4. Dados para os Gráficos (ainda simulados, mas a partir do backend)
-    // Estes dados são simulados e não vêm do banco, então não causam o erro de soma.
-    // Eles usam o timeRange apenas para definir a quantidade de pontos (7 ou 30).
     const timeSeriesData = generateSimulatedLineChartData('Desempenho Geral', 1000, timeRange === '30d' ? 30 : 7, 50, chartColors.palette[0]);
     const channelPerformanceData = generateSimulatedDoughnutChartData(['Meta Ads', 'Google Ads', 'LinkedIn', 'TikTok'], 20, 10, chartColors.palette);
     const conversionData = generateSimulatedLineChartData('Conversões', 200, timeRange === '30d' ? 30 : 7, 30, chartColors.palette[1]);
@@ -671,6 +598,117 @@ export class DatabaseStorage implements IStorage {
       conversionData: conversionData,
       roiData: roiData,
     };
+  }
+
+  // --- Métodos para Funis ---
+  async createFunnel(funnelData: InsertFunnel): Promise<Funnel> {
+    const [newFunnel] = await db.insert(funnels).values(funnelData).returning();
+    if (!newFunnel) throw new Error("Falha ao criar funil.");
+    return newFunnel;
+  }
+
+  async getFunnels(userId: number): Promise<Funnel[]> {
+    return db.select().from(funnels).where(eq(funnels.userId, userId)).orderBy(desc(funnels.createdAt));
+  }
+
+  async getFunnelWithStages(funnelId: number, userId: number): Promise<(Funnel & { stages: FunnelStage[] }) | undefined> {
+    const [funnelResult] = await db.select().from(funnels)
+      .where(and(eq(funnels.id, funnelId), eq(funnels.userId, userId)))
+      .limit(1);
+
+    if (!funnelResult) return undefined;
+
+    const stagesResult = await db.select().from(funnelStages)
+      .where(eq(funnelStages.funnelId, funnelId))
+      .orderBy(asc(funnelStages.order)); // Ordenar etapas pela coluna 'order'
+
+    return { ...funnelResult, stages: stagesResult };
+  }
+  
+  async updateFunnel(funnelId: number, funnelData: Partial<InsertFunnel>, userId: number): Promise<Funnel | undefined> {
+    const [updatedFunnel] = await db.update(funnels)
+      .set({ ...funnelData, updatedAt: new Date() })
+      .where(and(eq(funnels.id, funnelId), eq(funnels.userId, userId)))
+      .returning();
+    return updatedFunnel;
+  }
+
+  async deleteFunnel(funnelId: number, userId: number): Promise<boolean> {
+    const result = await db.delete(funnels)
+      .where(and(eq(funnels.id, funnelId), eq(funnels.userId, userId)));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  // --- Métodos para Etapas do Funil ---
+  async createFunnelStage(stageData: InsertFunnelStage, userId: number): Promise<FunnelStage | undefined> {
+    // Verificar se o funil pai pertence ao usuário
+    const funnel = await db.select({ id: funnels.id, userId: funnels.userId }).from(funnels)
+        .where(eq(funnels.id, stageData.funnelId!)) // funnelId é notNull na tabela, mas opcional em InsertFunnelStage por agora
+        .limit(1);
+    if (!funnel[0] || funnel[0].userId !== userId) {
+      throw new Error("Funil não encontrado ou não pertence ao usuário.");
+    }
+
+    const [newStage] = await db.insert(funnelStages).values(stageData).returning();
+    if (!newStage) throw new Error("Falha ao criar etapa do funil.");
+    return newStage;
+  }
+
+  async getFunnelStages(funnelId: number, userId: number): Promise<FunnelStage[]> {
+    const funnel = await db.select({ id: funnels.id, userId: funnels.userId }).from(funnels)
+      .where(and(eq(funnels.id, funnelId), eq(funnels.userId, userId)))
+      .limit(1);
+    if (!funnel[0]) {
+      throw new Error("Funil não encontrado ou não pertence ao usuário.");
+    }
+    return db.select().from(funnelStages)
+      .where(eq(funnelStages.funnelId, funnelId))
+      .orderBy(asc(funnelStages.order));
+  }
+
+  async updateFunnelStage(stageId: number, stageData: Partial<InsertFunnelStage>, userId: number): Promise<FunnelStage | undefined> {
+    // Para atualizar, primeiro pegamos a etapa para verificar o funil pai
+    const [existingStage] = await db.select({ funnelId: funnelStages.funnelId }).from(funnelStages)
+      .where(eq(funnelStages.id, stageId))
+      .limit(1);
+
+    if (!existingStage) throw new Error("Etapa do funil não encontrada.");
+
+    // Verificar permissão no funil pai
+    const funnel = await db.select({ id: funnels.id, userId: funnels.userId }).from(funnels)
+      .where(and(eq(funnels.id, existingStage.funnelId), eq(funnels.userId, userId)))
+      .limit(1);
+    if (!funnel[0]) {
+      throw new Error("Você não tem permissão para atualizar esta etapa do funil.");
+    }
+    
+    const [updatedStage] = await db.update(funnelStages)
+      .set({ ...stageData, updatedAt: new Date() })
+      .where(eq(funnelStages.id, stageId))
+      .returning();
+    return updatedStage;
+  }
+
+  async deleteFunnelStage(stageId: number, userId: number): Promise<boolean> {
+     // Para deletar, primeiro pegamos a etapa para verificar o funil pai
+    const [existingStage] = await db.select({ funnelId: funnelStages.funnelId }).from(funnelStages)
+      .where(eq(funnelStages.id, stageId))
+      .limit(1);
+
+    if (!existingStage) return false; // Ou throw new Error("Etapa do funil não encontrada.");
+
+    // Verificar permissão no funil pai
+    const funnel = await db.select({ id: funnels.id, userId: funnels.userId }).from(funnels)
+      .where(and(eq(funnels.id, existingStage.funnelId), eq(funnels.userId, userId)))
+      .limit(1);
+
+    if (!funnel[0]) {
+      throw new Error("Você não tem permissão para excluir esta etapa do funil.");
+    }
+
+    const result = await db.delete(funnelStages)
+      .where(eq(funnelStages.id, stageId));
+    return (result.rowCount ?? 0) > 0;
   }
 }
 
