@@ -8,7 +8,7 @@ import { apiRequest } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthStore } from '@/lib/auth'; // Importar o seu auth store
 
-const GRAPESJS_STUDIO_LICENSE_KEY = 'bcea48b82acd486f90429a86ef8e5f42b6abdef35d0e486f8649b929acfde5df';
+const GRAPESJS_STUDIO_LICENSE_KEY = 'a588bab57a26417d829a73e27616d0233b3b7ba518ea4156a72f28517c14f616';
 
 interface LandingPageItem {
   id: string;
@@ -49,7 +49,7 @@ export default function LandingPagesPage() {
         name: lpMetadata.name,
         studioProjectId: lpMetadata.studioProjectId,
         status: lpMetadata.status,
-        slug: lpMetadata.slug || lpMetadata.name?.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
+        slug: lpMetadata.urlSlug || lpMetadata.name?.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
         grapesJsData: lpMetadata.grapesJsData,
         publicUrl: lpMetadata.publicUrl, 
       };
@@ -83,7 +83,7 @@ export default function LandingPagesPage() {
     if (!editingLp) {
         const newName = prompt("Defina o Nome da Landing Page:", lpName);
         if (!newName || newName.trim() === "") {
-            toast({ title: "Ação Cancelada", description: "Nome é obrigatório para nova landing page.", variant: "warning"});
+            toast({ title: "Ação Cancelada", description: "Nome é obrigatório para nova landing page.", variant: "destructive"});
             setIsEditorLoading(false);
             throw new Error("Nome é obrigatório");
         }
@@ -123,7 +123,7 @@ export default function LandingPagesPage() {
         const errData = await response.json().catch(() => ({ message: `Projeto ${projectIdToLoad} não encontrado ou erro ao carregar.` }));
         throw new Error(errData.message);
       }
-      const lpData : LandingPageItem = await response.json();
+      const lpData : any = await response.json();
       setIsEditorLoading(false);
       if (!lpData || typeof lpData.project !== 'object' || lpData.project === null) {
         console.warn(`[LP_PAGE] handleProjectLoad: Dados do projeto ${projectIdToLoad} estão vazios, malformados ou não contêm a chave 'project'. Resposta:`, lpData);

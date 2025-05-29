@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { useAuthStore } from './auth';
 import { useLocation } from 'wouter'; // Para navegação
-import { Message as GeminiMessagePart } from '@google/generative-ai'; // Para tipagem do histórico do Gemini
+// import { Message as GeminiMessagePart } from '@google/generative-ai'; // Para tipagem do histórico do Gemini
 
 // Definir a interface da mensagem de chat que o frontend usa
 export interface Message {
@@ -344,7 +344,7 @@ export const sendMessageToMCP = async (text: string): Promise<void> => {
     if (data.action === 'navigate' && data.payload && navigate) {
       console.log(`[MCP_STORE] Navegando para: ${data.payload}`);
       setTimeout(() => {
-        navigate(data.payload, { replace: false });
+        navigate(data.payload || '/', { replace: false });
         useMCPStore.getState().togglePanel();
       }, 1000); 
     }

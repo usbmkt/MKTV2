@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import grapesjs, { Editor } from 'grapesjs';
 import 'grapesjs/dist/css/grapes.min.css';
 // Opcional: Importar preset (se instalado)
-import grapesjsPresetWebpage from 'grapesjs-preset-webpage';
+// import grapesjsPresetWebpage from 'grapesjs-preset-webpage';
 // Opcional: Outros plugins que você queira usar
 // import grapesjsCustomPlugin from 'grapesjs-some-custom-plugin';
 
@@ -31,14 +31,14 @@ const GrapesJsEditor: React.FC<GrapesJsEditorProps> = ({ initialData, onSave, pa
         },
         // Plugins (exemplo com preset-webpage)
         plugins: [
-          grapesjsPresetWebpage,
+          // grapesjsPresetWebpage,
           // editor => grapesjsCustomPlugin(editor, { /* plugin options */ }),
         ],
         pluginsOpts: {
-          [grapesjsPresetWebpage]: {
+          // [grapesjsPresetWebpage]: {
             // Opções para o preset, se necessário
             // ex: blocks: ['h1-block', 'text', 'image', 'link', 'section', 'column1', 'column2', 'column3'],
-          },
+          // },
         },
         // Configurações de Canvas (onde a página é renderizada)
         canvas: {
@@ -89,8 +89,8 @@ const GrapesJsEditor: React.FC<GrapesJsEditorProps> = ({ initialData, onSave, pa
         label: 'Salvar',
         command: () => {
           const jsonData = JSON.stringify(editor.getProjectData());
-          const htmlData = editor.getHtml();
-          const cssData = editor.getCss();
+          const htmlData = editor.getHtml() || '';
+          const cssData = editor.getCss() || '';
           onSave(jsonData, htmlData, cssData);
         },
         attributes: { title: 'Salvar no Banco de Dados' }

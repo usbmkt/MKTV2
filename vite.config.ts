@@ -20,7 +20,10 @@ export default defineConfig(async ({ command, mode }) => {
   if (mode !== "production" && process.env.REPL_ID) {
     try {
       const { cartographer } = await import("@replit/vite-plugin-cartographer");
-      plugins.push(cartographer());
+      const cartographerPlugin = cartographer();
+      if (cartographerPlugin) {
+        plugins.push(cartographerPlugin);
+      }
     } catch (e) {
       console.warn("@replit/vite-plugin-cartographer not found, skipping.");
     }

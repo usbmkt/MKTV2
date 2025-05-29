@@ -91,14 +91,14 @@ var campaigns = pgTable("campaigns", {
   platforms: jsonb("platforms").$type().default([]).notNull(),
   // Array de strings
   objectives: jsonb("objectives").$type().default([]),
-  budget: decimal("budget", { precision: 10, scale: 2 }),
-  // Decimal
-  dailyBudget: decimal("daily_budget", { precision: 10, scale: 2 }),
+  budget: text("budget"),
+  // String para compatibilidade
+  dailyBudget: text("daily_budget"),
   startDate: timestamp("start_date", { withTimezone: true }),
   endDate: timestamp("end_date", { withTimezone: true }),
   targetAudience: text("target_audience"),
   industry: text("industry"),
-  avgTicket: decimal("avg_ticket", { precision: 10, scale: 2 }),
+  avgTicket: text("avg_ticket"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
 });
@@ -195,8 +195,8 @@ var budgets = pgTable("budgets", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   campaignId: integer("campaign_id").references(() => campaigns.id, { onDelete: "cascade" }),
-  totalBudget: decimal("total_budget", { precision: 10, scale: 2 }).notNull(),
-  spentAmount: decimal("spent_amount", { precision: 10, scale: 2 }).default("0").notNull(),
+  totalBudget: text("total_budget").notNull(),
+  spentAmount: text("spent_amount").default("0").notNull(),
   period: text("period", { enum: ["daily", "weekly", "monthly", "total"] }).notNull(),
   startDate: timestamp("start_date", { withTimezone: true }).notNull(),
   endDate: timestamp("end_date", { withTimezone: true }),
@@ -261,16 +261,16 @@ var insertCampaignSchema = createInsertSchema(campaigns, {
   name: z.string().min(1, "Nome da campanha \xE9 obrigat\xF3rio."),
   // platforms agora é array de strings, o Zod já inferiu corretamente de jsonb
   budget: z.preprocess(
-    (val) => val === "" || val === null || val === void 0 ? void 0 : parseFloat(String(val)),
-    z.number({ invalid_type_error: "Or\xE7amento deve ser um n\xFAmero" }).positive("Or\xE7amento deve ser positivo").optional().nullable()
+    (val) => val === "" || val === null || val === void 0 ? null : String(val),
+    z.string().nullable().optional()
   ),
   dailyBudget: z.preprocess(
-    (val) => val === "" || val === null || val === void 0 ? void 0 : parseFloat(String(val)),
-    z.number({ invalid_type_error: "Or\xE7amento di\xE1rio deve ser um n\xFAmero" }).positive("Or\xE7amento di\xE1rio deve ser positivo").optional().nullable()
+    (val) => val === "" || val === null || val === void 0 ? null : String(val),
+    z.string().nullable().optional()
   ),
   avgTicket: z.preprocess(
-    (val) => val === "" || val === null || val === void 0 ? void 0 : parseFloat(String(val)),
-    z.number({ invalid_type_error: "Ticket m\xE9dio deve ser um n\xFAmero" }).positive("Ticket m\xE9dio deve ser positivo").optional().nullable()
+    (val) => val === "" || val === null || val === void 0 ? null : String(val),
+    z.string().nullable().optional()
   ),
   startDate: z.preprocess(
     (arg) => {
@@ -357,12 +357,12 @@ var insertAlertSchema = createInsertSchema(alerts, {
 });
 var insertBudgetSchema = createInsertSchema(budgets, {
   totalBudget: z.preprocess(
-    (val) => parseFloat(String(val)),
-    z.number({ invalid_type_error: "Or\xE7amento total deve ser um n\xFAmero" }).positive("Or\xE7amento total deve ser positivo")
+    (val) => String(val),
+    z.string({ invalid_type_error: "Or\xE7amento total deve ser um texto" })
   ),
   spentAmount: z.preprocess(
-    (val) => parseFloat(String(val)),
-    z.number({ invalid_type_error: "Valor gasto deve ser um n\xFAmero" }).nonnegative("Valor gasto n\xE3o pode ser negativo").optional()
+    (val) => String(val),
+    z.string({ invalid_type_error: "Valor gasto deve ser um texto" }).optional()
   ),
   startDate: z.preprocess(
     (arg) => {
@@ -418,6 +418,25 @@ var db = drizzle(pool, { schema: schema_exports });
 // server/storage.ts
 import { eq, count, sum, desc, and } from "drizzle-orm";
 import * as bcrypt from "bcrypt";
+function convertBudgetData(data) {
+  const converted = { ...data };
+  if (typeof converted.totalBudget === "number") {
+    converted.totalBudget = String(converted.totalBudget);
+  }
+  if (typeof converted.spentAmount === "number") {
+    converted.spentAmount = String(converted.spentAmount);
+  }
+  if (typeof converted.budget === "number") {
+    converted.budget = String(converted.budget);
+  }
+  if (typeof converted.dailyBudget === "number") {
+    converted.dailyBudget = String(converted.dailyBudget);
+  }
+  if (typeof converted.avgTicket === "number") {
+    converted.avgTicket = String(converted.avgTicket);
+  }
+  return converted;
+}
 var chartColors = {
   palette: [
     "rgba(75, 192, 192, 1)",
@@ -525,7 +544,7 @@ var DatabaseStorage = class {
   async getCampaigns(userId, limit) {
     let query = db.select().from(campaigns).where(eq(campaigns.userId, userId)).orderBy(desc(campaigns.createdAt));
     if (limit) {
-      query = query.limit(limit);
+      return query.limit(limit);
     }
     return query;
   }
@@ -534,17 +553,19 @@ var DatabaseStorage = class {
     return campaign;
   }
   async createCampaign(campaignData) {
-    const [newCampaign] = await db.insert(campaigns).values(campaignData).returning();
+    const convertedData = convertBudgetData(campaignData);
+    const [newCampaign] = await db.insert(campaigns).values(convertedData).returning();
     if (!newCampaign) throw new Error("Falha ao criar campanha.");
     return newCampaign;
   }
   async updateCampaign(id, campaignData, userId) {
-    const [updatedCampaign] = await db.update(campaigns).set({ ...campaignData, updatedAt: /* @__PURE__ */ new Date() }).where(and(eq(campaigns.id, id), eq(campaigns.userId, userId))).returning();
+    const convertedData = convertBudgetData(campaignData);
+    const [updatedCampaign] = await db.update(campaigns).set({ ...convertedData, updatedAt: /* @__PURE__ */ new Date() }).where(and(eq(campaigns.id, id), eq(campaigns.userId, userId))).returning();
     return updatedCampaign;
   }
   async deleteCampaign(id, userId) {
     const result = await db.delete(campaigns).where(and(eq(campaigns.id, id), eq(campaigns.userId, userId)));
-    return result.rowCount > 0;
+    return (result.rowCount ?? 0) > 0;
   }
   async getCreatives(userId, campaignId) {
     const conditions = [eq(creatives.userId, userId)];
@@ -568,7 +589,7 @@ var DatabaseStorage = class {
   }
   async deleteCreative(id, userId) {
     const result = await db.delete(creatives).where(and(eq(creatives.id, id), eq(creatives.userId, userId)));
-    return result.rowCount > 0;
+    return (result.rowCount ?? 0) > 0;
   }
   async getMetricsForCampaign(campaignId, userId) {
     const campaign = await this.getCampaign(campaignId, userId);
@@ -596,7 +617,7 @@ var DatabaseStorage = class {
   }
   async markMessageAsRead(id, userId) {
     const result = await db.update(whatsappMessages).set({ isRead: true }).where(and(eq(whatsappMessages.id, id), eq(whatsappMessages.userId, userId)));
-    return result.rowCount > 0;
+    return (result.rowCount ?? 0) > 0;
   }
   async getContacts(userId) {
     const allMessages = await db.select().from(whatsappMessages).where(eq(whatsappMessages.userId, userId)).orderBy(desc(whatsappMessages.timestamp));
@@ -640,7 +661,7 @@ var DatabaseStorage = class {
   }
   async deleteCopy(id, userId) {
     const result = await db.delete(copies).where(and(eq(copies.id, id), eq(copies.userId, userId)));
-    return result.rowCount > 0;
+    return (result.rowCount ?? 0) > 0;
   }
   async getAlerts(userId, onlyUnread) {
     const conditions = [eq(alerts.userId, userId)];
@@ -656,7 +677,7 @@ var DatabaseStorage = class {
   }
   async markAlertAsRead(id, userId) {
     const result = await db.update(alerts).set({ isRead: true }).where(and(eq(alerts.id, id), eq(alerts.userId, userId), eq(alerts.isRead, false)));
-    return result.rowCount > 0;
+    return (result.rowCount ?? 0) > 0;
   }
   async getBudgets(userId, campaignId) {
     const conditions = [eq(budgets.userId, userId)];
@@ -666,7 +687,8 @@ var DatabaseStorage = class {
     return db.select().from(budgets).where(and(...conditions)).orderBy(desc(budgets.createdAt));
   }
   async createBudget(budgetData) {
-    const [newBudget] = await db.insert(budgets).values(budgetData).returning();
+    const convertedData = convertBudgetData(budgetData);
+    const [newBudget] = await db.insert(budgets).values(convertedData).returning();
     if (!newBudget) throw new Error("Falha ao criar or\xE7amento.");
     return newBudget;
   }
@@ -675,7 +697,8 @@ var DatabaseStorage = class {
     if (!existingBudget || existingBudget.length === 0) {
       return void 0;
     }
-    const [updatedBudget] = await db.update(budgets).set(budgetData).where(and(eq(budgets.id, id), eq(budgets.userId, userId))).returning();
+    const convertedData = convertBudgetData(budgetData);
+    const [updatedBudget] = await db.update(budgets).set(convertedData).where(and(eq(budgets.id, id), eq(budgets.userId, userId))).returning();
     return updatedBudget;
   }
   async getLandingPages(userId) {
@@ -704,7 +727,7 @@ var DatabaseStorage = class {
   }
   async deleteLandingPage(id, userId) {
     const result = await db.delete(landingPages).where(and(eq(landingPages.id, id), eq(landingPages.userId, userId)));
-    return result.rowCount > 0;
+    return (result.rowCount ?? 0) > 0;
   }
   async createChatSession(userId, title = "Nova Conversa") {
     const [newSession] = await db.insert(chatSessions).values({ userId, title, createdAt: /* @__PURE__ */ new Date(), updatedAt: /* @__PURE__ */ new Date() }).returning();
@@ -975,6 +998,14 @@ var handleError = (err, req, res, next) => {
 async function registerRoutes(app2) {
   app2.use(express.json({ limit: "10mb" }));
   app2.use(express.urlencoded({ extended: true, limit: "10mb" }));
+  app2.get("/api/health", (req, res) => {
+    res.status(200).json({
+      status: "ok",
+      timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+      service: "MKTV5",
+      version: "1.0.0"
+    });
+  });
   app2.post("/api/auth/register", async (req, res, next) => {
     try {
       const userData = insertUserSchema.parse(req.body);
@@ -1606,7 +1637,10 @@ var vite_config_default = defineConfig(async ({ command, mode }) => {
   if (mode !== "production" && process.env.REPL_ID) {
     try {
       const { cartographer } = await import("@replit/vite-plugin-cartographer");
-      plugins.push(cartographer());
+      const cartographerPlugin = cartographer();
+      if (cartographerPlugin) {
+        plugins.push(cartographerPlugin);
+      }
     } catch (e) {
       console.warn("@replit/vite-plugin-cartographer not found, skipping.");
     }
@@ -1686,7 +1720,7 @@ async function setupVite(app2, server) {
   const serverOptions = {
     middlewareMode: true,
     hmr: { server },
-    allowedHosts: true
+    host: true
   };
   const vite = await createViteServer({
     ...vite_config_default,

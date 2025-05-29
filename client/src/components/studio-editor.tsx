@@ -29,27 +29,27 @@ const StudioEditor: React.FC<StudioEditorProps> = ({
     if (editorRef.current && !studioInstanceRef.current && publicKey) {
       let currentStudioInstance: StudioInstance | null = null;
       try {
-        currentStudioInstance = new GrapesJSStudioSDK({ // Usando a importação padrão
+        currentStudioInstance = new (GrapesJSStudioSDK as any)({ // Usando a importação padrão
           publicKey: publicKey,
           container: editorRef.current,
           editor: {
             height: '100%', 
             width: 'auto',
           },
-          onLoad: (data) => {
+          onLoad: (data: any) => {
             if (onLoad) onLoad(data);
           },
-          onSave: (data) => {
+          onSave: (data: any) => {
             if (onSave) onSave(data);
           },
-          onError: (error) => {
+          onError: (error: any) => {
             if (onError) onError(error);
           }
         });
 
         if (pageId) {
           currentStudioInstance.load({ id: pageId })
-            .catch(err => {
+            .catch((err: any) => {
               if (onError) onError(err);
               console.error("Studio SDK: Error loading project", err);
             });
@@ -69,9 +69,6 @@ const StudioEditor: React.FC<StudioEditorProps> = ({
       if (studioInstanceRef.current) {
         studioInstanceRef.current.destroy();
         studioInstanceRef.current = null;
-      } else if (currentStudioInstance) {
-         // Esta parte do currentStudioInstance pode ser redundante se o ref for bem gerenciado
-        currentStudioInstance.destroy();
       }
     };
   }, [publicKey, pageId, onSave, onLoad, onError]);

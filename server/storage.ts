@@ -14,6 +14,27 @@ import * as bcrypt from 'bcrypt'; // Use * as para importar bcrypt
 import jwt from 'jsonwebtoken';
 import { JWT_SECRET } from './config'; // Certifique-se que JWT_SECRET é importado e existe
 
+// Função auxiliar para converter números para strings nos budgets
+function convertBudgetData(data: any): any {
+  const converted = { ...data };
+  if (typeof converted.totalBudget === 'number') {
+    converted.totalBudget = String(converted.totalBudget);
+  }
+  if (typeof converted.spentAmount === 'number') {
+    converted.spentAmount = String(converted.spentAmount);
+  }
+  if (typeof converted.budget === 'number') {
+    converted.budget = String(converted.budget);
+  }
+  if (typeof converted.dailyBudget === 'number') {
+    converted.dailyBudget = String(converted.dailyBudget);
+  }
+  if (typeof converted.avgTicket === 'number') {
+    converted.avgTicket = String(converted.avgTicket);
+  }
+  return converted;
+}
+
 // Assumindo que chartColors é importado do frontend ou definido globalmente
 // Para o backend, podemos simular ou usar uma paleta fixa
 const chartColors = {
@@ -190,7 +211,7 @@ export class DatabaseStorage implements IStorage {
       .where(eq(campaigns.userId, userId))
       .orderBy(desc(campaigns.createdAt));
     if (limit) {
-      query = query.limit(limit);
+      return query.limit(limit);
     }
     return query;
   }
@@ -203,14 +224,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createCampaign(campaignData: InsertCampaign): Promise<Campaign> {
-    const [newCampaign] = await db.insert(campaigns).values(campaignData).returning();
+    const convertedData = convertBudgetData(campaignData);
+    const [newCampaign] = await db.insert(campaigns).values(convertedData).returning();
     if (!newCampaign) throw new Error("Falha ao criar campanha.");
     return newCampaign;
   }
 
   async updateCampaign(id: number, campaignData: Partial<Omit<InsertCampaign, 'userId'>>, userId: number): Promise<Campaign | undefined> {
+    const convertedData = convertBudgetData(campaignData);
     const [updatedCampaign] = await db.update(campaigns)
-      .set({ ...campaignData, updatedAt: new Date() })
+      .set({ ...convertedData, updatedAt: new Date() })
       .where(and(eq(campaigns.id, id), eq(campaigns.userId, userId)))
       .returning();
     return updatedCampaign;
@@ -219,7 +242,7 @@ export class DatabaseStorage implements IStorage {
   async deleteCampaign(id: number, userId: number): Promise<boolean> {
     const result = await db.delete(campaigns)
       .where(and(eq(campaigns.id, id), eq(campaigns.userId, userId)));
-    return result.rowCount > 0;
+    return (result.rowCount ?? 0) > 0;
   }
 
   async getCreatives(userId: number, campaignId?: number): Promise<Creative[]> {
@@ -254,7 +277,7 @@ export class DatabaseStorage implements IStorage {
   async deleteCreative(id: number, userId: number): Promise<boolean> {
     const result = await db.delete(creatives)
       .where(and(eq(creatives.id, id), eq(creatives.userId, userId)));
-    return result.rowCount > 0;
+    return (result.rowCount ?? 0) > 0;
   }
 
   async getMetricsForCampaign(campaignId: number, userId: number): Promise<Metric[]> {
@@ -291,7 +314,7 @@ export class DatabaseStorage implements IStorage {
     const result = await db.update(whatsappMessages)
       .set({ isRead: true })
       .where(and(eq(whatsappMessages.id, id), eq(whatsappMessages.userId, userId)));
-    return result.rowCount > 0;
+    return (result.rowCount ?? 0) > 0;
   }
 
   async getContacts(userId: number): Promise<{ contactNumber: string; contactName: string | null; lastMessage: string; timestamp: Date, unreadCount: number }[]> {
@@ -348,7 +371,7 @@ export class DatabaseStorage implements IStorage {
   async deleteCopy(id: number, userId: number): Promise<boolean> {
     const result = await db.delete(copies)
       .where(and(eq(copies.id, id), eq(copies.userId, userId)));
-    return result.rowCount > 0;
+    return (result.rowCount ?? 0) > 0;
   }
 
   async getAlerts(userId: number, onlyUnread?: boolean): Promise<Alert[]> {
@@ -369,7 +392,7 @@ export class DatabaseStorage implements IStorage {
     const result = await db.update(alerts)
       .set({ isRead: true })
       .where(and(eq(alerts.id, id), eq(alerts.userId, userId), eq(alerts.isRead, false)));
-    return result.rowCount > 0;
+    return (result.rowCount ?? 0) > 0;
   }
 
   async getBudgets(userId: number, campaignId?: number): Promise<Budget[]> {
@@ -381,7 +404,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createBudget(budgetData: InsertBudget): Promise<Budget> {
-    const [newBudget] = await db.insert(budgets).values(budgetData).returning();
+    const convertedData = convertBudgetData(budgetData);
+    const [newBudget] = await db.insert(budgets).values(convertedData).returning();
     if (!newBudget) throw new Error("Falha ao criar orçamento.");
     return newBudget;
   }
@@ -391,8 +415,9 @@ export class DatabaseStorage implements IStorage {
     if(!existingBudget || existingBudget.length === 0) {
         return undefined;
     }
+    const convertedData = convertBudgetData(budgetData);
     const [updatedBudget] = await db.update(budgets)
-      .set(budgetData)
+      .set(convertedData)
       .where(and(eq(budgets.id, id), eq(budgets.userId, userId)))
       .returning();
     return updatedBudget;
@@ -442,7 +467,7 @@ export class DatabaseStorage implements IStorage {
   async deleteLandingPage(id: number, userId: number): Promise<boolean> {
     const result = await db.delete(landingPages)
       .where(and(eq(landingPages.id, id), eq(landingPages.userId, userId)));
-    return result.rowCount > 0;
+    return (result.rowCount ?? 0) > 0;
   }
 
   async createChatSession(userId: number, title: string = 'Nova Conversa'): Promise<ChatSession> {
