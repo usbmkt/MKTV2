@@ -3,7 +3,7 @@
 ## ✅ TODAS AS BRANCHES ATUALIZADAS E SINCRONIZADAS
 
 ### 🚀 **MKTV5** - Branch Principal (100% Funcional)
-- **Commit:** `119ab9f` - 📝 UPDATE: Documentação final - App testado em tempo real
+- **Commit:** `0993ba2` - 🔧 MERGE: Correções de build do V5R para MKTV5
 - **Status:** ✅ **100% FUNCIONAL E TESTADO EM TEMPO REAL**
 - **Conteúdo:**
   - ✅ Todas as correções TypeScript aplicadas
@@ -16,16 +16,17 @@
   - ✅ Navegação e interface responsiva
 
 ### 🎯 **V5R** - Branch para Render
-- **Commit:** `119ab9f` - Atualizada com todas as correções do MKTV5
-- **Status:** ✅ **PRONTA PARA DEPLOY NO RENDER**
+- **Commit:** `3db2075` - 🔧 FIX: Corrigir build do Render - mover Vite para dependencies
+- **Status:** ✅ **PRONTA PARA DEPLOY NO RENDER - BUILD CORRIGIDO**
 - **Configurações específicas:**
   - ✅ `render.yaml` configurado
   - ✅ `.env.render` com variáveis do Render
   - ✅ Build script otimizado para Render
+  - ✅ Vite movido para dependencies (corrigido)
   - ✅ Todas as correções do MKTV5 aplicadas
 
 ### 🌐 **V5VS** - Branch para Vercel + Supabase
-- **Commit:** `09ee883` - Merge com MKTV5 mantendo configurações Vercel
+- **Commit:** `d5ceba6` - 🔧 MERGE: Aplicar correções de build do MKTV5 para V5VS
 - **Status:** ✅ **PRONTA PARA DEPLOY NO VERCEL + SUPABASE**
 - **Configurações específicas:**
   - ✅ `vercel.json` configurado
@@ -37,9 +38,9 @@
 
 ### Commits Recentes:
 ```
-* 09ee883 (V5VS) 🔄 MERGE: Atualizações do MKTV5 para V5VS
-* 119ab9f (MKTV5, V5R) 📝 UPDATE: Documentação final - App testado
-* e345c47 🎉 MKTV5: App 100% Funcional - Todas as correções aplicadas
+* d5ceba6 (V5VS) 🔧 MERGE: Aplicar correções de build do MKTV5 para V5VS
+* 0993ba2 (MKTV5) 🔧 MERGE: Correções de build do V5R para MKTV5
+* 3db2075 (V5R) 🔧 FIX: Corrigir build do Render - mover Vite para dependencies
 ```
 
 ### Status GitHub:
@@ -69,6 +70,29 @@
    # Configuração universal
    ```
 
+## 🔧 CORREÇÕES DE BUILD APLICADAS
+
+### Problema Resolvido:
+- **Erro:** `sh: 1: vite: not found` durante build no Render
+- **Causa:** Vite estava em devDependencies, não acessível durante build
+- **Solução:** Movido Vite, esbuild e dependências de build para dependencies
+
+### Mudanças no package.json:
+```json
+"dependencies": {
+  // ... outras deps
+  "vite": "^5.4.14",
+  "esbuild": "^0.25.0",
+  "@vitejs/plugin-react": "^4.3.2",
+  "drizzle-kit": "^0.30.4"
+}
+```
+
+### Script de build atualizado:
+```json
+"build": "npx vite build && npx esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist"
+```
+
 ## ✅ CONFIRMAÇÃO FINAL
 
 **TODAS AS BRANCHES ESTÃO:**
@@ -77,7 +101,8 @@
 - ✅ Prontas para deploy
 - ✅ Com código 100% funcional
 - ✅ Sem erros de TypeScript
-- ✅ Com build funcionando
+- ✅ Com build funcionando (CORRIGIDO)
 - ✅ Testadas em tempo real
+- ✅ Build do Render corrigido
 
 **🚀 O APP ESTÁ 100% PRONTO PARA DEPLOY EM QUALQUER PLATAFORMA!**
