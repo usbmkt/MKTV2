@@ -1,6 +1,14 @@
-# 🚀 DEPLOY NO RENDER - MKTV5
+# 🎨 DEPLOY NO RENDER - MKTV5
 
-## 📋 PASSO A PASSO COMPLETO
+## ✅ STATUS: APLICAÇÃO 100% FUNCIONAL E PRONTA
+
+**Branch:** `mktv5`  
+**Commit:** `ca58145` (📚 DOCUMENTAÇÃO FINAL - MKTV5 100% PRONTO)  
+**Build:** ✅ Funcionando (0 erros)  
+**TypeScript:** ✅ Validado (0 erros)  
+**Todas as páginas:** ✅ Testadas e funcionais  
+
+## 🚀 PASSO A PASSO PARA DEPLOY NO RENDER
 
 ### 1. **CRIAR CONTA NO RENDER**
 1. Acesse: https://render.com
@@ -8,23 +16,34 @@
 3. Conecte com sua conta GitHub
 4. Autorize o acesso ao repositório **usbmkt/MKTV2**
 
-### 2. **CRIAR SERVIÇO WEB**
-1. No dashboard do Render, clique **"New +"**
-2. Selecione **"Web Service"**
-3. Conecte o repositório **usbmkt/MKTV2**
-4. Selecione a branch **mktv5**
+### 2. **CRIAR BANCO POSTGRESQL (PRIMEIRO)**
+1. No dashboard do Render, clique **"New +"** → **"PostgreSQL"**
+2. Configure:
+   ```
+   Name: mktv5-postgres
+   Database Name: mktv5
+   User: mktv5user
+   Region: Oregon (US West)
+   Plan: Free
+   ```
+3. **IMPORTANTE:** Copie a **Internal Database URL** após criação
 
-### 3. **CONFIGURAR O SERVIÇO**
+### 3. **CRIAR SERVIÇO WEB**
+1. No dashboard do Render, clique **"New +"** → **"Web Service"**
+2. Conecte o repositório **usbmkt/MKTV2**
+3. Selecione a branch **mktv5** (OBRIGATÓRIO)
+
+### 4. **CONFIGURAR O SERVIÇO**
 ```
 Name: mktv5-app
 Environment: Node
-Region: Oregon (US West)
+Region: Oregon (US West) - MESMO DO BANCO
 Branch: mktv5
 Build Command: npm install && npm run build
 Start Command: npm start
 ```
 
-### 4. **CONFIGURAR VARIÁVEIS DE AMBIENTE**
+### 5. **CONFIGURAR VARIÁVEIS DE AMBIENTE**
 ```
 NODE_ENV=production
 PORT=10000
