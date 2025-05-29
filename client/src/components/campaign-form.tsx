@@ -211,7 +211,7 @@ export default function CampaignForm({ onClose, onSuccess, initialData }: Campai
                   <FormItem>
                     <FormLabel>Setor/Indústria</FormLabel>
                     <FormControl>
-                      <Input placeholder="Ex: E-commerce, SaaS, Varejo" {...field} />
+                      <Input placeholder="Ex: E-commerce, SaaS, Varejo" {...field} value={field.value ?? ''} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -403,7 +403,7 @@ export default function CampaignForm({ onClose, onSuccess, initialData }: Campai
                       <PopoverContent className="w-auto p-0" align="start">
                         <Calendar
                           mode="single"
-                          selected={field.value}
+                          selected={field.value ?? undefined}
                           onSelect={field.onChange}
                           disabled={(date) =>
                             date < new Date(new Date().setDate(new Date().getDate() -1)) // Não permite datas passadas
@@ -444,7 +444,7 @@ export default function CampaignForm({ onClose, onSuccess, initialData }: Campai
                       <PopoverContent className="w-auto p-0" align="start">
                         <Calendar
                           mode="single"
-                          selected={field.value}
+                          selected={field.value ?? undefined}
                           onSelect={field.onChange}
                           disabled={(date) =>
                             (form.getValues("startDate") && date < form.getValues("startDate")!) ||

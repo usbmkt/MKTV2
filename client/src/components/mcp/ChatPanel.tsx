@@ -275,7 +275,7 @@ export const ChatPanel: React.FC = () => {
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => {
                 if (currentSessionId) { // Só reinicia se houver sessão
-                    useMCPStore.getState().set({ messages: [
+                    useMCPStore.setState({ messages: [
                       { id: 'reset-agent-message', text: 'Conversa reiniciada. Como posso ajudar?', sender: 'agent', timestamp: new Date(), sessionId: currentSessionId }
                     ]});
                 } else {
@@ -283,7 +283,7 @@ export const ChatPanel: React.FC = () => {
                     handleStartNewChat().then(() => {
                         const newSessionId = useMCPStore.getState().currentSessionId;
                         if (newSessionId) {
-                             useMCPStore.getState().set({ messages: [
+                             useMCPStore.setState({ messages: [
                                 { id: 'reset-agent-message', text: 'Conversa reiniciada. Como posso ajudar?', sender: 'agent', timestamp: new Date(), sessionId: newSessionId }
                             ]});
                         }

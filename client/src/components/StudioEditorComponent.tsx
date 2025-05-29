@@ -61,7 +61,7 @@ const StudioEditorComponent: React.FC<StudioEditorComponentProps> = ({
           },
           onDelete: async ({ assets }) => {
             try {
-              await onAssetsDelete(assets);
+              await onAssetsDelete(assets.map((asset: any) => ({ src: asset.src || asset.url || '' })));
             } catch (error) {
               console.error('StudioEditorComponent: Asset delete callback error:', error);
               if (onEditorError) onEditorError(error);
@@ -70,9 +70,9 @@ const StudioEditorComponent: React.FC<StudioEditorComponentProps> = ({
         },
         storage: {
           type: 'self',
-          onSave: async ({ project, id: studioInternalId }) => {
+          onSave: async ({ project }: any) => {
             try {
-              const idToSaveUnder = projectId || studioInternalId || Date.now().toString();
+              const idToSaveUnder = projectId || Date.now().toString();
               return await onProjectSave(project, idToSaveUnder); 
             } catch (error) {
               console.error('StudioEditorComponent: Project save callback error:', error);
@@ -103,12 +103,7 @@ const StudioEditorComponent: React.FC<StudioEditorComponentProps> = ({
           rteProseMirror.init({}),
           tableComponent.init({}),
           swiperComponent.init({}),
-          canvasEmptyState.init({ 
-            items: [ 
-              { label: 'Texto', commandId: 'core:component-create', commandArgs: { type: 'text', content: 'Insira seu texto...' } },
-              { label: 'Imagem', commandId: 'core:open-assets' },
-            ]
-          }),
+          canvasEmptyState.init({}),
           iconifyComponent.init({}),
           accordionComponent.init({}),
           listPagesComponent.init({
@@ -119,12 +114,12 @@ const StudioEditorComponent: React.FC<StudioEditorComponentProps> = ({
           youtubeAssetProvider.init({}),
           lightGalleryComponent.init({})
         ],
-        onLoad: () => { 
-          if (onEditorLoad) onEditorLoad();
-        },
-        onError: (error: any) => {
-           if (onEditorError) onEditorError(error);
-        }
+        // onLoad: () => { 
+        //   if (onEditorLoad) onEditorLoad();
+        // },
+        // onError: (error: any) => {
+        //    if (onEditorError) onEditorError(error);
+        // }
       }}
     />
   );

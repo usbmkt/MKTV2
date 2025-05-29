@@ -40,13 +40,13 @@ export const campaigns = pgTable("campaigns", {
   status: campaignStatusEnum("status").default("draft").notNull(), // Usando o enum
   platforms: jsonb("platforms").$type<string[]>().default([]).notNull(), // Array de strings
   objectives: jsonb("objectives").$type<string[]>().default([]),
-  budget: decimal("budget", { precision: 10, scale: 2 }), // Decimal
-  dailyBudget: decimal("daily_budget", { precision: 10, scale: 2 }),
+  budget: text("budget"), // String para compatibilidade
+  dailyBudget: text("daily_budget"),
   startDate: timestamp("start_date", { withTimezone: true }),
   endDate: timestamp("end_date", { withTimezone: true }),
   targetAudience: text("target_audience"),
   industry: text("industry"),
-  avgTicket: decimal("avg_ticket", { precision: 10, scale: 2 }),
+  avgTicket: text("avg_ticket"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
@@ -153,8 +153,8 @@ export const budgets = pgTable("budgets", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   campaignId: integer("campaign_id").references(() => campaigns.id, { onDelete: 'cascade' }),
-  totalBudget: decimal("total_budget", { precision: 10, scale: 2 }).notNull(),
-  spentAmount: decimal("spent_amount", { precision: 10, scale: 2 }).default("0").notNull(),
+  totalBudget: text("total_budget").notNull(),
+  spentAmount: text("spent_amount").default("0").notNull(),
   period: text("period", { enum: ["daily", "weekly", "monthly", "total"] }).notNull(),
   startDate: timestamp("start_date", { withTimezone: true }).notNull(),
   endDate: timestamp("end_date", { withTimezone: true }),
@@ -233,16 +233,16 @@ export const insertCampaignSchema = createInsertSchema(campaigns, {
   name: z.string().min(1, "Nome da campanha é obrigatório."),
   // platforms agora é array de strings, o Zod já inferiu corretamente de jsonb
   budget: z.preprocess(
-    (val) => (val === "" || val === null || val === undefined ? undefined : parseFloat(String(val))),
-    z.number({invalid_type_error: "Orçamento deve ser um número"}).positive("Orçamento deve ser positivo").optional().nullable()
+    (val) => (val === "" || val === null || val === undefined ? null : String(val)),
+    z.string().nullable().optional()
   ),
   dailyBudget: z.preprocess(
-    (val) => (val === "" || val === null || val === undefined ? undefined : parseFloat(String(val))),
-    z.number({invalid_type_error: "Orçamento diário deve ser um número"}).positive("Orçamento diário deve ser positivo").optional().nullable()
+    (val) => (val === "" || val === null || val === undefined ? null : String(val)),
+    z.string().nullable().optional()
   ),
   avgTicket: z.preprocess(
-    (val) => (val === "" || val === null || val === undefined ? undefined : parseFloat(String(val))),
-    z.number({invalid_type_error: "Ticket médio deve ser um número"}).positive("Ticket médio deve ser positivo").optional().nullable()
+    (val) => (val === "" || val === null || val === undefined ? null : String(val)),
+    z.string().nullable().optional()
   ),
   startDate: z.preprocess(
     (arg) => {
@@ -339,12 +339,12 @@ export const insertAlertSchema = createInsertSchema(alerts, {
 
 export const insertBudgetSchema = createInsertSchema(budgets, {
   totalBudget: z.preprocess(
-    (val) => parseFloat(String(val)),
-    z.number({invalid_type_error: "Orçamento total deve ser um número"}).positive("Orçamento total deve ser positivo")
+    (val) => String(val),
+    z.string({invalid_type_error: "Orçamento total deve ser um texto"})
   ),
   spentAmount: z.preprocess(
-    (val) => parseFloat(String(val)),
-    z.number({invalid_type_error: "Valor gasto deve ser um número"}).nonnegative("Valor gasto não pode ser negativo").optional()
+    (val) => String(val),
+    z.string({invalid_type_error: "Valor gasto deve ser um texto"}).optional()
   ),
   startDate: z.preprocess(
     (arg) => {

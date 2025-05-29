@@ -339,7 +339,7 @@ export default function UploadModal({ onClose, onSuccess, onError, initialData }
                         setSelectedFile(null);
                         form.setValue('fileUrl', null, { shouldValidate: true }); // Marcar para remoção
                         setPreviewUrl(null);
-                        toast({ title: 'Arquivo removido', description: 'O arquivo existente será removido ao salvar.', variant: 'warning' });
+                        toast({ title: 'Arquivo removido', description: 'O arquivo existente será removido ao salvar.', variant: 'destructive' });
                       }}
                     >
                       <X className="w-4 h-4 mr-1" /> Remover Arquivo Existente
