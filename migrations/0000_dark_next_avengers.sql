@@ -1,6 +1,6 @@
-CREATE TYPE "public"."campaign_status" AS ENUM('active', 'paused', 'completed', 'draft');--> statement-breakpoint
-CREATE TYPE "public"."chat_sender" AS ENUM('user', 'agent');--> statement-breakpoint
-CREATE TABLE "alerts" (
+CREATE TYPE IF NOT EXISTS "public"."campaign_status" AS ENUM('active', 'paused', 'completed', 'draft');--> statement-breakpoint
+CREATE TYPE IF NOT EXISTS "public"."chat_sender" AS ENUM('user', 'agent');--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "alerts" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" integer NOT NULL,
 	"campaign_id" integer,
@@ -11,7 +11,7 @@ CREATE TABLE "alerts" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "budgets" (
+CREATE TABLE IF NOT EXISTS "budgets" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" integer NOT NULL,
 	"campaign_id" integer,
@@ -23,7 +23,7 @@ CREATE TABLE "budgets" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "campaigns" (
+CREATE TABLE IF NOT EXISTS "campaigns" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" integer NOT NULL,
 	"name" text NOT NULL,
@@ -42,7 +42,7 @@ CREATE TABLE "campaigns" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "chat_messages" (
+CREATE TABLE IF NOT EXISTS "chat_messages" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"session_id" integer NOT NULL,
 	"sender" "chat_sender" NOT NULL,
@@ -51,7 +51,7 @@ CREATE TABLE "chat_messages" (
 	"timestamp" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "chat_sessions" (
+CREATE TABLE IF NOT EXISTS "chat_sessions" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" integer NOT NULL,
 	"title" text DEFAULT 'Nova Conversa' NOT NULL,
@@ -59,7 +59,7 @@ CREATE TABLE "chat_sessions" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "copies" (
+CREATE TABLE IF NOT EXISTS "copies" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" integer NOT NULL,
 	"campaign_id" integer,
@@ -70,7 +70,7 @@ CREATE TABLE "copies" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "creatives" (
+CREATE TABLE IF NOT EXISTS "creatives" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" integer NOT NULL,
 	"campaign_id" integer,
@@ -85,7 +85,7 @@ CREATE TABLE "creatives" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "funnel_stages" (
+CREATE TABLE IF NOT EXISTS "funnel_stages" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"funnel_id" integer NOT NULL,
 	"name" text NOT NULL,
@@ -95,7 +95,7 @@ CREATE TABLE "funnel_stages" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "funnels" (
+CREATE TABLE IF NOT EXISTS "funnels" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" integer NOT NULL,
 	"campaign_id" integer,
@@ -105,7 +105,7 @@ CREATE TABLE "funnels" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "landing_pages" (
+CREATE TABLE IF NOT EXISTS "landing_pages" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" integer NOT NULL,
 	"name" text NOT NULL,
@@ -122,7 +122,7 @@ CREATE TABLE "landing_pages" (
 	CONSTRAINT "landing_pages_slug_unique" UNIQUE("slug")
 );
 --> statement-breakpoint
-CREATE TABLE "metrics" (
+CREATE TABLE IF NOT EXISTS "metrics" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"campaign_id" integer NOT NULL,
 	"user_id" integer NOT NULL,
@@ -136,7 +136,7 @@ CREATE TABLE "metrics" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "users" (
+CREATE TABLE IF NOT EXISTS "users" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"username" text NOT NULL,
 	"email" text NOT NULL,
@@ -147,7 +147,7 @@ CREATE TABLE "users" (
 	CONSTRAINT "users_email_unique" UNIQUE("email")
 );
 --> statement-breakpoint
-CREATE TABLE "whatsapp_messages" (
+CREATE TABLE IF NOT EXISTS "whatsapp_messages" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" integer NOT NULL,
 	"contact_number" text NOT NULL,
