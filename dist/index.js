@@ -1628,23 +1628,12 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path2 from "path";
 import { fileURLToPath } from "node:url";
-var vite_config_default = defineConfig(async ({ command, mode }) => {
+var vite_config_default = defineConfig(({ command, mode }) => {
   const plugins = [
     react()
     // O runtimeErrorOverlay é útil para desenvolvimento, pode ser removido para produção final se desejado
     // runtimeErrorOverlay(), 
   ];
-  if (mode !== "production" && process.env.REPL_ID) {
-    try {
-      const { cartographer } = await import("@replit/vite-plugin-cartographer");
-      const cartographerPlugin = cartographer();
-      if (cartographerPlugin) {
-        plugins.push(cartographerPlugin);
-      }
-    } catch (e) {
-      console.warn("@replit/vite-plugin-cartographer not found, skipping.");
-    }
-  }
   return {
     plugins,
     define: {
@@ -1692,8 +1681,19 @@ var vite_config_default = defineConfig(async ({ command, mode }) => {
     },
     server: {
       // Configurações do servidor de desenvolvimento Vite
-      port: 3e3
+      port: 3e3,
       // Ou a porta que você preferir para desenvolvimento local
+      host: "0.0.0.0",
+      // Permite acesso de qualquer host
+      allowedHosts: [
+        "localhost",
+        "127.0.0.1",
+        "0.0.0.0",
+        "work-1-cixzsejsspdqlyvw.prod-runtime.all-hands.dev",
+        "work-2-cixzsejsspdqlyvw.prod-runtime.all-hands.dev",
+        ".all-hands.dev",
+        ".prod-runtime.all-hands.dev"
+      ]
       // proxy: { // Exemplo se você precisar de proxy para o backend em desenvolvimento
       //   '/api': {
       //     target: 'http://localhost:5000', // Seu servidor backend
@@ -1808,7 +1808,8 @@ app.use((req, res, next) => {
     res.status(status).json({ message });
     throw err;
   });
-  if (app.get("env") === "development") {
+  log(`Environment: NODE_ENV=${process.env.NODE_ENV}, app.get("env")=${app.get("env")}`);
+  if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);
   } else {
     serveStatic(app);

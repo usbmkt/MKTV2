@@ -7,27 +7,12 @@ import { fileURLToPath, URL } from 'node:url';
 // Remova ou ajuste se não estiver usando o ambiente Replit para o build final
 // import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal"; 
 
-export default defineConfig(async ({ command, mode }) => {
+export default defineConfig(({ command, mode }) => {
   const plugins = [
     react(),
     // O runtimeErrorOverlay é útil para desenvolvimento, pode ser removido para produção final se desejado
     // runtimeErrorOverlay(), 
   ];
-
-  // Adicionar plugin cartographer apenas em desenvolvimento no Replit
-  // Verifique se REPL_ID está definido no seu ambiente de build do Railway, caso contrário, remova esta lógica condicional.
-  // Para um build de produção padrão, você provavelmente não precisará do cartographer.
-  if (mode !== "production" && process.env.REPL_ID) {
-    try {
-      const { cartographer } = await import("@replit/vite-plugin-cartographer");
-      const cartographerPlugin = cartographer();
-      if (cartographerPlugin) {
-        plugins.push(cartographerPlugin);
-      }
-    } catch (e) {
-      console.warn("@replit/vite-plugin-cartographer not found, skipping.");
-    }
-  }
 
   return {
     plugins: plugins,
@@ -74,6 +59,16 @@ export default defineConfig(async ({ command, mode }) => {
     },
     server: { // Configurações do servidor de desenvolvimento Vite
       port: 3000, // Ou a porta que você preferir para desenvolvimento local
+      host: '0.0.0.0', // Permite acesso de qualquer host
+      allowedHosts: [
+        'localhost',
+        '127.0.0.1',
+        '0.0.0.0',
+        'work-1-cixzsejsspdqlyvw.prod-runtime.all-hands.dev',
+        'work-2-cixzsejsspdqlyvw.prod-runtime.all-hands.dev',
+        '.all-hands.dev',
+        '.prod-runtime.all-hands.dev'
+      ],
       // proxy: { // Exemplo se você precisar de proxy para o backend em desenvolvimento
       //   '/api': {
       //     target: 'http://localhost:5000', // Seu servidor backend
