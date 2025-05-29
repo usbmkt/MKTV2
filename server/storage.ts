@@ -525,7 +525,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // --- Funções para o Dashboard ---
-  async getDashboardData(userId: number, timeRange: string = '30d') {
+  async getDashboardData(userId: number, timeRange: string) {
     // Lógica para calcular o intervalo de tempo com base em timeRange
     const now = new Date();
     let startDate = new Date();
