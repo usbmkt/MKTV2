@@ -30,6 +30,7 @@ export const userRelations = relations(users, ({ many }) => ({
   budgets: many(budgets),
   landingPages: many(landingPages),
   chatSessions: many(chatSessions),
+  funnels: many(funnels), // Adicionado relacionamento com funis
 }));
 
 export const campaigns = pgTable("campaigns", {
@@ -37,10 +38,10 @@ export const campaigns = pgTable("campaigns", {
   userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   name: text("name").notNull(),
   description: text("description"),
-  status: campaignStatusEnum("status").default("draft").notNull(), // Usando o enum
-  platforms: jsonb("platforms").$type<string[]>().default([]).notNull(), // Array de strings
+  status: campaignStatusEnum("status").default("draft").notNull(),
+  platforms: jsonb("platforms").$type<string[]>().default([]).notNull(),
   objectives: jsonb("objectives").$type<string[]>().default([]),
-  budget: text("budget"), // String para compatibilidade
+  budget: text("budget"),
   dailyBudget: text("daily_budget"),
   startDate: timestamp("start_date", { withTimezone: true }),
   endDate: timestamp("end_date", { withTimezone: true }),
@@ -61,6 +62,7 @@ export const campaignRelations = relations(campaigns, ({ one, many }) => ({
   copies: many(copies),
   alerts: many(alerts),
   budgets: many(budgets),
+  funnels: many(funnels), // Adicionado relacionamento com funis
 }));
 
 export const creatives = pgTable("creatives", {
@@ -69,10 +71,10 @@ export const creatives = pgTable("creatives", {
   campaignId: integer("campaign_id").references(() => campaigns.id, { onDelete: 'set null' }),
   name: text("name").notNull(),
   type: text("type", { enum: ["image", "video", "text", "carousel"] }).notNull(),
-  fileUrl: text("file_url"), // fileUrl é TEXT
+  fileUrl: text("file_url"),
   content: text("content"),
   status: text("status", { enum: ["approved", "pending", "rejected"] }).default("pending").notNull(),
-  platforms: jsonb("platforms").$type<string[]>().default([]).notNull(), // Isso é JSONB no DB
+  platforms: jsonb("platforms").$type<string[]>().default([]).notNull(),
   thumbnailUrl: text("thumbnail_url"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
@@ -214,6 +216,42 @@ export const chatMessageRelations = relations(chatMessages, ({ one }) => ({
   session: one(chatSessions, { fields: [chatMessages.sessionId], references: [chatSessions.id] }),
 }));
 
+// Novas tabelas para Funis
+export const funnels = pgTable("funnels", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  campaignId: integer("campaign_id").references(() => campaigns.id, { onDelete: 'set null' }), // Opcional
+  name: text("name").notNull(),
+  description: text("description"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const funnelRelations = relations(funnels, ({ one, many }) => ({
+  user: one(users, { fields: [funnels.userId], references: [users.id] }),
+  campaign: one(campaigns, { fields: [funnels.campaignId], references: [campaigns.id] }),
+  stages: many(funnelStages),
+}));
+
+export const funnelStages = pgTable("funnel_stages", {
+  id: serial("id").primaryKey(),
+  funnelId: integer("funnel_id").notNull().references(() => funnels.id, { onDelete: 'cascade' }),
+  name: text("name").notNull(),
+  description: text("description"),
+  order: integer("order").notNull(), // Para definir a sequência das etapas
+  // Campos adicionais podem ser úteis, como:
+  // expectedVisitors: integer("expected_visitors"),
+  // actualVisitors: integer("actual_visitors"),
+  // expectedConversionRate: decimal("expected_conversion_rate", { precision: 5, scale: 2 }),
+  // actualConversionRate: decimal("actual_conversion_rate", { precision: 5, scale: 2 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const funnelStageRelations = relations(funnelStages, ({ one }) => ({
+  funnel: one(funnels, { fields: [funnelStages.funnelId], references: [funnels.id] }),
+}));
+
 
 // ========================================================================
 // Schemas de Inserção e Tipos
@@ -231,7 +269,6 @@ export const insertUserSchema = createInsertSchema(users, {
 
 export const insertCampaignSchema = createInsertSchema(campaigns, {
   name: z.string().min(1, "Nome da campanha é obrigatório."),
-  // platforms agora é array de strings, o Zod já inferiu corretamente de jsonb
   budget: z.preprocess(
     (val) => (val === "" || val === null || val === undefined ? null : String(val)),
     z.string().nullable().optional()
@@ -280,27 +317,21 @@ export const insertCreativeSchema = createInsertSchema(creatives, {
     z.array(z.string()).optional()
   ),
   fileUrl: z.string().nullable().optional(),
-  // CORREÇÃO AQUI: Pré-processamento para campaignId
   campaignId: z.preprocess(
     (val) => {
-      // Se val é a string "null" ou string vazia, converte para null
       if (val === "null" || val === "") {
         return null;
       }
-      // Se já é um número ou null, retorna
       if (typeof val === 'number' || val === null) {
         return val;
       }
-      // Se é uma string que pode ser parseada para número, parseia
       if (typeof val === 'string') {
         const parsed = parseInt(val);
-        // Se parsed for NaN (string inválida), retorna undefined para Zod tratar como opcional
         return isNaN(parsed) ? undefined : parsed;
       }
-      // Para outros tipos (undefined, etc.), retorna undefined para Zod tratar como opcional
       return undefined;
     },
-    z.number().nullable().optional() // Opcional e pode ser null
+    z.number().nullable().optional()
   ),
 }).omit({
   id: true,
@@ -378,7 +409,6 @@ export const insertLandingPageSchema = createInsertSchema(landingPages, {
   publishedAt: true,
 });
 
-// Tipos para as novas tabelas de chat
 export const insertChatSessionSchema = createInsertSchema(chatSessions).omit({
   id: true,
   createdAt: true,
@@ -389,8 +419,34 @@ export const insertChatMessageSchema = createInsertSchema(chatMessages).omit({
   timestamp: true,
 });
 
+// Schemas para Funis
+export const insertFunnelSchema = createInsertSchema(funnels, {
+  name: z.string().min(1, "Nome do funil é obrigatório."),
+  campaignId: z.preprocess( // Permite que campaignId seja string vazia ou null no formulário
+    (val) => (val === "" || val === null || val === undefined ? null : parseInt(String(val))),
+    z.number().nullable().optional()
+  ),
+}).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
 
-// Tipos para as tabelas (mantendo seu padrão)
+export const insertFunnelStageSchema = createInsertSchema(funnelStages, {
+  name: z.string().min(1, "Nome da etapa é obrigatório."),
+  order: z.number().min(0, "Ordem deve ser um número positivo."),
+  // expectedConversionRate: z.preprocess( // Exemplo se você adicionar esse campo
+  // (val) => (val === "" || val === null || val === undefined ? null : String(val)),
+  // z.string().nullable().optional()
+  // ),
+}).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+
+// Tipos para as tabelas
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type InsertCampaign = z.infer<typeof insertCampaignSchema>;
@@ -409,9 +465,13 @@ export type InsertBudget = z.infer<typeof insertBudgetSchema>;
 export type Budget = typeof budgets.$inferSelect;
 export type InsertLandingPage = z.infer<typeof insertLandingPageSchema>;
 export type LandingPage = typeof landingPages.$inferSelect;
-
-// Novos tipos para chat
 export type InsertChatSession = z.infer<typeof insertChatSessionSchema>;
 export type ChatSession = typeof chatSessions.$inferSelect;
 export type InsertChatMessage = z.infer<typeof insertChatMessageSchema>;
 export type ChatMessage = typeof chatMessages.$inferSelect;
+
+// Novos tipos para Funis
+export type InsertFunnel = z.infer<typeof insertFunnelSchema>;
+export type Funnel = typeof funnels.$inferSelect;
+export type InsertFunnelStage = z.infer<typeof insertFunnelStageSchema>;
+export type FunnelStage = typeof funnelStages.$inferSelect;
