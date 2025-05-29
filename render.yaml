@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: mktv5-app
+    env: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: FORCE_AUTH_BYPASS
+        value: false
+      - key: GEMINI_API_KEY
+        fromDatabase:
+          name: mktv5-secrets
+          property: GEMINI_API_KEY
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 8d
+      - key: GRAPESJS_STUDIO_LICENSE_KEY
+        fromDatabase:
+          name: mktv5-secrets
+          property: GRAPESJS_STUDIO_LICENSE_KEY
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mktv5-postgres
+          property: connectionString
+
+databases:
+  - name: mktv5-postgres
+    plan: free
+    databaseName: mktv5
+    user: mktv5user
