@@ -10,12 +10,12 @@ export default defineConfig({
   // Caminho confirmado para o seu arquivo de schema
   schema: "./shared/schema.ts",
   dialect: "postgresql",
-  // Mantemos o driver 'pg'
-  driver: "pg",
+  // Usamos 'pglite' aqui para tentar satisfazer a validação do 'drizzle-kit generate' durante o build
+  driver: "pglite",
   dbCredentials: {
-    // Usamos 'url' conforme o último erro solicitou
+    // Usamos 'url' pois o erro mais recente indicou que é o esperado para o migrate/config
     url: process.env.DATABASE_URL!,
-    // Configuração SSL para o Render, ignorando validação de certificado
+    // Mantemos a configuração SSL necessária para conectar ao Render
     ssl: { rejectUnauthorized: false }
   },
   verbose: true, // Mantém logs detalhados, útil para depuração
