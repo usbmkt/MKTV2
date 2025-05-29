@@ -1,4 +1,7 @@
 // server/db.ts
+import dotenv from 'dotenv';
+dotenv.config();
+
 import { drizzle, NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import * as schema from '../shared/schema'; // Importa todo o schema para o drizzle

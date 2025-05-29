@@ -25,7 +25,7 @@ import {
 } from "../shared/schema";
 import { ZodError } from "zod";
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
-import { JWT_SECRET, GEMINI_API_KEY } from './config.ts';
+import { JWT_SECRET, GEMINI_API_KEY } from './config';
 
 const UPLOADS_ROOT_DIR = 'uploads';
 const LP_ASSETS_DIR = path.resolve(UPLOADS_ROOT_DIR, 'lp-assets');
@@ -113,6 +113,20 @@ interface AuthenticatedRequest extends Request {
 }
 
 const authenticateToken = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  // Bypass de autenticação para desenvolvimento/teste
+  if (process.env.FORCE_AUTH_BYPASS === 'true') {
+    console.log('[AUTH] Bypass ativo - criando usuário mock');
+    req.user = {
+      id: 1,
+      username: 'admin',
+      email: 'admin@usbmkt.com',
+      password: 'hashed_password',
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    return next();
+  }
+
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 

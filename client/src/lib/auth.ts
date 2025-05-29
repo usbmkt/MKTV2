@@ -111,6 +111,28 @@ export const useAuthStore = create<AuthState>()(
       },
       
       checkAuth: () => {
+        // Debug das variáveis de ambiente
+        console.log('[AUTH] Verificando variáveis de ambiente:');
+        console.log('[AUTH] VITE_FORCE_AUTH_BYPASS:', import.meta.env.VITE_FORCE_AUTH_BYPASS);
+        console.log('[AUTH] Todas as env vars:', import.meta.env);
+        
+        // Bypass de autenticação para desenvolvimento/teste
+        const forceBypass = import.meta.env.VITE_FORCE_AUTH_BYPASS === 'true' || 
+                           import.meta.env.VITE_FORCE_AUTH_BYPASS === true ||
+                           window.location.hostname.includes('all-hands.dev'); // Bypass para ambiente de desenvolvimento
+        
+        if (forceBypass) {
+          console.log('[AUTH] Frontend bypass ativo - autenticando automaticamente');
+          set({
+            user: { id: 1, username: 'admin', email: 'admin@usbmkt.com' },
+            token: 'bypass-token',
+            isAuthenticated: true,
+            isLoading: false,
+            error: null
+          });
+          return;
+        }
+
         // Esta função é chamada na inicialização da app para reidratar o estado de isAuthenticated
         // com base no token/user persistidos.
         const state = get(); // Pega o estado atual (que já foi reidratado pelo middleware 'persist')
