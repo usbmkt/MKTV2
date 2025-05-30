@@ -1,272 +1,237 @@
-import { useState, useMemo, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+// client/src/pages/FunnelSimulatorPage.tsx
+import { useState, useMemo, ChangeEvent } from 'react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Select as ShadSelect, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Users, MousePointer, ShoppingCart, CreditCard, TrendingUp, Plus, Edit, Trash2, Loader2, AlertTriangle, Link as LinkIcon, Filter as FilterIcon } from 'lucide-react'; // Adicionado LinkIcon e FilterIcon
+import { Label } from '@/components/ui/label';
+import { Slider } from '@/components/ui/slider'; // Usaremos Input por precisão, mas Slider é opção
+import { Button } from '@/components/ui/button';
 import { ResponsiveContainer, FunnelChart, Funnel as RechartsFunnel, Tooltip as RechartsTooltip, LabelList, Cell } from 'recharts';
-import { useToast } from '@/hooks/use-toast';
-import { apiRequest } from '@/lib/api';
-import { Funnel as FunnelType, FunnelStage, InsertFunnel, insertFunnelSchema, Campaign as CampaignType } from '@shared/schema';
+import { DollarSign, Users, Percent, TrendingUp, BarChartHorizontalBig, Settings, ShoppingBag } from 'lucide-react';
 
-interface FunnelWithStages extends FunnelType {
-  stages: FunnelStage[];
-  totalVisitors?: number; 
-  totalConversions?: number;
-  overallConversionRate?: number;
+const FUNNEL_CHART_COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff8042', '#00C49F'];
+
+interface SimulatorData {
+  investimentoDiario: number;
+  cpc: number;
+  precoProduto: number;
+  alcanceOrganico: number;
+  conversaoAlcanceParaCliques: number; // Em %
+  taxaConversaoSite: number; // Em %
 }
 
-type FunnelFormData = Pick<InsertFunnel, "name" | "description" | "campaignId">;
+const initialSimulatorData: SimulatorData = {
+  investimentoDiario: 279.70,
+  cpc: 1.95,
+  precoProduto: 97.00,
+  alcanceOrganico: 12000,
+  conversaoAlcanceParaCliques: 2.00,
+  taxaConversaoSite: 2.50,
+};
 
-const FUNNEL_COLORS = ['#8884d8', '#83a6ed', '#8dd1e1', '#82ca9d', '#a4de6c', '#d0ed57', '#ffc658'];
+export default function FunnelSimulatorPage() {
+  const [data, setData] = useState<SimulatorData>(initialSimulatorData);
 
-export default function FunnelPage() {
-  const [selectedFunnelId, setSelectedFunnelId] = useState<number | null>(null);
-  const [isFormModalOpen, setIsFormModalOpen] = useState(false);
-  const [editingFunnel, setEditingFunnel] = useState<FunnelType | null>(null);
-  const [campaignFilter, setCampaignFilter] = useState<string>('all'); // 'all' ou campaignId
-  
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-
-  const { data: allFunnels = [], isLoading: isLoadingFunnels, error: funnelsError, refetch: refetchFunnelsList } = useQuery<FunnelType[]>({
-    queryKey: ['funnels'],
-    queryFn: async () => apiRequest('GET', '/api/funnels').then(res => res.json()),
-  });
-
-  const { data: selectedFunnelData, isLoading: isLoadingSelectedFunnel, error: selectedFunnelError } = useQuery<FunnelWithStages>({
-    queryKey: ['funnelDetails', selectedFunnelId],
-    queryFn: async () => apiRequest('GET', `/api/funnels/${selectedFunnelId}`).then(res => res.json()),
-    enabled: !!selectedFunnelId,
-  });
-  
-  const { data: campaignsList = [] } = useQuery<CampaignType[]>({
-    queryKey: ['campaignsForFunnelForm'], // Usado também para o filtro
-    queryFn: () => apiRequest('GET', '/api/campaigns').then(res => res.json()),
-  });
-
-  const form = useForm<FunnelFormData>({
-    resolver: zodResolver(insertFunnelSchema.pick({ name: true, description: true, campaignId: true })),
-    defaultValues: { name: '', description: '', campaignId: null },
-  });
-  
-  useEffect(() => {
-    if (editingFunnel) {
-      form.reset({
-        name: editingFunnel.name,
-        description: editingFunnel.description || '',
-        campaignId: editingFunnel.campaignId === undefined || editingFunnel.campaignId === null ? null : editingFunnel.campaignId,
-      });
-    } else {
-      form.reset({ name: '', description: '', campaignId: null });
-    }
-  }, [editingFunnel, form, isFormModalOpen]);
-
-  const funnelMutation = useMutation<FunnelType, Error, FunnelFormData & { id?: number }>({
-    mutationFn: async (data) => {
-      const method = data.id ? 'PUT' : 'POST';
-      const url = data.id ? `/api/funnels/${data.id}` : '/api/funnels';
-      return apiRequest(method, url, data).then(res => res.json());
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['funnels'] });
-      toast({ title: `Funil ${editingFunnel ? 'atualizado' : 'criado'}!` });
-      setIsFormModalOpen(false);
-      setEditingFunnel(null);
-      setSelectedFunnelId(data.id);
-      queryClient.invalidateQueries({ queryKey: ['funnelDetails', data.id] });
-    },
-    onError: (error) => toast({ title: 'Erro ao salvar funil', description: error.message, variant: 'destructive' }),
-  });
-
-  const deleteFunnelMutation = useMutation<void, Error, number>({
-    mutationFn: (id) => apiRequest('DELETE', `/api/funnels/${id}`).then(res => { if(!res.ok) throw new Error('Falha ao excluir'); return res.json()}),
-    onSuccess: (_, deletedFunnelId) => {
-      queryClient.invalidateQueries({ queryKey: ['funnels'] });
-      toast({ title: 'Funil excluído!' });
-      if (selectedFunnelId === deletedFunnelId) {
-        const remainingFunnels = allFunnels.filter(f => f.id !== deletedFunnelId);
-        setSelectedFunnelId(remainingFunnels.length > 0 ? remainingFunnels[0].id : null);
-      }
-    },
-    onError: (error) => toast({ title: 'Erro ao excluir funil', description: error.message, variant: 'destructive' }),
-  });
-
-  const handleOpenFormModal = (funnel?: FunnelType) => {
-    setEditingFunnel(funnel || null);
-    setIsFormModalOpen(true);
+  const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setData(prev => ({ ...prev, [name]: parseFloat(value) || 0 }));
   };
   
-  const onSubmitFunnelForm = (data: FunnelFormData) => funnelMutation.mutate({ ...data, id: editingFunnel?.id });
-  const handleDeleteFunnel = (id: number) => { if (window.confirm('Excluir este funil e suas etapas?')) deleteFunnelMutation.mutate(id); };
-  
-  const filteredFunnelsList = useMemo(() => {
-    if (campaignFilter === 'all') return allFunnels;
-    const campaignIdNum = parseInt(campaignFilter);
-    return allFunnels.filter(funnel => funnel.campaignId === campaignIdNum);
-  }, [allFunnels, campaignFilter]);
-
-  useEffect(() => {
-    if (!selectedFunnelId && filteredFunnelsList && filteredFunnelsList.length > 0) {
-      setSelectedFunnelId(filteredFunnelsList[0].id);
-    } else if (selectedFunnelId && filteredFunnelsList.length > 0 && !filteredFunnelsList.find(f => f.id === selectedFunnelId)) {
-      // Se o funil selecionado não estiver mais na lista filtrada, seleciona o primeiro da lista filtrada
-      setSelectedFunnelId(filteredFunnelsList[0].id);
-    } else if (filteredFunnelsList.length === 0) {
-      setSelectedFunnelId(null);
-    }
-  }, [filteredFunnelsList, selectedFunnelId]);
+  const handleSliderChange = (name: keyof SimulatorData, value: number[]) => {
+    setData(prev => ({ ...prev, [name]: value[0] || 0 }));
+  };
 
 
-  const funnelChartData = useMemo(() => {
-    if (!selectedFunnelData || !selectedFunnelData.stages || selectedFunnelData.stages.length === 0) return [];
-    let currentStageValue = 1000; 
-    return selectedFunnelData.stages
-      .sort((a, b) => a.order - b.order)
-      .map((stage, index) => {
-        if (index > 0) currentStageValue = Math.max(1, Math.floor(currentStageValue * (0.4 + Math.random() * 0.45))); 
-        return { 
-          value: currentStageValue, 
-          name: `${stage.order}. ${stage.name}`, 
-          fill: FUNNEL_COLORS[index % FUNNEL_COLORS.length], 
-          stageId: stage.id,
-          description: stage.description 
-        };
-    });
-  }, [selectedFunnelData]);
+  const calculations = useMemo(() => {
+    const visitantesPagos = data.cpc > 0 ? data.investimentoDiario / data.cpc : 0;
+    const visitantesOrganicos = data.alcanceOrganico * (data.conversaoAlcanceParaCliques / 100);
+    const totalVisitantes = visitantesPagos + visitantesOrganicos;
+    const vendas = totalVisitantes * (data.taxaConversaoSite / 100);
+    
+    const faturamentoDiario = vendas * data.precoProduto;
+    const lucroDiario = faturamentoDiario - data.investimentoDiario;
 
-  if (isLoadingFunnels) return <div className="p-8 text-center"><Loader2 className="h-12 w-12 animate-spin mx-auto text-primary" /> Carregando funis...</div>;
-  if (funnelsError) return <div className="p-8 text-center text-destructive"><AlertTriangle className="h-12 w-12 mx-auto mb-2" />Erro: {funnelsError.message}<Button onClick={() => refetchFunnelsList()} className="mt-4">Tentar Novamente</Button></div>;
+    return {
+      visitantesPagos: Math.round(visitantesPagos),
+      visitantesOrganicos: Math.round(visitantesOrganicos),
+      totalVisitantes: Math.round(totalVisitantes),
+      vendas: parseFloat(vendas.toFixed(2)), // Manter precisão para cálculo de faturamento
+      vendasDisplay: Math.round(vendas), // Para exibição
+      faturamentoDiario,
+      lucroDiario,
+      faturamentoSemanal: faturamentoDiario * 7,
+      lucroSemanal: lucroDiario * 7,
+      faturamentoMensal: faturamentoDiario * 30,
+      lucroMensal: lucroDiario * 30,
+      vendasSemanais: Math.round(vendas * 7),
+      vendasMensais: Math.round(vendas * 30),
+    };
+  }, [data]);
 
-  const selectedCampaignName = selectedFunnelData?.campaignId 
-    ? campaignsList.find(c => c.id === selectedFunnelData.campaignId)?.name 
-    : null;
+  const funnelChartData = [
+    { name: 'Total Visitantes', value: calculations.totalVisitantes, fill: FUNNEL_CHART_COLORS[0] },
+    { name: 'Vendas Estimadas', value: calculations.vendasDisplay, fill: FUNNEL_CHART_COLORS[1] },
+    // Poderíamos adicionar Faturamento como uma etapa final se a escala não ficar muito diferente
+    // { name: 'Faturamento', value: calculations.faturamentoDiario, fill: FUNNEL_CHART_COLORS[2] },
+  ].filter(item => item.value > 0); // Evitar etapas com valor zero no gráfico
+
+  const formatCurrency = (value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+  const formatNumber = (value: number) => new Intl.NumberFormat('pt-BR').format(value);
+
+  const inputFields: Array<{ id: keyof SimulatorData, label: string, min: number, max: number, step: number, unit?: string, icon: React.ElementType }> = [
+    { id: 'investimentoDiario', label: 'Investimento Diário (R$)', min: 0, max: 5000, step: 10, icon: DollarSign },
+    { id: 'cpc', label: 'Custo por Clique - CPC (R$)', min: 0.01, max: 20, step: 0.01, icon: MousePointer },
+    { id: 'precoProduto', label: 'Preço do Produto (R$)', min: 0, max: 2000, step: 1, icon: ShoppingBag },
+    { id: 'alcanceOrganico', label: 'Alcance Orgânico (diário)', min: 0, max: 100000, step: 500, icon: Users },
+    { id: 'conversaoAlcanceParaCliques', label: 'Conversão Alcance p/ Cliques (%)', min: 0.1, max: 20, step: 0.1, unit: '%', icon: Percent },
+    { id: 'taxaConversaoSite', label: 'Taxa de Conversão do Site (%)', min: 0.1, max: 20, step: 0.1, unit: '%', icon: TrendingUp },
+  ];
 
   return (
-    <div className="space-y-6 p-4 md:p-8">
-      <div className="flex justify-between items-center">
-        <div><h1 className="text-3xl font-bold tracking-tight">Análise de Funil</h1><p className="text-muted-foreground">Monitore a jornada e otimize conversões.</p></div>
-        <Button onClick={() => handleOpenFormModal()}><Plus className="w-4 h-4 mr-2" /> Novo Funil</Button>
+    <div className="p-4 md:p-6 space-y-6">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Simulador de Funil de Vendas</h1>
+          <p className="text-muted-foreground mt-1">
+            Faça previsões e ajuste suas métricas para otimizar resultados.
+          </p>
+        </div>
+        <Button variant="outline" className="mt-4 md:mt-0 neu-button">
+          <Settings className="w-4 h-4 mr-2" /> Opções Avançadas
+        </Button>
       </div>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Selecionar Funil</CardTitle>
-          <div className="w-64">
-            <ShadSelect value={campaignFilter} onValueChange={setCampaignFilter}>
-              <SelectTrigger><FilterIcon className="w-4 h-4 mr-2" /><SelectValue placeholder="Filtrar por Campanha" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas as Campanhas</SelectItem>
-                {campaignsList.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
-              </SelectContent>
-            </ShadSelect>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {filteredFunnelsList.length === 0 ? <p className="text-muted-foreground text-center py-4">Nenhum funil encontrado para os filtros selecionados.</p> : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {filteredFunnelsList.map((f) => {
-                const campaignName = f.campaignId ? campaignsList.find(c => c.id === f.campaignId)?.name : null;
-                return (
-                  <div key={f.id} className={`p-4 border rounded-lg cursor-pointer ${selectedFunnelId === f.id ? 'border-primary bg-primary/5' : 'hover:border-primary/50'}`} onClick={() => setSelectedFunnelId(f.id)}>
-                    <div className="flex justify-between items-start">
-                      <h3 className="font-semibold flex-1 mr-2">{f.name}</h3>
-                      <div className="flex-shrink-0 space-x-1">
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); handleOpenFormModal(f);}}><Edit className="h-3.5 w-3.5"/></Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-destructive/10" onClick={(e) => { e.stopPropagation(); handleDeleteFunnel(f.id);}} disabled={deleteFunnelMutation.isPending && deleteFunnelMutation.variables === f.id}><Trash2 className="h-3.5 w-3.5 text-destructive"/></Button>
-                      </div>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1 truncate">{f.description || "Sem descrição"}</p>
-                    {campaignName && <p className="text-xs text-primary/80 mt-1 flex items-center"><LinkIcon className="w-3 h-3 mr-1"/> Campanha: {campaignName}</p>}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList><TabsTrigger value="overview">Visão Geral</TabsTrigger><TabsTrigger value="detailed" disabled={!selectedFunnelId || !selectedFunnelData?.stages?.length}>Análise Detalhada</TabsTrigger><TabsTrigger value="optimization" disabled={!selectedFunnelId}>Otimização</TabsTrigger></TabsList>
-        
-        <TabsContent value="overview" className="space-y-4">
-          {isLoadingSelectedFunnel && selectedFunnelId && <div className="p-8 text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" /> Carregando...</div>}
-          {selectedFunnelError && <Card className="border-destructive bg-destructive/10"><CardContent className="p-4 text-destructive flex items-center"><AlertTriangle className="h-5 w-5 mr-2" />Erro: {selectedFunnelError.message}</CardContent></Card>}
-
-          {selectedFunnelData && !isLoadingSelectedFunnel && (
-            <>
-              {selectedCampaignName && (
-                <Card className="bg-secondary/50"><CardContent className="p-3"><p className="text-sm text-center font-medium">Funil referente à Campanha: <span className="text-primary">{selectedCampaignName}</span></p></CardContent></Card>
-              )}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Visitantes (Início)</CardTitle><Users className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">{funnelChartData[0]?.value.toLocaleString() || 0}</div></CardContent></Card>
-                <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Conversões (Fim)</CardTitle><MousePointer className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">{funnelChartData[funnelChartData.length-1]?.value.toLocaleString() || 0}</div></CardContent></Card>
-                <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Taxa Conv. Total</CardTitle><TrendingUp className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">{(funnelChartData[0]?.value > 0 ? ( (funnelChartData[funnelChartData.length-1]?.value || 0) / funnelChartData[0]?.value * 100).toFixed(1) : 0)}%</div></CardContent></Card>
-                <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Etapas</CardTitle><CreditCard className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">{selectedFunnelData.stages?.length || 0}</div></CardContent></Card>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Coluna de Inputs */}
+        <Card className="lg:col-span-1 neu-card">
+          <CardHeader>
+            <CardTitle>Configurar Métricas</CardTitle>
+            <CardDescription>Ajuste os valores para simular seu funil.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            {inputFields.map(field => {
+              const Icon = field.icon;
+              return (
+              <div key={field.id} className="space-y-2">
+                <Label htmlFor={field.id} className="flex items-center text-sm font-medium">
+                  <Icon className="w-4 h-4 mr-2 text-primary" />
+                  {field.label}
+                </Label>
+                <div className="flex items-center space-x-2">
+                  <Input
+                    type="number"
+                    id={field.id}
+                    name={field.id}
+                    value={data[field.id]}
+                    onChange={handleInputChange}
+                    min={field.min}
+                    max={field.max}
+                    step={field.step}
+                    className="neu-input w-28 text-sm"
+                  />
+                  <Slider
+                    name={field.id}
+                    value={[data[field.id]]}
+                    onValueChange={(value) => handleSliderChange(field.id, value)}
+                    min={field.min}
+                    max={field.max}
+                    step={field.step}
+                    className="flex-1"
+                  />
+                </div>
+                 <p className="text-xs text-muted-foreground text-right">
+                    Min: {field.unit === '%' ? field.min.toFixed(1) : field.min}{field.unit || ''} / 
+                    Max: {field.unit === '%' ? field.max.toFixed(1) : field.max}{field.unit || ''}
+                </p>
               </div>
-              <Card>
-                <CardHeader><CardTitle>Visualização do Funil</CardTitle><CardDescription>Fluxo de usuários por etapa.</CardDescription></CardHeader>
-                <CardContent className="h-[400px] md:h-[500px] p-2">
-                  {funnelChartData && funnelChartData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <FunnelChart>
-                        <RechartsTooltip formatter={(value: number, name: string) => [`${value.toLocaleString()} usuários (simulado)`, name.substring(name.indexOf('.') + 2)]} />
-                        <RechartsFunnel dataKey="value" data={funnelChartData} isAnimationActive lastShapeType="rectangle" orientation="vertical" neckWidth="30%" neckHeight="0%">
-                          {funnelChartData.map((entry, index) => (<Cell key={`cell-${index}`} fill={entry.fill} />))}
-                          <LabelList position="center" fill="#fff" dataKey="name" formatter={(value: string) => value.substring(value.indexOf('.') + 2)} className="text-xs font-semibold pointer-events-none select-none" />
-                        </RechartsFunnel>
-                      </FunnelChart>
-                    </ResponsiveContainer>
-                  ) : <div className="flex items-center justify-center h-full text-muted-foreground">Este funil não possui etapas ou os dados ainda estão carregando.</div>}
-                </CardContent>
-              </Card>
-            </>
-          )}
-           {!selectedFunnelId && !isLoadingFunnels && <Card><CardContent className="p-8 text-muted-foreground text-center">Selecione um funil acima para ver os detalhes.</CardContent></Card>}
-        </TabsContent>
-        
-        <TabsContent value="detailed" className="space-y-4">
-          {/* ... (Aba Análise Detalhada - pode ser aprimorado depois para usar dados reais de stage_conversions se disponíveis) ... */}
-        </TabsContent>
-        <TabsContent value="optimization" className="space-y-4"> </TabsContent>
-      </Tabs>
+            )})}
+          </CardContent>
+        </Card>
 
-      <Dialog open={isFormModalOpen} onOpenChange={(isOpen) => { if (!isOpen) { setIsFormModalOpen(false); setEditingFunnel(null); form.reset(); } else { setIsFormModalOpen(true); }}}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader><DialogTitle>{editingFunnel ? 'Editar Funil' : 'Novo Funil'}</DialogTitle><DialogDescription>{editingFunnel ? 'Altere os detalhes.' : 'Crie um novo funil.'}</DialogDescription></DialogHeader>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmitFunnelForm)} className="space-y-4 py-4">
-              <FormField control={form.control} name="name" render={({ field }) => (<FormItem><FormLabel>Nome*</FormLabel><FormControl><Input placeholder="Ex: Funil Black Friday" {...field} /></FormControl><FormMessage /></FormItem>)} />
-              <FormField control={form.control} name="description" render={({ field }) => (<FormItem><FormLabel>Descrição</FormLabel><FormControl><Textarea placeholder="Objetivo, público..." {...field} value={field.value ?? ''}/></FormControl><FormMessage /></FormItem>)} />
-              <FormField control={form.control} name="campaignId" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Associar à Campanha</FormLabel>
-                  <ShadSelect onValueChange={(value) => field.onChange(value === "NONE" ? null : parseInt(value))} value={field.value === null || field.value === undefined ? "NONE" : String(field.value)} disabled={campaignsList.length === 0}>
-                    <FormControl><SelectTrigger><SelectValue placeholder={campaignsList.length === 0 ? "Nenhuma campanha" : "Nenhuma"} /></SelectTrigger></FormControl>
-                    <SelectContent>
-                      <SelectItem value="NONE">Nenhuma</SelectItem>
-                      {campaignsList.map((c) => (<SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>))}
-                    </SelectContent>
-                  </ShadSelect>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => { setIsFormModalOpen(false); setEditingFunnel(null); form.reset();}}>Cancelar</Button>
-                <Button type="submit" disabled={funnelMutation.isPending}>{funnelMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{editingFunnel ? 'Salvar' : 'Criar'}</Button>
-              </DialogFooter>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
+        {/* Coluna de Resultados e Gráfico */}
+        <div className="lg:col-span-2 space-y-6">
+          <Card className="neu-card">
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <BarChartHorizontalBig className="w-5 h-5 mr-2 text-primary"/>
+                Previsão do Funil
+              </CardTitle>
+              <CardDescription>Resultados calculados com base nas suas métricas.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                <div><p className="text-xs text-muted-foreground">Visitantes Pagos</p><p className="font-bold text-lg">{formatNumber(calculations.visitantesPagos)}</p></div>
+                <div><p className="text-xs text-muted-foreground">Visitantes Orgânicos</p><p className="font-bold text-lg">{formatNumber(calculations.visitantesOrganicos)}</p></div>
+                <div><p className="text-xs text-muted-foreground">Total Visitantes</p><p className="font-bold text-lg text-primary">{formatNumber(calculations.totalVisitantes)}</p></div>
+                <div><p className="text-xs text-muted-foreground">Vendas Estimadas</p><p className="font-bold text-lg text-green-500">{formatNumber(calculations.vendasDisplay)}</p></div>
+              </div>
+              
+              <div className="h-[300px] md:h-[350px] mt-4">
+                {funnelChartData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <FunnelChart>
+                      <RechartsTooltip 
+                        formatter={(value: number, name: string) => [`${formatNumber(value)} ${name.includes('Visitantes') ? 'visitantes' : 'vendas'}`, name]}
+                        labelStyle={{ color: 'hsl(var(--foreground))' }}
+                        itemStyle={{ color: 'hsl(var(--foreground))' }}
+                        contentStyle={{ backgroundColor: 'hsl(var(--background)/0.8)', borderColor: 'hsl(var(--border))', borderRadius: '0.5rem' }}
+                      />
+                      <RechartsFunnel
+                        dataKey="value"
+                        data={funnelChartData}
+                        isAnimationActive
+                        labelLine={false}
+                        orientation="horizontal"
+                        neckWidth="20%"
+                        neckHeight="0%"
+                        trapezoid={false} // Para um visual mais de pirâmide/triângulo
+                      >
+                        <LabelList 
+                          position="center" 
+                          dataKey="name" 
+                          formatter={(value: string) => value}
+                          className="text-xs md:text-sm font-semibold pointer-events-none select-none" 
+                          fill="#fff" // Cor do texto dentro das seções do funil
+                        />
+                      </RechartsFunnel>
+                    </FunnelChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex items-center justify-center h-full text-muted-foreground">
+                    Ajuste as métricas para gerar o funil.
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <Card className="neu-card">
+              <CardHeader><CardTitle className="text-base">Volume de Vendas</CardTitle></CardHeader>
+              <CardContent className="space-y-1 text-sm">
+                <p>Diário: <span className="font-semibold">{formatNumber(calculations.vendasDisplay)}</span></p>
+                <p>Semanal: <span className="font-semibold">{formatNumber(calculations.vendasSemanais)}</span></p>
+                <p>Mensal: <span className="font-semibold">{formatNumber(calculations.vendasMensais)}</span></p>
+              </CardContent>
+            </Card>
+            <Card className="neu-card">
+              <CardHeader><CardTitle className="text-base">Faturamento (R$)</CardTitle></CardHeader>
+              <CardContent className="space-y-1 text-sm">
+                <p>Diário: <span className="font-semibold">{formatCurrency(calculations.faturamentoDiario)}</span></p>
+                <p>Semanal: <span className="font-semibold">{formatCurrency(calculations.faturamentoSemanal)}</span></p>
+                <p>Mensal: <span className="font-semibold">{formatCurrency(calculations.faturamentoMensal)}</span></p>
+              </CardContent>
+            </Card>
+            <Card className="neu-card">
+              <CardHeader><CardTitle className="text-base">Lucro Estimado (R$)</CardTitle></CardHeader>
+              <CardContent className="space-y-1 text-sm">
+                <p>Diário: <span className="font-semibold">{formatCurrency(calculations.lucroDiario)}</span></p>
+                <p>Semanal: <span className="font-semibold">{formatCurrency(calculations.lucroSemanal)}</span></p>
+                <p>Mensal: <span className="font-semibold">{formatCurrency(calculations.lucroMensal)}</span></p>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
