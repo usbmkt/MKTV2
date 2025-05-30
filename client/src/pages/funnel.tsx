@@ -19,9 +19,9 @@ import { Funnel as FunnelType, FunnelStage, InsertFunnel, insertFunnelSchema, Ca
 
 interface FunnelWithStages extends FunnelType {
   stages: FunnelStage[];
-  totalVisitors?: number; // Campo opcional que o backend poderia preencher
-  totalConversions?: number; // Campo opcional
-  overallConversionRate?: number; // Campo opcional
+  totalVisitors?: number; 
+  totalConversions?: number;
+  overallConversionRate?: number;
 }
 
 type FunnelFormData = Pick<InsertFunnel, "name" | "description" | "campaignId">;
@@ -115,12 +115,12 @@ export default function FunnelPage() {
 
   const funnelChartData = useMemo(() => {
     if (!selectedFunnelData || !selectedFunnelData.stages || selectedFunnelData.stages.length === 0) return [];
-    // Simulação de valores para o gráfico. Idealmente, viriam do backend.
-    let currentStageValue = 1000; // Valor inicial simulado para a primeira etapa
+    // Simulação de valores para o gráfico. Idealmente, viriam do backend com contagens reais por etapa.
+    let currentStageValue = 1000; // Valor inicial simulado
     return selectedFunnelData.stages
       .sort((a, b) => a.order - b.order)
       .map((stage, index) => {
-        if (index > 0) currentStageValue = Math.max(1, Math.floor(currentStageValue * (0.4 + Math.random() * 0.45))); // Queda simulada entre 15% e 60%
+        if (index > 0) currentStageValue = Math.max(1, Math.floor(currentStageValue * (0.4 + Math.random() * 0.45))); 
         return { 
           value: currentStageValue, 
           name: `${stage.order}. ${stage.name}`, 
@@ -185,7 +185,7 @@ export default function FunnelPage() {
                         </RechartsFunnel>
                       </FunnelChart>
                     </ResponsiveContainer>
-                  ) : <div className="flex items-center justify-center h-full text-muted-foreground">Este funil não possui etapas definidas. Adicione etapas para visualizá-lo.</div>}
+                  ) : <div className="flex items-center justify-center h-full text-muted-foreground">Este funil não possui etapas ou os dados ainda estão carregando.</div>}
                 </CardContent>
               </Card>
             </>
@@ -199,8 +199,8 @@ export default function FunnelPage() {
               <CardContent className="space-y-6">
                 {selectedFunnelData.stages.sort((a,b) => a.order - b.order).map((stage, index) => {
                   const stageValueInChart = funnelChartData.find(fd => fd.stageId === stage.id)?.value || 0;
-                  const prevStageValueInChart = index > 0 ? (funnelChartData.find(fd => fd.stageId === selectedFunnelData.stages[index-1].id)?.value || stageValueInChart) : stageValueInChart;
-                  const conversionRateFromPrevious = prevStageValueInChart > 0 ? (stageValueInChart / prevStageValueInChart * 100) : (index === 0 ? 100 : 0) ;
+                  const prevStageValueInChart = index > 0 ? (funnelChartData.find(fd => fd.stageId === selectedFunnelData.stages.find(s => s.order === stage.order - 1)?.id)?.value || stageValueInChart) : stageValueInChart;
+                  const conversionRateFromPrevious = prevStageValueInChart > 0 && index > 0 ? (stageValueInChart / prevStageValueInChart * 100) : (index === 0 ? 100 : 0) ;
                   const dropOffRate = prevStageValueInChart > 0 && index > 0 ? ((prevStageValueInChart - stageValueInChart) / prevStageValueInChart * 100) : 0;
                   return (
                   <div key={stage.id} className="border rounded-lg p-4">
@@ -211,11 +211,11 @@ export default function FunnelPage() {
                       <div><p className="text-sm text-muted-foreground">Conv. da Etapa Ant. (Simulado)</p><p className="text-2xl font-bold">{conversionRateFromPrevious.toFixed(1)}%</p></div>
                       <div><p className="text-sm text-muted-foreground">Drop-off da Etapa Ant. (Simulado)</p><p className="text-2xl font-bold text-red-500">{dropOffRate.toFixed(1)}%</p></div>
                     </div>
-                    {/* TODO: Adicionar botões para editar/excluir etapas aqui */}
+                     {/* TODO: Adicionar botões para gerenciar esta etapa (futuro) */}
                   </div>
                 );})}
                 <div className="text-center">
-                  <Button variant="outline" disabled> {/* Desabilitado por enquanto */}
+                  <Button variant="outline" disabled> 
                     <Plus className="mr-2 h-4 w-4"/> Adicionar Nova Etapa
                   </Button>
                 </div>
@@ -223,7 +223,7 @@ export default function FunnelPage() {
             </Card>
           ) : <Card><CardContent className="p-8 text-center text-muted-foreground">{selectedFunnelId ? "Este funil não possui etapas." : "Selecione um funil."}</CardContent></Card>}
         </TabsContent>
-        <TabsContent value="optimization" className="space-y-4"> {/* Mantido Estático */} </TabsContent>
+        <TabsContent value="optimization" className="space-y-4"> </TabsContent>
       </Tabs>
 
       <Dialog open={isFormModalOpen} onOpenChange={(isOpen) => { if (!isOpen) { setIsFormModalOpen(false); setEditingFunnel(null); form.reset(); } else { setIsFormModalOpen(true); }}}>
