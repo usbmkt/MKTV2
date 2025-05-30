@@ -19,9 +19,9 @@ import { Funnel as FunnelType, FunnelStage, InsertFunnel, insertFunnelSchema, Ca
 
 interface FunnelWithStages extends FunnelType {
   stages: FunnelStage[];
-  totalVisitors?: number; 
-  totalConversions?: number;
-  overallConversionRate?: number;
+  totalVisitors?: number; // Campo opcional que o backend poderia preencher
+  totalConversions?: number; // Campo opcional
+  overallConversionRate?: number; // Campo opcional
 }
 
 type FunnelFormData = Pick<InsertFunnel, "name" | "description" | "campaignId">;
@@ -73,8 +73,7 @@ export default function FunnelPage() {
     mutationFn: async (data) => {
       const method = data.id ? 'PUT' : 'POST';
       const url = data.id ? `/api/funnels/${data.id}` : '/api/funnels';
-      const payload = { ...data };
-      return apiRequest(method, url, payload).then(res => res.json());
+      return apiRequest(method, url, data).then(res => res.json());
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['funnels'] });
@@ -116,12 +115,19 @@ export default function FunnelPage() {
 
   const funnelChartData = useMemo(() => {
     if (!selectedFunnelData || !selectedFunnelData.stages || selectedFunnelData.stages.length === 0) return [];
-    let currentStageValue = selectedFunnelData.totalVisitors || 1000; 
+    // Simulação de valores para o gráfico. Idealmente, viriam do backend.
+    let currentStageValue = 1000; // Valor inicial simulado para a primeira etapa
     return selectedFunnelData.stages
       .sort((a, b) => a.order - b.order)
       .map((stage, index) => {
-        if (index > 0) currentStageValue = Math.max(1, Math.floor(currentStageValue * (0.4 + Math.random() * 0.55))); 
-        return { value: currentStageValue, name: `${stage.order}. ${stage.name}`, fill: FUNNEL_COLORS[index % FUNNEL_COLORS.length], stageId: stage.id };
+        if (index > 0) currentStageValue = Math.max(1, Math.floor(currentStageValue * (0.4 + Math.random() * 0.45))); // Queda simulada entre 15% e 60%
+        return { 
+          value: currentStageValue, 
+          name: `${stage.order}. ${stage.name}`, 
+          fill: FUNNEL_COLORS[index % FUNNEL_COLORS.length], 
+          stageId: stage.id,
+          description: stage.description 
+        };
     });
   }, [selectedFunnelData]);
 
@@ -136,7 +142,8 @@ export default function FunnelPage() {
       </div>
 
       <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList><TabsTrigger value="overview">Visão Geral</TabsTrigger><TabsTrigger value="detailed" disabled={!selectedFunnelId}>Análise Detalhada</TabsTrigger><TabsTrigger value="optimization" disabled={!selectedFunnelId}>Otimização</TabsTrigger></TabsList>
+        <TabsList><TabsTrigger value="overview">Visão Geral</TabsTrigger><TabsTrigger value="detailed" disabled={!selectedFunnelId || !selectedFunnelData?.stages?.length}>Análise Detalhada</TabsTrigger><TabsTrigger value="optimization" disabled={!selectedFunnelId}>Otimização</TabsTrigger></TabsList>
+        
         <TabsContent value="overview" className="space-y-4">
           <Card>
             <CardHeader><CardTitle>Selecionar Funil</CardTitle></CardHeader>
@@ -171,25 +178,52 @@ export default function FunnelPage() {
                   {funnelChartData && funnelChartData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
                       <FunnelChart>
-                        <RechartsTooltip formatter={(value: number, name: string) => [`${value.toLocaleString()} usuários`, name.substring(name.indexOf('.') + 2)]} />
+                        <RechartsTooltip formatter={(value: number, name: string) => [`${value.toLocaleString()} usuários (simulado)`, name.substring(name.indexOf('.') + 2)]} />
                         <RechartsFunnel dataKey="value" data={funnelChartData} isAnimationActive lastShapeType="rectangle" orientation="vertical" neckWidth="30%" neckHeight="0%">
                           {funnelChartData.map((entry, index) => (<Cell key={`cell-${index}`} fill={entry.fill} />))}
                           <LabelList position="center" fill="#fff" dataKey="name" formatter={(value: string) => value.substring(value.indexOf('.') + 2)} className="text-xs font-semibold pointer-events-none select-none" />
                         </RechartsFunnel>
                       </FunnelChart>
                     </ResponsiveContainer>
-                  ) : <div className="flex items-center justify-center h-full text-muted-foreground">Funil sem etapas ou dados para visualização.</div>}
+                  ) : <div className="flex items-center justify-center h-full text-muted-foreground">Este funil não possui etapas definidas. Adicione etapas para visualizá-lo.</div>}
                 </CardContent>
               </Card>
             </>
           )}
         </TabsContent>
+        
         <TabsContent value="detailed" className="space-y-4">
-          {/* ... (Aba Análise Detalhada - aprimorar com dados reais das etapas no futuro) ... */}
+          {selectedFunnelData && selectedFunnelData.stages && selectedFunnelData.stages.length > 0 ? (
+            <Card>
+              <CardHeader><CardTitle>Análise Detalhada por Etapa</CardTitle></CardHeader>
+              <CardContent className="space-y-6">
+                {selectedFunnelData.stages.sort((a,b) => a.order - b.order).map((stage, index) => {
+                  const stageValueInChart = funnelChartData.find(fd => fd.stageId === stage.id)?.value || 0;
+                  const prevStageValueInChart = index > 0 ? (funnelChartData.find(fd => fd.stageId === selectedFunnelData.stages[index-1].id)?.value || stageValueInChart) : stageValueInChart;
+                  const conversionRateFromPrevious = prevStageValueInChart > 0 ? (stageValueInChart / prevStageValueInChart * 100) : (index === 0 ? 100 : 0) ;
+                  const dropOffRate = prevStageValueInChart > 0 && index > 0 ? ((prevStageValueInChart - stageValueInChart) / prevStageValueInChart * 100) : 0;
+                  return (
+                  <div key={stage.id} className="border rounded-lg p-4">
+                    <h3 className="text-lg font-semibold">{stage.order}. {stage.name}</h3>
+                    {stage.description && <p className="text-xs mt-1 text-muted-foreground mb-2">{stage.description}</p>}
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      <div><p className="text-sm text-muted-foreground">Valor (Simulado)</p><p className="text-2xl font-bold">{stageValueInChart.toLocaleString()}</p></div>
+                      <div><p className="text-sm text-muted-foreground">Conv. da Etapa Ant. (Simulado)</p><p className="text-2xl font-bold">{conversionRateFromPrevious.toFixed(1)}%</p></div>
+                      <div><p className="text-sm text-muted-foreground">Drop-off da Etapa Ant. (Simulado)</p><p className="text-2xl font-bold text-red-500">{dropOffRate.toFixed(1)}%</p></div>
+                    </div>
+                    {/* TODO: Adicionar botões para editar/excluir etapas aqui */}
+                  </div>
+                );})}
+                <div className="text-center">
+                  <Button variant="outline" disabled> {/* Desabilitado por enquanto */}
+                    <Plus className="mr-2 h-4 w-4"/> Adicionar Nova Etapa
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ) : <Card><CardContent className="p-8 text-center text-muted-foreground">{selectedFunnelId ? "Este funil não possui etapas." : "Selecione um funil."}</CardContent></Card>}
         </TabsContent>
-        <TabsContent value="optimization" className="space-y-4">
-           {/* ... (Aba Otimização - conteúdo estático) ... */}
-        </TabsContent>
+        <TabsContent value="optimization" className="space-y-4"> {/* Mantido Estático */} </TabsContent>
       </Tabs>
 
       <Dialog open={isFormModalOpen} onOpenChange={(isOpen) => { if (!isOpen) { setIsFormModalOpen(false); setEditingFunnel(null); form.reset(); } else { setIsFormModalOpen(true); }}}>
