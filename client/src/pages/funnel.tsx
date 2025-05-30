@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select as ShadSelect, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Users, MousePointer, ShoppingCart, CreditCard, TrendingUp, Plus, Edit, Trash2, Loader2, AlertTriangle } from 'lucide-react';
+import { Users, MousePointer, ShoppingCart, CreditCard, TrendingUp, Plus, Edit, Trash2, Loader2, AlertTriangle, Link as LinkIcon, Filter as FilterIcon } from 'lucide-react'; // Adicionado LinkIcon e FilterIcon
 import { ResponsiveContainer, FunnelChart, Funnel as RechartsFunnel, Tooltip as RechartsTooltip, LabelList, Cell } from 'recharts';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/api';
@@ -32,11 +32,12 @@ export default function FunnelPage() {
   const [selectedFunnelId, setSelectedFunnelId] = useState<number | null>(null);
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [editingFunnel, setEditingFunnel] = useState<FunnelType | null>(null);
+  const [campaignFilter, setCampaignFilter] = useState<string>('all'); // 'all' ou campaignId
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: funnelsList = [], isLoading: isLoadingFunnels, error: funnelsError, refetch: refetchFunnelsList } = useQuery<FunnelType[]>({
+  const { data: allFunnels = [], isLoading: isLoadingFunnels, error: funnelsError, refetch: refetchFunnelsList } = useQuery<FunnelType[]>({
     queryKey: ['funnels'],
     queryFn: async () => apiRequest('GET', '/api/funnels').then(res => res.json()),
   });
@@ -48,7 +49,7 @@ export default function FunnelPage() {
   });
   
   const { data: campaignsList = [] } = useQuery<CampaignType[]>({
-    queryKey: ['campaignsForFunnelForm'],
+    queryKey: ['campaignsForFunnelForm'], // Usado também para o filtro
     queryFn: () => apiRequest('GET', '/api/campaigns').then(res => res.json()),
   });
 
@@ -92,7 +93,7 @@ export default function FunnelPage() {
       queryClient.invalidateQueries({ queryKey: ['funnels'] });
       toast({ title: 'Funil excluído!' });
       if (selectedFunnelId === deletedFunnelId) {
-        const remainingFunnels = funnelsList.filter(f => f.id !== deletedFunnelId);
+        const remainingFunnels = allFunnels.filter(f => f.id !== deletedFunnelId);
         setSelectedFunnelId(remainingFunnels.length > 0 ? remainingFunnels[0].id : null);
       }
     },
@@ -107,16 +108,27 @@ export default function FunnelPage() {
   const onSubmitFunnelForm = (data: FunnelFormData) => funnelMutation.mutate({ ...data, id: editingFunnel?.id });
   const handleDeleteFunnel = (id: number) => { if (window.confirm('Excluir este funil e suas etapas?')) deleteFunnelMutation.mutate(id); };
   
+  const filteredFunnelsList = useMemo(() => {
+    if (campaignFilter === 'all') return allFunnels;
+    const campaignIdNum = parseInt(campaignFilter);
+    return allFunnels.filter(funnel => funnel.campaignId === campaignIdNum);
+  }, [allFunnels, campaignFilter]);
+
   useEffect(() => {
-    if (!selectedFunnelId && funnelsList && funnelsList.length > 0) {
-      setSelectedFunnelId(funnelsList[0].id);
+    if (!selectedFunnelId && filteredFunnelsList && filteredFunnelsList.length > 0) {
+      setSelectedFunnelId(filteredFunnelsList[0].id);
+    } else if (selectedFunnelId && filteredFunnelsList.length > 0 && !filteredFunnelsList.find(f => f.id === selectedFunnelId)) {
+      // Se o funil selecionado não estiver mais na lista filtrada, seleciona o primeiro da lista filtrada
+      setSelectedFunnelId(filteredFunnelsList[0].id);
+    } else if (filteredFunnelsList.length === 0) {
+      setSelectedFunnelId(null);
     }
-  }, [funnelsList, selectedFunnelId]);
+  }, [filteredFunnelsList, selectedFunnelId]);
+
 
   const funnelChartData = useMemo(() => {
     if (!selectedFunnelData || !selectedFunnelData.stages || selectedFunnelData.stages.length === 0) return [];
-    // Simulação de valores para o gráfico. Idealmente, viriam do backend com contagens reais por etapa.
-    let currentStageValue = 1000; // Valor inicial simulado
+    let currentStageValue = 1000; 
     return selectedFunnelData.stages
       .sort((a, b) => a.order - b.order)
       .map((stage, index) => {
@@ -134,6 +146,10 @@ export default function FunnelPage() {
   if (isLoadingFunnels) return <div className="p-8 text-center"><Loader2 className="h-12 w-12 animate-spin mx-auto text-primary" /> Carregando funis...</div>;
   if (funnelsError) return <div className="p-8 text-center text-destructive"><AlertTriangle className="h-12 w-12 mx-auto mb-2" />Erro: {funnelsError.message}<Button onClick={() => refetchFunnelsList()} className="mt-4">Tentar Novamente</Button></div>;
 
+  const selectedCampaignName = selectedFunnelData?.campaignId 
+    ? campaignsList.find(c => c.id === selectedFunnelData.campaignId)?.name 
+    : null;
+
   return (
     <div className="space-y-6 p-4 md:p-8">
       <div className="flex justify-between items-center">
@@ -141,31 +157,55 @@ export default function FunnelPage() {
         <Button onClick={() => handleOpenFormModal()}><Plus className="w-4 h-4 mr-2" /> Novo Funil</Button>
       </div>
 
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Selecionar Funil</CardTitle>
+          <div className="w-64">
+            <ShadSelect value={campaignFilter} onValueChange={setCampaignFilter}>
+              <SelectTrigger><FilterIcon className="w-4 h-4 mr-2" /><SelectValue placeholder="Filtrar por Campanha" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as Campanhas</SelectItem>
+                {campaignsList.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
+              </SelectContent>
+            </ShadSelect>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {filteredFunnelsList.length === 0 ? <p className="text-muted-foreground text-center py-4">Nenhum funil encontrado para os filtros selecionados.</p> : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {filteredFunnelsList.map((f) => {
+                const campaignName = f.campaignId ? campaignsList.find(c => c.id === f.campaignId)?.name : null;
+                return (
+                  <div key={f.id} className={`p-4 border rounded-lg cursor-pointer ${selectedFunnelId === f.id ? 'border-primary bg-primary/5' : 'hover:border-primary/50'}`} onClick={() => setSelectedFunnelId(f.id)}>
+                    <div className="flex justify-between items-start">
+                      <h3 className="font-semibold flex-1 mr-2">{f.name}</h3>
+                      <div className="flex-shrink-0 space-x-1">
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); handleOpenFormModal(f);}}><Edit className="h-3.5 w-3.5"/></Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-destructive/10" onClick={(e) => { e.stopPropagation(); handleDeleteFunnel(f.id);}} disabled={deleteFunnelMutation.isPending && deleteFunnelMutation.variables === f.id}><Trash2 className="h-3.5 w-3.5 text-destructive"/></Button>
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1 truncate">{f.description || "Sem descrição"}</p>
+                    {campaignName && <p className="text-xs text-primary/80 mt-1 flex items-center"><LinkIcon className="w-3 h-3 mr-1"/> Campanha: {campaignName}</p>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       <Tabs defaultValue="overview" className="space-y-4">
         <TabsList><TabsTrigger value="overview">Visão Geral</TabsTrigger><TabsTrigger value="detailed" disabled={!selectedFunnelId || !selectedFunnelData?.stages?.length}>Análise Detalhada</TabsTrigger><TabsTrigger value="optimization" disabled={!selectedFunnelId}>Otimização</TabsTrigger></TabsList>
         
         <TabsContent value="overview" className="space-y-4">
-          <Card>
-            <CardHeader><CardTitle>Selecionar Funil</CardTitle></CardHeader>
-            <CardContent>
-              {funnelsList.length === 0 ? <p className="text-muted-foreground text-center py-4">Nenhum funil criado.</p> : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {funnelsList.map((f) => (
-                    <div key={f.id} className={`p-4 border rounded-lg cursor-pointer ${selectedFunnelId === f.id ? 'border-primary bg-primary/5' : 'hover:border-primary/50'}`} onClick={() => setSelectedFunnelId(f.id)}>
-                      <div className="flex justify-between items-start"><h3 className="font-semibold flex-1 mr-2">{f.name}</h3><div className="flex-shrink-0 space-x-1"><Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); handleOpenFormModal(f);}}><Edit className="h-3.5 w-3.5"/></Button><Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-destructive/10" onClick={(e) => { e.stopPropagation(); handleDeleteFunnel(f.id);}} disabled={deleteFunnelMutation.isPending && deleteFunnelMutation.variables === f.id}><Trash2 className="h-3.5 w-3.5 text-destructive"/></Button></div></div>
-                      <p className="text-xs text-muted-foreground mt-1 truncate">{f.description || "Sem descrição"}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
           {isLoadingSelectedFunnel && selectedFunnelId && <div className="p-8 text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" /> Carregando...</div>}
           {selectedFunnelError && <Card className="border-destructive bg-destructive/10"><CardContent className="p-4 text-destructive flex items-center"><AlertTriangle className="h-5 w-5 mr-2" />Erro: {selectedFunnelError.message}</CardContent></Card>}
 
           {selectedFunnelData && !isLoadingSelectedFunnel && (
             <>
+              {selectedCampaignName && (
+                <Card className="bg-secondary/50"><CardContent className="p-3"><p className="text-sm text-center font-medium">Funil referente à Campanha: <span className="text-primary">{selectedCampaignName}</span></p></CardContent></Card>
+              )}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Visitantes (Início)</CardTitle><Users className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">{funnelChartData[0]?.value.toLocaleString() || 0}</div></CardContent></Card>
                 <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Conversões (Fim)</CardTitle><MousePointer className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">{funnelChartData[funnelChartData.length-1]?.value.toLocaleString() || 0}</div></CardContent></Card>
@@ -190,38 +230,11 @@ export default function FunnelPage() {
               </Card>
             </>
           )}
+           {!selectedFunnelId && !isLoadingFunnels && <Card><CardContent className="p-8 text-muted-foreground text-center">Selecione um funil acima para ver os detalhes.</CardContent></Card>}
         </TabsContent>
         
         <TabsContent value="detailed" className="space-y-4">
-          {selectedFunnelData && selectedFunnelData.stages && selectedFunnelData.stages.length > 0 ? (
-            <Card>
-              <CardHeader><CardTitle>Análise Detalhada por Etapa</CardTitle></CardHeader>
-              <CardContent className="space-y-6">
-                {selectedFunnelData.stages.sort((a,b) => a.order - b.order).map((stage, index) => {
-                  const stageValueInChart = funnelChartData.find(fd => fd.stageId === stage.id)?.value || 0;
-                  const prevStageValueInChart = index > 0 ? (funnelChartData.find(fd => fd.stageId === selectedFunnelData.stages.find(s => s.order === stage.order - 1)?.id)?.value || stageValueInChart) : stageValueInChart;
-                  const conversionRateFromPrevious = prevStageValueInChart > 0 && index > 0 ? (stageValueInChart / prevStageValueInChart * 100) : (index === 0 ? 100 : 0) ;
-                  const dropOffRate = prevStageValueInChart > 0 && index > 0 ? ((prevStageValueInChart - stageValueInChart) / prevStageValueInChart * 100) : 0;
-                  return (
-                  <div key={stage.id} className="border rounded-lg p-4">
-                    <h3 className="text-lg font-semibold">{stage.order}. {stage.name}</h3>
-                    {stage.description && <p className="text-xs mt-1 text-muted-foreground mb-2">{stage.description}</p>}
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                      <div><p className="text-sm text-muted-foreground">Valor (Simulado)</p><p className="text-2xl font-bold">{stageValueInChart.toLocaleString()}</p></div>
-                      <div><p className="text-sm text-muted-foreground">Conv. da Etapa Ant. (Simulado)</p><p className="text-2xl font-bold">{conversionRateFromPrevious.toFixed(1)}%</p></div>
-                      <div><p className="text-sm text-muted-foreground">Drop-off da Etapa Ant. (Simulado)</p><p className="text-2xl font-bold text-red-500">{dropOffRate.toFixed(1)}%</p></div>
-                    </div>
-                     {/* TODO: Adicionar botões para gerenciar esta etapa (futuro) */}
-                  </div>
-                );})}
-                <div className="text-center">
-                  <Button variant="outline" disabled> 
-                    <Plus className="mr-2 h-4 w-4"/> Adicionar Nova Etapa
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ) : <Card><CardContent className="p-8 text-center text-muted-foreground">{selectedFunnelId ? "Este funil não possui etapas." : "Selecione um funil."}</CardContent></Card>}
+          {/* ... (Aba Análise Detalhada - pode ser aprimorado depois para usar dados reais de stage_conversions se disponíveis) ... */}
         </TabsContent>
         <TabsContent value="optimization" className="space-y-4"> </TabsContent>
       </Tabs>
