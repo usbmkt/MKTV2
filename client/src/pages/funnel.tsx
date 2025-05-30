@@ -3,10 +3,10 @@ import { useState, useMemo, ChangeEvent } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Slider } from '@/components/ui/slider'; // Usaremos Input por precisão, mas Slider é opção
+import { Slider } from '@/components/ui/slider';
 import { Button } from '@/components/ui/button';
 import { ResponsiveContainer, FunnelChart, Funnel as RechartsFunnel, Tooltip as RechartsTooltip, LabelList, Cell } from 'recharts';
-import { DollarSign, Users, Percent, TrendingUp, BarChartHorizontalBig, Settings, ShoppingBag } from 'lucide-react';
+import { DollarSign, Users, Percent, TrendingUp, BarChartHorizontalBig, Settings, ShoppingBag, MousePointer } from 'lucide-react'; // MousePointer ADICIONADO AQUI
 
 const FUNNEL_CHART_COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff8042', '#00C49F'];
 
@@ -40,7 +40,6 @@ export default function FunnelSimulatorPage() {
     setData(prev => ({ ...prev, [name]: value[0] || 0 }));
   };
 
-
   const calculations = useMemo(() => {
     const visitantesPagos = data.cpc > 0 ? data.investimentoDiario / data.cpc : 0;
     const visitantesOrganicos = data.alcanceOrganico * (data.conversaoAlcanceParaCliques / 100);
@@ -54,8 +53,8 @@ export default function FunnelSimulatorPage() {
       visitantesPagos: Math.round(visitantesPagos),
       visitantesOrganicos: Math.round(visitantesOrganicos),
       totalVisitantes: Math.round(totalVisitantes),
-      vendas: parseFloat(vendas.toFixed(2)), // Manter precisão para cálculo de faturamento
-      vendasDisplay: Math.round(vendas), // Para exibição
+      vendas: parseFloat(vendas.toFixed(2)), 
+      vendasDisplay: Math.round(vendas), 
       faturamentoDiario,
       lucroDiario,
       faturamentoSemanal: faturamentoDiario * 7,
@@ -70,16 +69,14 @@ export default function FunnelSimulatorPage() {
   const funnelChartData = [
     { name: 'Total Visitantes', value: calculations.totalVisitantes, fill: FUNNEL_CHART_COLORS[0] },
     { name: 'Vendas Estimadas', value: calculations.vendasDisplay, fill: FUNNEL_CHART_COLORS[1] },
-    // Poderíamos adicionar Faturamento como uma etapa final se a escala não ficar muito diferente
-    // { name: 'Faturamento', value: calculations.faturamentoDiario, fill: FUNNEL_CHART_COLORS[2] },
-  ].filter(item => item.value > 0); // Evitar etapas com valor zero no gráfico
+  ].filter(item => item.value > 0); 
 
   const formatCurrency = (value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
   const formatNumber = (value: number) => new Intl.NumberFormat('pt-BR').format(value);
 
   const inputFields: Array<{ id: keyof SimulatorData, label: string, min: number, max: number, step: number, unit?: string, icon: React.ElementType }> = [
     { id: 'investimentoDiario', label: 'Investimento Diário (R$)', min: 0, max: 5000, step: 10, icon: DollarSign },
-    { id: 'cpc', label: 'Custo por Clique - CPC (R$)', min: 0.01, max: 20, step: 0.01, icon: MousePointer },
+    { id: 'cpc', label: 'Custo por Clique - CPC (R$)', min: 0.01, max: 20, step: 0.01, icon: MousePointer }, // Usa MousePointer
     { id: 'precoProduto', label: 'Preço do Produto (R$)', min: 0, max: 2000, step: 1, icon: ShoppingBag },
     { id: 'alcanceOrganico', label: 'Alcance Orgânico (diário)', min: 0, max: 100000, step: 500, icon: Users },
     { id: 'conversaoAlcanceParaCliques', label: 'Conversão Alcance p/ Cliques (%)', min: 0.1, max: 20, step: 0.1, unit: '%', icon: Percent },
@@ -101,7 +98,6 @@ export default function FunnelSimulatorPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Coluna de Inputs */}
         <Card className="lg:col-span-1 neu-card">
           <CardHeader>
             <CardTitle>Configurar Métricas</CardTitle>
@@ -147,7 +143,6 @@ export default function FunnelSimulatorPage() {
           </CardContent>
         </Card>
 
-        {/* Coluna de Resultados e Gráfico */}
         <div className="lg:col-span-2 space-y-6">
           <Card className="neu-card">
             <CardHeader>
@@ -180,17 +175,17 @@ export default function FunnelSimulatorPage() {
                         data={funnelChartData}
                         isAnimationActive
                         labelLine={false}
-                        orientation="horizontal"
+                        orientation="horizontal" 
                         neckWidth="20%"
                         neckHeight="0%"
-                        trapezoid={false} // Para um visual mais de pirâmide/triângulo
+                        trapezoid={false}
                       >
                         <LabelList 
                           position="center" 
                           dataKey="name" 
                           formatter={(value: string) => value}
                           className="text-xs md:text-sm font-semibold pointer-events-none select-none" 
-                          fill="#fff" // Cor do texto dentro das seções do funil
+                          fill="#fff"
                         />
                       </RechartsFunnel>
                     </FunnelChart>
