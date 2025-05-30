@@ -21,22 +21,10 @@ import { apiRequest } from '@/lib/api';
 import { Funnel as FunnelType, FunnelStage, InsertFunnel, insertFunnelSchema, Campaign as CampaignType } from '@shared/schema';
 
 interface FunnelWithStages extends FunnelType {
-  stages: FunnelStage[]; // Backend deve garantir que isso é um array
-  totalVisitors?: number; 
-  totalConversions?: number;
-  overallConversionRate?: number;
+  stages: FunnelStage[]; // Backend deve garantir que isto é um array
 }
 
 type FunnelFormData = Pick<InsertFunnel, "name" | "description" | "campaignId">;
-
-const initialSimulatorData: SimulatorData = {
-  investimentoDiario: 279.70,
-  cpc: 1.95,
-  precoProduto: 97.00,
-  alcanceOrganico: 12000,
-  conversaoAlcanceParaCliques: 2.00,
-  taxaConversaoSite: 2.50,
-};
 
 interface SimulatorData {
   investimentoDiario: number;
@@ -46,6 +34,15 @@ interface SimulatorData {
   conversaoAlcanceParaCliques: number;
   taxaConversaoSite: number;
 }
+
+const initialSimulatorData: SimulatorData = {
+  investimentoDiario: 279.70,
+  cpc: 1.95,
+  precoProduto: 97.00,
+  alcanceOrganico: 12000,
+  conversaoAlcanceParaCliques: 2.00,
+  taxaConversaoSite: 2.50,
+};
 
 const FUNNEL_COLORS = ['#8884d8', '#83a6ed', '#8dd1e1', '#82ca9d', '#a4de6c', '#d0ed57', '#ffc658'];
 const SIMULATOR_FUNNEL_COLORS = ['#00C49F', '#FFBB28', '#FF8042'];
@@ -69,9 +66,9 @@ export default function FunnelPage() {
   const { data: selectedFunnelData, isLoading: isLoadingSelectedFunnel, error: selectedFunnelError } = useQuery<FunnelWithStages>({
     queryKey: ['funnelDetails', selectedFunnelId],
     queryFn: async () => {
+        if (!selectedFunnelId) return undefined; 
         const response = await apiRequest('GET', `/api/funnels/${selectedFunnelId}`);
         const data = await response.json();
-        // Garantir que stages seja sempre um array
         return { ...data, stages: Array.isArray(data.stages) ? data.stages : [] };
     },
     enabled: !!selectedFunnelId,
@@ -138,7 +135,7 @@ export default function FunnelPage() {
   const handleDeleteFunnel = (id: number) => { if (window.confirm('Excluir este funil e suas etapas?')) deleteFunnelMutation.mutate(id); };
   
   const filteredFunnelsList = useMemo(() => {
-    if (!allFunnels) return []; // Adicionada verificação
+    if (!allFunnels) return [];
     if (campaignFilter === 'all') return allFunnels;
     const campaignIdNum = parseInt(campaignFilter);
     return allFunnels.filter(funnel => funnel.campaignId === campaignIdNum);
@@ -149,21 +146,24 @@ export default function FunnelPage() {
       setSelectedFunnelId(filteredFunnelsList[0].id);
     } else if (selectedFunnelId && filteredFunnelsList && !filteredFunnelsList.find(f => f.id === selectedFunnelId)) {
       setSelectedFunnelId(filteredFunnelsList.length > 0 ? filteredFunnelsList[0].id : null);
-    } else if (filteredFunnelsList && filteredFunnelsList.length === 0) { // Adicionada verificação
+    } else if (filteredFunnelsList && filteredFunnelsList.length === 0) { 
       setSelectedFunnelId(null);
     }
   }, [filteredFunnelsList, selectedFunnelId]);
 
   const savedFunnelChartData = useMemo(() => {
-    // Garantir que stages é um array antes de chamar .length ou .map
     const stages = selectedFunnelData?.stages && Array.isArray(selectedFunnelData.stages) ? selectedFunnelData.stages : [];
     if (!selectedFunnelData || stages.length === 0) return [];
     
-    let currentStageValue = selectedFunnelData.totalVisitors || 1000; 
+    let currentStageValue = 1000; // Valor inicial simulado para a primeira etapa do funil salvo
     return stages
       .sort((a, b) => a.order - b.order)
       .map((stage, index) => {
-        if (index > 0) currentStageValue = Math.max(1, Math.floor(currentStageValue * (0.4 + Math.random() * 0.45))); 
+        if (index === 0) {
+          currentStageValue = 1000; // Reinicia a simulação para o funil selecionado
+        } else {
+          currentStageValue = Math.max(1, Math.floor(currentStageValue * (0.4 + Math.random() * 0.45))); 
+        }
         return { 
           value: currentStageValue, 
           name: `${stage.order}. ${stage.name}`, 
@@ -174,15 +174,40 @@ export default function FunnelPage() {
     });
   }, [selectedFunnelData]);
 
-  const handleSimulatorInputChange = (e: ChangeEvent<HTMLInputElement>) => { /* ... (como antes) ... */ };
-  const handleSimulatorSliderChange = (name: keyof SimulatorData, value: number[]) => { /* ... (como antes) ... */ };
-  const simulatorCalculations = useMemo(() => { /* ... (como antes) ... */ }, [simulatorData]);
-  const simulatorFunnelChartData = useMemo(() => [ /* ... (como antes, baseado em simulatorCalculations) ... */
+  const handleSimulatorInputChange = (e: ChangeEvent<HTMLInputElement>) => setSimulatorData(prev => ({ ...prev, [e.target.name]: parseFloat(e.target.value) || 0 }));
+  const handleSimulatorSliderChange = (name: keyof SimulatorData, value: number[]) => setSimulatorData(prev => ({ ...prev, [name]: value[0] || 0 }));
+
+  const simulatorCalculations = useMemo(() => {
+    const d = simulatorData;
+    const visitantesPagos = d.cpc > 0 ? d.investimentoDiario / d.cpc : 0;
+    const visitantesOrganicos = d.alcanceOrganico * (d.conversaoAlcanceParaCliques / 100);
+    const totalVisitantes = visitantesPagos + visitantesOrganicos;
+    const vendas = totalVisitantes * (d.taxaConversaoSite / 100);
+    const faturamentoDiario = vendas * d.precoProduto;
+    const lucroDiario = faturamentoDiario - d.investimentoDiario;
+    return {
+      visitantesPagos: Math.round(visitantesPagos), visitantesOrganicos: Math.round(visitantesOrganicos),
+      totalVisitantes: Math.round(totalVisitantes), vendas: parseFloat(vendas.toFixed(2)),
+      vendasDisplay: Math.round(vendas), faturamentoDiario, lucroDiario,
+      faturamentoSemanal: faturamentoDiario * 7, lucroSemanal: lucroDiario * 7,
+      faturamentoMensal: faturamentoDiario * 30, lucroMensal: lucroDiario * 30,
+      vendasSemanais: Math.round(vendas * 7), vendasMensais: Math.round(vendas * 30),
+    };
+  }, [simulatorData]);
+
+  const simulatorFunnelChartData = useMemo(() => [
     { name: 'Total Visitantes', value: simulatorCalculations.totalVisitantes, fill: SIMULATOR_FUNNEL_COLORS[0] },
     { name: 'Vendas Estimadas', value: simulatorCalculations.vendasDisplay, fill: SIMULATOR_FUNNEL_COLORS[1] },
   ].filter(item => item.value > 0), [simulatorCalculations]);
 
-  const simulatorInputFields: Array<{ id: keyof SimulatorData, label: string, min: number, max: number, step: number, unit?: string, icon: React.ElementType }> = [ /* ... (como antes) ... */ ];
+  const simulatorInputFields: Array<{ id: keyof SimulatorData, label: string, min: number, max: number, step: number, unit?: string, icon: React.ElementType }> = [
+    { id: 'investimentoDiario', label: 'Investimento Diário (R$)', min: 0, max: 5000, step: 10, icon: DollarSignIcon },
+    { id: 'cpc', label: 'Custo por Clique - CPC (R$)', min: 0.01, max: 20, step: 0.01, icon: MousePointer },
+    { id: 'precoProduto', label: 'Preço do Produto (R$)', min: 0, max: 2000, step: 1, icon: ShoppingBag },
+    { id: 'alcanceOrganico', label: 'Alcance Orgânico (diário)', min: 0, max: 100000, step: 500, icon: Users },
+    { id: 'conversaoAlcanceParaCliques', label: 'Conversão Alcance p/ Cliques (%)', min: 0.1, max: 20, step: 0.1, unit: '%', icon: Percent },
+    { id: 'taxaConversaoSite', label: 'Taxa de Conversão do Site (%)', min: 0.1, max: 20, step: 0.1, unit: '%', icon: TrendingUp },
+  ];
   
   const formatCurrency = (value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
   const formatNumber = (value: number) => new Intl.NumberFormat('pt-BR').format(value);
@@ -190,13 +215,16 @@ export default function FunnelPage() {
   if (isLoadingFunnels) return <div className="p-8 text-center"><Loader2 className="h-12 w-12 animate-spin mx-auto text-primary" /> Carregando funis...</div>;
   if (funnelsError) return <div className="p-8 text-center text-destructive"><AlertTriangle className="h-12 w-12 mx-auto mb-2" />Erro: {funnelsError.message}<Button onClick={() => refetchFunnelsList()} className="mt-4">Tentar Novamente</Button></div>;
 
-  const selectedCampaignNameForSavedFunnel = selectedFunnelData?.campaignId 
+  const selectedCampaignNameForSavedFunnel = selectedFunnelData?.campaignId && campaignsList
     ? campaignsList.find(c => c.id === selectedFunnelData.campaignId)?.name 
     : null;
   
-  // Garantir que selectedFunnelData.stages é um array para as abas
   const stagesForDetailedView = selectedFunnelData?.stages && Array.isArray(selectedFunnelData.stages) ? selectedFunnelData.stages : [];
 
+  // KPIs para funis salvos, derivados do gráfico simulado
+  const initialVisitorsSaved = savedFunnelChartData[0]?.value || 0;
+  const finalConversionsSaved = savedFunnelChartData.length > 0 ? savedFunnelChartData[savedFunnelChartData.length - 1]?.value || 0 : 0;
+  const overallConversionRateSaved = initialVisitorsSaved > 0 ? (finalConversionsSaved / initialVisitorsSaved * 100) : 0;
 
   return (
     <div className="space-y-6 p-4 md:p-8">
@@ -231,7 +259,7 @@ export default function FunnelPage() {
               {filteredFunnelsList.length === 0 ? <p className="text-muted-foreground text-center py-4">Nenhum funil salvo encontrado.</p> : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {filteredFunnelsList.map((f) => {
-                     const campaignName = f.campaignId ? campaignsList.find(c => c.id === f.campaignId)?.name : null;
+                     const campaignName = f.campaignId && campaignsList ? campaignsList.find(c => c.id === f.campaignId)?.name : null;
                      return (
                       <div key={f.id} className={`p-4 border rounded-lg cursor-pointer ${selectedFunnelId === f.id ? 'border-primary bg-primary/5' : 'hover:border-primary/50'}`} onClick={() => setSelectedFunnelId(f.id)}>
                         <div className="flex justify-between items-start"><h3 className="font-semibold flex-1 mr-2">{f.name}</h3><div className="flex-shrink-0 space-x-1"><Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); handleOpenFormModal(f);}}><Edit className="h-3.5 w-3.5"/></Button><Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-destructive/10" onClick={(e) => { e.stopPropagation(); handleDeleteFunnel(f.id);}} disabled={deleteFunnelMutation.isPending && deleteFunnelMutation.variables === f.id}><Trash2 className="h-3.5 w-3.5 text-destructive"/></Button></div></div>
@@ -251,7 +279,12 @@ export default function FunnelPage() {
           {selectedFunnelData && !isLoadingSelectedFunnel && (
             <>
               {selectedCampaignNameForSavedFunnel && ( <Card className="bg-secondary/50"><CardContent className="p-3"><p className="text-sm text-center font-medium">Funil referente à Campanha: <span className="text-primary">{selectedCampaignNameForSavedFunnel}</span></p></CardContent></Card> )}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4"> {/* KPIs */} </div>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Visitantes (Início)</CardTitle><Users className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">{initialVisitorsSaved.toLocaleString()}</div></CardContent></Card>
+                <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Conversões (Fim)</CardTitle><MousePointer className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">{finalConversionsSaved.toLocaleString()}</div></CardContent></Card>
+                <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Taxa Conv. Total</CardTitle><TrendingUp className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">{overallConversionRateSaved.toFixed(1)}%</div></CardContent></Card>
+                <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Etapas</CardTitle><CreditCard className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">{selectedFunnelData.stages?.length || 0}</div></CardContent></Card>
+              </div>
               <Card>
                 <CardHeader><CardTitle>Visualização do Funil Salvo</CardTitle><CardDescription>Fluxo de usuários por etapa.</CardDescription></CardHeader>
                 <CardContent className="h-[400px] md:h-[500px] p-2">
@@ -295,7 +328,40 @@ export default function FunnelPage() {
                     )})}
                   </CardContent>
                 </Card>
-                <div className="lg:col-span-2 space-y-6"> {/* ... (conteúdo do simulador como antes) ... */} </div>
+                <div className="lg:col-span-2 space-y-6">
+                  <Card className="neu-card">
+                    <CardHeader>
+                      <CardTitle className="flex items-center"><BarChartHorizontalBig className="w-5 h-5 mr-2 text-primary"/>Previsão do Funil (Simulação)</CardTitle>
+                      <CardDescription>Resultados calculados com base nas suas métricas simuladas.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                        <div><p className="text-xs text-muted-foreground">Visitantes Pagos</p><p className="font-bold text-lg">{formatNumber(simulatorCalculations.visitantesPagos)}</p></div>
+                        <div><p className="text-xs text-muted-foreground">Visitantes Orgânicos</p><p className="font-bold text-lg">{formatNumber(simulatorCalculations.visitantesOrganicos)}</p></div>
+                        <div><p className="text-xs text-muted-foreground">Total Visitantes</p><p className="font-bold text-lg text-primary">{formatNumber(simulatorCalculations.totalVisitantes)}</p></div>
+                        <div><p className="text-xs text-muted-foreground">Vendas Estimadas</p><p className="font-bold text-lg text-green-500">{formatNumber(simulatorCalculations.vendasDisplay)}</p></div>
+                      </div>
+                      <div className="h-[300px] md:h-[350px] mt-4">
+                        {simulatorFunnelChartData.length > 0 ? (
+                          <ResponsiveContainer width="100%" height="100%">
+                            <FunnelChart>
+                              <RechartsTooltip formatter={(value: number, name: string) => [`${formatNumber(value)} ${name.includes('Visitantes') ? 'visitantes' : 'vendas'}`, name]} labelStyle={{ color: 'hsl(var(--foreground))' }} itemStyle={{ color: 'hsl(var(--foreground))' }} contentStyle={{ backgroundColor: 'hsl(var(--background)/0.8)', borderColor: 'hsl(var(--border))', borderRadius: '0.5rem' }}/>
+                              <RechartsFunnel dataKey="value" data={simulatorFunnelChartData} isAnimationActive labelLine={false} orientation="horizontal" neckWidth="20%" neckHeight="0%" trapezoid={false} >
+                                {simulatorFunnelChartData.map((entry, index) => (<Cell key={`cell-${index}`} fill={entry.fill} />))}
+                                <LabelList position="center" dataKey="name" formatter={(value: string) => value} className="text-xs md:text-sm font-semibold pointer-events-none select-none" fill="#fff"/>
+                              </RechartsFunnel>
+                            </FunnelChart>
+                          </ResponsiveContainer>
+                        ) : <div className="flex items-center justify-center h-full text-muted-foreground">Ajuste as métricas para gerar o funil.</div>}
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <Card className="neu-card"><CardHeader><CardTitle className="text-base">Volume de Vendas</CardTitle></CardHeader><CardContent className="space-y-1 text-sm"><p>Diário: <span className="font-semibold">{formatNumber(simulatorCalculations.vendasDisplay)}</span></p><p>Semanal: <span className="font-semibold">{formatNumber(simulatorCalculations.vendasSemanais)}</span></p><p>Mensal: <span className="font-semibold">{formatNumber(simulatorCalculations.vendasMensais)}</span></p></CardContent></Card>
+                    <Card className="neu-card"><CardHeader><CardTitle className="text-base">Faturamento (R$)</CardTitle></CardHeader><CardContent className="space-y-1 text-sm"><p>Diário: <span className="font-semibold">{formatCurrency(simulatorCalculations.faturamentoDiario)}</span></p><p>Semanal: <span className="font-semibold">{formatCurrency(simulatorCalculations.faturamentoSemanal)}</span></p><p>Mensal: <span className="font-semibold">{formatCurrency(simulatorCalculations.faturamentoMensal)}</span></p></CardContent></Card>
+                    <Card className="neu-card"><CardHeader><CardTitle className="text-base">Lucro Estimado (R$)</CardTitle></CardHeader><CardContent className="space-y-1 text-sm"><p>Diário: <span className="font-semibold">{formatCurrency(simulatorCalculations.lucroDiario)}</span></p><p>Semanal: <span className="font-semibold">{formatCurrency(simulatorCalculations.lucroSemanal)}</span></p><p>Mensal: <span className="font-semibold">{formatCurrency(simulatorCalculations.lucroMensal)}</span></p></CardContent></Card>
+                  </div>
+                </div>
             </div>
         </TabsContent>
         
@@ -304,19 +370,60 @@ export default function FunnelPage() {
             <Card>
               <CardHeader><CardTitle>Análise Detalhada por Etapa (Funil Salvo)</CardTitle></CardHeader>
               <CardContent className="space-y-6">
-                {stagesForDetailedView.sort((a,b) => a.order - b.order).map((stage, index) => { /* ... (renderização das etapas salvas, como antes) ... */ })}
+                {stagesForDetailedView.sort((a,b) => a.order - b.order).map((stage, index) => { 
+                   const stageValueInChart = savedFunnelChartData.find(fd => fd.stageId === stage.id)?.value || 0;
+                   const prevStageData = index > 0 ? stagesForDetailedView.find(s => s.order === stage.order -1) : null;
+                   const prevStageValueInChart = index > 0 && prevStageData ? (savedFunnelChartData.find(fd => fd.stageId === prevStageData.id)?.value || stageValueInChart) : stageValueInChart;
+                   const conversionRateFromPrevious = prevStageValueInChart > 0 && index > 0 ? (stageValueInChart / prevStageValueInChart * 100) : (index === 0 ? 100 : 0) ;
+                   const dropOffRate = prevStageValueInChart > 0 && index > 0 ? ((prevStageValueInChart - stageValueInChart) / prevStageValueInChart * 100) : 0;
+                  return (
+                  <div key={stage.id} className="border rounded-lg p-4">
+                    <h3 className="text-lg font-semibold">{stage.order}. {stage.name}</h3>
+                    {stage.description && <p className="text-xs mt-1 text-muted-foreground mb-2">{stage.description}</p>}
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      <div><p className="text-sm text-muted-foreground">Valor (Simulado)</p><p className="text-2xl font-bold">{stageValueInChart.toLocaleString()}</p></div>
+                      <div><p className="text-sm text-muted-foreground">Conv. da Etapa Ant. (Simulado)</p><p className="text-2xl font-bold">{conversionRateFromPrevious.toFixed(1)}%</p></div>
+                      <div><p className="text-sm text-muted-foreground">Drop-off da Etapa Ant. (Simulado)</p><p className="text-2xl font-bold text-red-500">{dropOffRate.toFixed(1)}%</p></div>
+                    </div>
+                  </div>
+                );})}
                 <div className="text-center mt-4">
                   <Button variant="outline" disabled> <Plus className="mr-2 h-4 w-4"/> Adicionar Etapa ao Funil Salvo</Button>
                 </div>
               </CardContent>
             </Card>
-          ) : <Card><CardContent className="p-8 text-center text-muted-foreground">{selectedFunnelId ? "Funil salvo não possui etapas." : "Selecione um funil salvo."}</CardContent></Card>}
+          ) : <Card><CardContent className="p-8 text-center text-muted-foreground">{selectedFunnelId ? "Este funil salvo não possui etapas." : "Selecione um funil salvo."}</CardContent></Card>}
         </TabsContent>
-        <TabsContent value="optimization" className="space-y-4"> {/* Conteúdo estático */} </TabsContent>
+        <TabsContent value="optimization" className="space-y-4"> </TabsContent>
       </Tabs>
 
       <Dialog open={isFormModalOpen} onOpenChange={(isOpen) => { if (!isOpen) { setIsFormModalOpen(false); setEditingFunnel(null); form.reset(); } else { setIsFormModalOpen(true); }}}>
-        {/* ... (Modal de Criar/Editar Funil Salvo, como antes) ... */}
+         <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader><DialogTitle>{editingFunnel ? 'Editar Funil Salvo' : 'Novo Funil Salvo'}</DialogTitle><DialogDescription>{editingFunnel ? 'Altere os detalhes.' : 'Crie um novo funil para salvar.'}</DialogDescription></DialogHeader>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmitFunnelForm)} className="space-y-4 py-4">
+              <FormField control={form.control} name="name" render={({ field }) => (<FormItem><FormLabel>Nome*</FormLabel><FormControl><Input placeholder="Ex: Funil Black Friday" {...field} /></FormControl><FormMessage /></FormItem>)} />
+              <FormField control={form.control} name="description" render={({ field }) => (<FormItem><FormLabel>Descrição</FormLabel><FormControl><Textarea placeholder="Objetivo, público..." {...field} value={field.value ?? ''}/></FormControl><FormMessage /></FormItem>)} />
+              <FormField control={form.control} name="campaignId" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Associar à Campanha</FormLabel>
+                  <ShadSelect onValueChange={(value) => field.onChange(value === "NONE" ? null : parseInt(value))} value={field.value === null || field.value === undefined ? "NONE" : String(field.value)} disabled={campaignsList.length === 0}>
+                    <FormControl><SelectTrigger><SelectValue placeholder={campaignsList.length === 0 ? "Nenhuma campanha" : "Nenhuma"} /></SelectTrigger></FormControl>
+                    <SelectContent>
+                      <SelectItem value="NONE">Nenhuma</SelectItem>
+                      {campaignsList.map((c) => (<SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>))}
+                    </SelectContent>
+                  </ShadSelect>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => { setIsFormModalOpen(false); setEditingFunnel(null); form.reset();}}>Cancelar</Button>
+                <Button type="submit" disabled={funnelMutation.isPending}>{funnelMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{editingFunnel ? 'Salvar' : 'Criar'}</Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
       </Dialog>
     </div>
   );
