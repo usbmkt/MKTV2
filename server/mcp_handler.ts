@@ -2,7 +2,7 @@
 import { storage } from "./storage";
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import { GEMINI_API_KEY } from './config';
-import { InsertCampaign, ChatMessage, ChatSession } from "../shared/schema"; // Removido User, pois não é utilizado neste arquivo
+import { InsertCampaign, ChatMessage, ChatSession } from "../shared/schema";
 
 let genAI: GoogleGenerativeAI | null = null;
 if (GEMINI_API_KEY) {
@@ -47,8 +47,22 @@ function formatCampaignDetailsForChat(campaign: NonNullable<Awaited<ReturnType<t
   - Nome: ${campaign.name}
   - Status: ${campaign.status}`;
   if (campaign.description) details += `\n  - Descrição: ${campaign.description}`;
-  if (campaign.budget !== null && campaign.budget !== undefined) details += `\n  - Orçamento: ${campaign.budget}`;
-  // Adicione mais campos conforme necessário
+  // Verifica se o campo existe e não é nulo/undefined antes de adicionar
+  if (campaign.budget !== null && campaign.budget !== undefined) {
+    details += `\n  - Orçamento: ${campaign.budget}`;
+  }
+  if (campaign.dailyBudget !== null && campaign.dailyBudget !== undefined) {
+    details += `\n  - Orçamento Diário: ${campaign.dailyBudget}`;
+  }
+  if (campaign.avgTicket !== null && campaign.avgTicket !== undefined) {
+    details += `\n  - Ticket Médio: ${campaign.avgTicket}`;
+  }
+  if (campaign.startDate) {
+    details += `\n  - Data de Início: ${new Date(campaign.startDate).toLocaleDateString('pt-BR')}`;
+  }
+  if (campaign.endDate) {
+    details += `\n  - Data de Fim: ${new Date(campaign.endDate).toLocaleDateString('pt-BR')}`;
+  }
   return details;
 }
 
@@ -61,12 +75,18 @@ export async function handleMCPConversation(
 ): Promise<MCPResponsePayload> {
   console.log(`[MCP_HANDLER] User ${userId} disse: "${message || '[Anexo]'}" (Session: ${currentSessionId || 'Nova'})`);
 
-  let activeSession: ChatSession | undefined;
+  let activeSession: ChatSession; // Garantido que activeSession será definida
   if (currentSessionId) {
-    activeSession = await storage.getChatSession(currentSessionId, userId);
-  }
-
-  if (!activeSession) {
+    const existingSession = await storage.getChatSession(currentSessionId, userId);
+    if (existingSession) {
+      activeSession = existingSession;
+    } else {
+      // Se o ID da sessão foi fornecido mas não encontrado, cria uma nova.
+      const newSessionTitle = message ? `Conversa sobre "${message.substring(0, 20)}..." (ID antigo: ${currentSessionId})` : `Nova Conversa (ID antigo: ${currentSessionId}) ${new Date().toLocaleDateString('pt-BR')}`;
+      console.warn(`[MCP_HANDLER] Sessão ${currentSessionId} não encontrada para usuário ${userId}. Criando nova sessão.`);
+      activeSession = await storage.createChatSession(userId, newSessionTitle);
+    }
+  } else {
     const newSessionTitle = message ? `Conversa sobre "${message.substring(0, 20)}..."` : `Nova Conversa ${new Date().toLocaleDateString('pt-BR')}`;
     console.log(`[MCP_HANDLER] Criando nova sessão de chat para o usuário ${userId} com título: ${newSessionTitle}`);
     activeSession = await storage.createChatSession(userId, newSessionTitle);
@@ -81,6 +101,7 @@ export async function handleMCPConversation(
 
   let agentReplyText: string;
   const responsePayload: Partial<MCPResponsePayload> = { sessionId: activeSession.id };
+  let messageAlreadySavedBySpecialFlow = false; // Flag para controle
 
   if (genAI && message) {
     const intentModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
@@ -121,66 +142,68 @@ export async function handleMCPConversation(
             status: 'draft',
             platforms: [],
             objectives: [],
-            // budget, dailyBudget, avgTicket são opcionais e serão tratados como null/undefined
-            // se não fornecidos aqui, conforme o schema Zod e a lógica do banco.
           };
           const createdCampaign = await storage.createCampaign(newCampaignData);
-          agentReplyText = `Campanha "${createdCampaign.name}" criada com sucesso como rascunho!`;
-          console.log(`[MCP_HANDLER] Campanha "${createdCampaign.name}" (ID: ${createdCampaign.id}) criada para usuário ${userId}.`);
           
-          const campaignDetailsMessage = formatCampaignDetailsForChat(createdCampaign);
-          await storage.addChatMessage({ 
+          // Mensagem simples de sucesso para o log
+          const simpleSuccessMessage = `Campanha "${createdCampaign.name}" criada com sucesso como rascunho!`;
+          agentReplyText = simpleSuccessMessage; // Define para a resposta inicial
+          
+          await storage.addChatMessage({
             sessionId: activeSession.id,
             sender: 'agent',
-            text: agentReplyText, // Salva a mensagem simples de sucesso
+            text: simpleSuccessMessage,
           });
-          // A resposta final para o usuário incluirá os detalhes, mas a mensagem simples é salva no histórico.
-          agentReplyText += `\n\n${campaignDetailsMessage}`;
+          messageAlreadySavedBySpecialFlow = true; // Marca que a mensagem principal foi salva
 
+          // Adiciona detalhes para a resposta ao usuário
+          const campaignDetailsMessage = formatCampaignDetailsForChat(createdCampaign);
+          agentReplyText += `\n\n${campaignDetailsMessage}`; 
+          
+          console.log(`[MCP_HANDLER] Campanha "${createdCampaign.name}" (ID: ${createdCampaign.id}) criada para usuário ${userId}.`);
         } catch (creationError: any) {
           console.error("[MCP_HANDLER] Erro ao criar campanha via MCP:", creationError);
           agentReplyText = `Houve um problema ao tentar criar a campanha "${campaignName}". Detalhes: ${creationError.message || 'Erro desconhecido.'}`;
-          // Removido ZodError específico aqui pois a mensagem de erro geral já deve ser suficiente.
-          // Se quiser ser mais específico com ZodError, pode adicionar de volta.
         }
       } else {
         agentReplyText = "Entendi que você quer criar uma nova campanha, mas não consegui identificar o nome. Poderia me dizer qual nome você gostaria de dar para a nova campanha?";
       }
-    } else {
-      // Resposta geral da IA se nenhuma ação específica for detectada
+    } else { // Resposta geral da IA
       console.log(`[MCP_HANDLER] Nenhuma ação específica detectada. Usando IA geral.`);
       const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
-      const messagesFromDb: ChatMessage[] = await storage.getChatMessages(activeSession.id, userId);
-      const historyForGemini = messagesFromDb.map(msg => ({
-        role: msg.sender === 'user' ? 'user' : 'model',
-        parts: [{ text: msg.text }]
+      const messagesFromDbForContext: ChatMessage[] = await storage.getChatMessages(activeSession.id, userId);
+      
+      const historyForGemini = messagesFromDbForContext
+        .filter(msg => msg.sender === 'user' || msg.sender === 'agent') // Inclui apenas user e agent
+        .map(msg => ({
+          role: msg.sender === 'user' ? 'user' : 'model',
+          parts: [{ text: msg.text }]
       }));
+
       const systemPrompt = { role: "user", parts: [{ text: "Você é o Agente MCP. Responda em Português do Brasil, de forma concisa." }] };
       const chat = model.startChat({
-        history: [systemPrompt, ...historyForGemini.slice(0, -1)], // Exclui a última mensagem do usuário, que será enviada
+        history: [systemPrompt, ...historyForGemini.slice(0, -1)], // Exclui a última mensagem do usuário (já adicionada)
          safetySettings: [
             { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
             { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
           ],
       });
-      const result = await chat.sendMessage(message);
+      const result = await chat.sendMessage(message); // Envia a mensagem atual do usuário
       agentReplyText = result.response.text();
     }
   } else {
     agentReplyText = `Recebido: "${message || 'Anexo'}". ${!genAI ? 'O serviço de IA não está configurado.' : 'Por favor, envie uma mensagem de texto.'}`;
   }
 
-  // Salva a resposta final do agente (que pode ter sido concatenada)
-  // Se a resposta de criação já salvou a mensagem simples, esta lógica evita salvar novamente
-  // a mesma mensagem base. A mensagem com detalhes é apenas para o usuário.
-  if (!agentReplyText.includes("Detalhes da Campanha Criada:") || (agentReplyText.includes("Detalhes da Campanha Criada:") && !messages.some(m => m.text.startsWith(`Campanha "${(await getCampaignNameFromMessage(message))}" criada com sucesso`)))) {
+  // Salva a resposta do agente no banco de dados, a menos que já tenha sido salva por um fluxo especial (criação de campanha)
+  if (!messageAlreadySavedBySpecialFlow) {
     await storage.addChatMessage({
       sessionId: activeSession.id,
       sender: 'agent',
-      text: agentReplyText.split('\n\nDetalhes da Campanha Criada:')[0], // Salva apenas a mensagem principal se houver detalhes
+      text: agentReplyText, // Salva a resposta completa que será enviada ao usuário
     });
   }
 
-  responsePayload.reply = agentReplyText; // Envia a resposta completa (com detalhes se houver) para o frontend
+  responsePayload.reply = agentReplyText;
   return responsePayload as MCPResponsePayload;
 }
