@@ -82,7 +82,8 @@ export default function Sidebar() {
     >
       <div className={cn("p-4 flex items-center border-b border-sidebar-border shrink-0", isCollapsed ? "justify-center h-[72px]" : "justify-start h-[72px]")}>
         <Link href="/dashboard" className={cn("flex items-center gap-2 group", isCollapsed ? "" : "p-1")}>
-          <span className="flex items-center gap-2"> {/* MODIFICAÇÃO: Wrapper span */}
+          {/* CORREÇÃO: Envolvendo o conteúdo do Link em um único span para evitar erro de "React.Children.only" */}
+          <span className="flex items-center gap-2"> 
             <img 
               src="/logo-usbmkt.svg" 
               alt="USB MKT PRO Logo" 
