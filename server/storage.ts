@@ -1,44 +1,28 @@
+// server/storage.ts
 import dotenv from "dotenv";
 dotenv.config();
 
 import { db } from './db'; 
 import {
   users, campaigns, creatives, metrics, whatsappMessages, copies, alerts, budgets, landingPages,
-  chatSessions, chatMessages,
+  chatSessions, chatMessages, funnels, funnelStages, // Adicionado funnels e funnelStages
   type User, type InsertUser, type Campaign, type InsertCampaign,
   type Creative, type InsertCreative, type Metric, type InsertMetric,
   type WhatsappMessage, type InsertWhatsappMessage, type Copy, type InsertCopy,
   type Alert, type InsertAlert, type Budget, type InsertBudget,
   type LandingPage, type InsertLandingPage,
-  type ChatSession, type InsertChatSession, type ChatMessage, type InsertChatMessage
+  type ChatSession, type InsertChatSession, type ChatMessage, type InsertChatMessage,
+  type Funnel, type InsertFunnel, type FunnelStage, type InsertFunnelStage // Adicionado tipos de Funil
 } from '../shared/schema'; 
 
-import { eq, count, sum, sql, desc, and, or } from 'drizzle-orm'; 
+import { eq, count, sum, sql, desc, and, or, gte, lte, isNull } from 'drizzle-orm'; // Adicionado gte, lte, isNull
 
 import * as bcrypt from 'bcrypt'; 
 import jwt from 'jsonwebtoken';
 import { JWT_SECRET } from './config'; 
 
-// // Função auxiliar convertBudgetData não é mais necessária com os tipos corretos no schema
-// function convertBudgetData(data: any): any {
-//   const converted = { ...data };
-//   if (typeof converted.totalBudget === 'number') {
-//     converted.totalBudget = String(converted.totalBudget);
-//   }
-//   if (typeof converted.spentAmount === 'number') {
-//     converted.spentAmount = String(converted.spentAmount);
-//   }
-//   if (typeof converted.budget === 'number') {
-//     converted.budget = String(converted.budget);
-//   }
-//   if (typeof converted.dailyBudget === 'number') {
-//     converted.dailyBudget = String(converted.dailyBudget);
-//   }
-//   if (typeof converted.avgTicket === 'number') {
-//     converted.avgTicket = String(converted.avgTicket);
-//   }
-//   return converted;
-// }
+// A função convertBudgetData foi removida pois os tipos no schema foram corrigidos para decimal
+// e os Zod schemas agora lidam com a conversão de string para número se necessário.
 
 const chartColors = {
   palette: [
@@ -172,6 +156,18 @@ export interface IStorage {
   deleteChatSession(sessionId: number, userId: number): Promise<boolean>;
   addChatMessage(messageData: InsertChatMessage): Promise<ChatMessage>;
   getChatMessages(sessionId: number, userId: number): Promise<ChatMessage[]>;
+
+  // Funis
+  getFunnels(userId: number, campaignId?: number): Promise<Funnel[]>;
+  getFunnel(id: number, userId: number): Promise<Funnel | undefined>;
+  createFunnel(funnelData: InsertFunnel): Promise<Funnel>;
+  updateFunnel(id: number, funnelData: Partial<Omit<InsertFunnel, 'userId'>>, userId: number): Promise<Funnel | undefined>;
+  deleteFunnel(id: number, userId: number): Promise<boolean>;
+
+  getFunnelStages(funnelId: number, userId: number): Promise<FunnelStage[]>; // userId para checar permissão ao funil pai
+  createFunnelStage(stageData: InsertFunnelStage): Promise<FunnelStage>;
+  updateFunnelStage(id: number, stageData: Partial<Omit<InsertFunnelStage, 'funnelId'>>, userId: number): Promise<FunnelStage | undefined>;
+  deleteFunnelStage(id: number, userId: number): Promise<boolean>;
   
   getDashboardData(userId: number, timeRange: string): Promise<any>; 
 }
@@ -224,14 +220,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createCampaign(campaignData: InsertCampaign): Promise<Campaign> {
-    // const convertedData = convertBudgetData(campaignData); // Não mais necessário se Zod/frontend envia número
     const [newCampaign] = await db.insert(campaigns).values(campaignData).returning();
     if (!newCampaign) throw new Error("Falha ao criar campanha.");
     return newCampaign;
   }
 
   async updateCampaign(id: number, campaignData: Partial<Omit<InsertCampaign, 'userId'>>, userId: number): Promise<Campaign | undefined> {
-    // const convertedData = convertBudgetData(campaignData); // Não mais necessário
     const [updatedCampaign] = await db.update(campaigns)
       .set({ ...campaignData, updatedAt: new Date() })
       .where(and(eq(campaigns.id, id), eq(campaigns.userId, userId)))
@@ -248,7 +242,7 @@ export class DatabaseStorage implements IStorage {
   async getCreatives(userId: number, campaignId?: number): Promise<Creative[]> {
     const conditions = [eq(creatives.userId, userId)];
     if (campaignId !== undefined) {
-      conditions.push(eq(creatives.campaignId, campaignId));
+        conditions.push(campaignId === null ? isNull(creatives.campaignId) : eq(creatives.campaignId, campaignId));
     }
     return db.select().from(creatives).where(and(...conditions)).orderBy(desc(creatives.createdAt));
   }
@@ -281,16 +275,20 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getMetricsForCampaign(campaignId: number, userId: number): Promise<Metric[]> {
-    const campaign = await this.getCampaign(campaignId, userId);
-    if (!campaign) {
+    // Primeiro, verificar se a campanha pertence ao usuário
+    const campaignExists = await db.select({id: campaigns.id}).from(campaigns)
+      .where(and(eq(campaigns.id, campaignId), eq(campaigns.userId, userId)))
+      .limit(1);
+    if (!campaignExists.length) {
         throw new Error("Campanha não encontrada ou não pertence ao usuário.");
     }
     return db.select().from(metrics)
-      .where(eq(metrics.campaignId, campaignId))
+      .where(eq(metrics.campaignId, campaignId)) // userId já está implícito pela checagem da campanha
       .orderBy(desc(metrics.date));
   }
 
   async createMetric(metricData: InsertMetric): Promise<Metric> {
+     // Poderia adicionar uma checagem aqui para garantir que metricData.userId e metricData.campaignId correspondem a um usuário/campanha válidos
     const [newMetric] = await db.insert(metrics).values(metricData).returning();
     if (!newMetric) throw new Error("Falha ao criar métrica.");
     return newMetric;
@@ -345,7 +343,7 @@ export class DatabaseStorage implements IStorage {
   async getCopies(userId: number, campaignId?: number): Promise<Copy[]> {
     const conditions = [eq(copies.userId, userId)];
     if (campaignId !== undefined) {
-      conditions.push(eq(copies.campaignId, campaignId));
+      conditions.push(campaignId === null ? isNull(copies.campaignId) : eq(copies.campaignId, campaignId));
     }
     return db.select().from(copies).where(and(...conditions)).orderBy(desc(copies.createdAt));
   }
@@ -362,7 +360,7 @@ export class DatabaseStorage implements IStorage {
         return undefined;
     }
     const [updatedCopy] = await db.update(copies)
-      .set(copyData)
+      .set(copyData) // Não precisa de updatedAt aqui, copies não tem
       .where(and(eq(copies.id, id), eq(copies.userId, userId)))
       .returning();
     return updatedCopy;
@@ -398,13 +396,12 @@ export class DatabaseStorage implements IStorage {
   async getBudgets(userId: number, campaignId?: number): Promise<Budget[]> {
     const conditions = [eq(budgets.userId, userId)];
     if (campaignId !== undefined) {
-      conditions.push(eq(budgets.campaignId, campaignId));
+      conditions.push(campaignId === null ? isNull(budgets.campaignId) : eq(budgets.campaignId, campaignId));
     }
     return db.select().from(budgets).where(and(...conditions)).orderBy(desc(budgets.createdAt));
   }
 
   async createBudget(budgetData: InsertBudget): Promise<Budget> {
-    // const convertedData = convertBudgetData(budgetData); // Não mais necessário
     const [newBudget] = await db.insert(budgets).values(budgetData).returning();
     if (!newBudget) throw new Error("Falha ao criar orçamento.");
     return newBudget;
@@ -415,9 +412,8 @@ export class DatabaseStorage implements IStorage {
     if(!existingBudget || existingBudget.length === 0) {
         return undefined;
     }
-    // const convertedData = convertBudgetData(budgetData); // Não mais necessário
     const [updatedBudget] = await db.update(budgets)
-      .set(budgetData)
+      .set(budgetData) // budgets não tem updatedAt
       .where(and(eq(budgets.id, id), eq(budgets.userId, userId)))
       .returning();
     return updatedBudget;
@@ -438,7 +434,7 @@ export class DatabaseStorage implements IStorage {
 
   async getLandingPageBySlug(slug: string): Promise<LandingPage | undefined> {
     const [lp] = await db.select().from(landingPages)
-      .where(eq(landingPages.slug, slug))
+      .where(eq(landingPages.slug, slug)) // Slug é único, não precisa de userId aqui. Acesso público.
       .limit(1);
     return lp;
   }
@@ -491,8 +487,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteChatSession(sessionId: number, userId: number): Promise<boolean> {
-    const [deletedSession] = await db.delete(chatSessions).where(and(eq(chatSessions.id, sessionId), eq(chatSessions.userId, userId))).returning();
-    return !!deletedSession;
+    // const [deletedSession] = await db.delete(chatSessions).where(and(eq(chatSessions.id, sessionId), eq(chatSessions.userId, userId))).returning(); // .returning() não é padrão para delete e pode não funcionar em todos os drivers/versões pg
+    const result = await db.delete(chatSessions).where(and(eq(chatSessions.id, sessionId), eq(chatSessions.userId, userId)));
+    return (result.rowCount ?? 0) > 0;
   }
 
   async addChatMessage(messageData: InsertChatMessage): Promise<ChatMessage> {
@@ -503,12 +500,106 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getChatMessages(sessionId: number, userId: number): Promise<ChatMessage[]> {
+    // Verificar se a sessão pertence ao usuário
     const sessionExists = await db.select({ id: chatSessions.id }).from(chatSessions).where(and(eq(chatSessions.id, sessionId), eq(chatSessions.userId, userId))).limit(1);
     if (!sessionExists.length) {
-      return [];
+      // Lançar um erro ou retornar array vazio? Por segurança, retornar vazio é mais suave para o cliente.
+      // Mas para debug, um erro seria mais informativo. Vamos manter o retorno vazio para o cliente.
+      console.warn(`Tentativa de acesso a mensagens da sessão ${sessionId} pelo usuário ${userId} falhou a verificação de propriedade.`);
+      return []; 
     }
     return db.select().from(chatMessages).where(eq(chatMessages.sessionId, sessionId)).orderBy(chatMessages.timestamp);
   }
+
+  // Funis
+  async getFunnels(userId: number, campaignId?: number): Promise<Funnel[]> {
+    const conditions = [eq(funnels.userId, userId)];
+    if (campaignId !== undefined) {
+      conditions.push(campaignId === null ? isNull(funnels.campaignId) : eq(funnels.campaignId, campaignId));
+    }
+    return db.select().from(funnels).where(and(...conditions)).orderBy(desc(funnels.createdAt));
+  }
+
+  async getFunnel(id: number, userId: number): Promise<Funnel | undefined> {
+    const [funnel] = await db.select().from(funnels)
+      .where(and(eq(funnels.id, id), eq(funnels.userId, userId)))
+      .limit(1);
+    return funnel;
+  }
+
+  async createFunnel(funnelData: InsertFunnel): Promise<Funnel> {
+    const [newFunnel] = await db.insert(funnels).values(funnelData).returning();
+    if (!newFunnel) throw new Error("Falha ao criar funil.");
+    return newFunnel;
+  }
+
+  async updateFunnel(id: number, funnelData: Partial<Omit<InsertFunnel, 'userId'>>, userId: number): Promise<Funnel | undefined> {
+    const [updatedFunnel] = await db.update(funnels)
+      .set({ ...funnelData, updatedAt: new Date() })
+      .where(and(eq(funnels.id, id), eq(funnels.userId, userId)))
+      .returning();
+    return updatedFunnel;
+  }
+
+  async deleteFunnel(id: number, userId: number): Promise<boolean> {
+    const result = await db.delete(funnels)
+      .where(and(eq(funnels.id, id), eq(funnels.userId, userId)));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async getFunnelStages(funnelId: number, userId: number): Promise<FunnelStage[]> {
+    // Verificar se o funil pai pertence ao usuário
+    const funnelOwner = await db.select({ id: funnels.id }).from(funnels)
+      .where(and(eq(funnels.id, funnelId), eq(funnels.userId, userId)))
+      .limit(1);
+    if (!funnelOwner.length) {
+      throw new Error("Funil não encontrado ou não pertence ao usuário.");
+    }
+    return db.select().from(funnelStages)
+      .where(eq(funnelStages.funnelId, funnelId))
+      .orderBy(funnelStages.order, desc(funnelStages.createdAt)); // Ordenar por 'order' e depois por data
+  }
+
+  async createFunnelStage(stageData: InsertFunnelStage): Promise<FunnelStage> {
+    // Poderia adicionar verificação se funnelId pertence ao usuário logado antes de inserir
+    const [newStage] = await db.insert(funnelStages).values(stageData).returning();
+    if (!newStage) throw new Error("Falha ao criar etapa do funil.");
+    return newStage;
+  }
+
+  async updateFunnelStage(id: number, stageData: Partial<Omit<InsertFunnelStage, 'funnelId'>>, userId: number): Promise<FunnelStage | undefined> {
+    // Verificar se a etapa pertence a um funil do usuário
+    const existingStage = await db.select({ funnelId: funnelStages.funnelId }).from(funnelStages)
+        .leftJoin(funnels, eq(funnelStages.funnelId, funnels.id))
+        .where(and(eq(funnelStages.id, id), eq(funnels.userId, userId)))
+        .limit(1);
+
+    if (!existingStage.length) {
+        throw new Error("Etapa do funil não encontrada ou não pertence ao usuário.");
+    }
+
+    const [updatedStage] = await db.update(funnelStages)
+      .set({ ...stageData, updatedAt: new Date() })
+      .where(eq(funnelStages.id, id)) // O userId já foi verificado acima
+      .returning();
+    return updatedStage;
+  }
+
+  async deleteFunnelStage(id: number, userId: number): Promise<boolean> {
+     // Verificar se a etapa pertence a um funil do usuário antes de deletar
+    const existingStage = await db.select({ id: funnelStages.id }).from(funnelStages)
+        .leftJoin(funnels, eq(funnelStages.funnelId, funnels.id))
+        .where(and(eq(funnelStages.id, id), eq(funnels.userId, userId)))
+        .limit(1);
+    
+    if (!existingStage.length) {
+        throw new Error("Etapa do funil não encontrada ou não pertence ao usuário para exclusão.");
+    }
+
+    const result = await db.delete(funnelStages).where(eq(funnelStages.id, id));
+    return (result.rowCount ?? 0) > 0;
+  }
+
 
   async getDashboardData(userId: number, timeRange: string = '30d') {
     const now = new Date();
@@ -521,7 +612,7 @@ export class DatabaseStorage implements IStorage {
 
     const metricsTimeCondition = and(
         eq(metrics.userId, userId),
-        sql`${metrics.date} >= ${startDate}` 
+        gte(metrics.date, startDate) 
     );
 
     const budgetsUserCondition = eq(budgets.userId, userId);
@@ -530,43 +621,39 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(campaigns.userId, userId), eq(campaigns.status, 'active')));
     const activeCampaigns = activeCampaignsResult[0]?.count || 0;
 
-    // CORREÇÃO: sum(budgets.spentAmount) agora deve funcionar porque o schema define spentAmount como decimal
     const totalSpentResult = await db.select({
         total: sum(budgets.spentAmount) 
     })
       .from(budgets)
       .where(budgetsUserCondition);
-    // O resultado de sum(decimal) já é um tipo numérico que o JS pode entender.
-    // O Drizzle retorna como string, então parseFloat ainda é bom.
-    const totalSpent = parseFloat(totalSpentResult[0]?.total || "0") || 0;
-
+    const totalSpent = parseFloat(String(totalSpentResult[0]?.total || "0")) || 0;
 
     const totalConversionsResult = await db.select({ total: sum(metrics.conversions) })
       .from(metrics)
       .where(metricsTimeCondition); 
-    const conversions = parseFloat(totalConversionsResult[0]?.total || '0') || 0;
+    const conversions = parseFloat(String(totalConversionsResult[0]?.total || '0')) || 0;
 
     const totalRevenueResult = await db.select({ total: sum(metrics.revenue) })
       .from(metrics)
       .where(metricsTimeCondition); 
-    const totalRevenue = parseFloat(totalRevenueResult[0]?.total || '0') || 0;
+    const totalRevenue = parseFloat(String(totalRevenueResult[0]?.total || '0')) || 0;
 
     const totalCostResult = await db.select({ total: sum(metrics.cost) })
       .from(metrics)
       .where(metricsTimeCondition); 
-    const totalCost = parseFloat(totalCostResult[0]?.total || '0') || 0;
+    const totalCost = parseFloat(String(totalCostResult[0]?.total || '0')) || 0;
 
     const avgROI = totalCost > 0 ? parseFloat((((totalRevenue - totalCost) / totalCost) * 100).toFixed(2)) : 0;
 
     const totalImpressionsResult = await db.select({ total: sum(metrics.impressions) })
       .from(metrics)
       .where(metricsTimeCondition); 
-    const impressions = parseFloat(totalImpressionsResult[0]?.total || '0') || 0;
+    const impressions = parseFloat(String(totalImpressionsResult[0]?.total || '0')) || 0;
 
     const totalClicksResult = await db.select({ total: sum(metrics.clicks) })
       .from(metrics)
       .where(metricsTimeCondition); 
-    const clicks = parseFloat(totalClicksResult[0]?.total || '0') || 0;
+    const clicks = parseFloat(String(totalClicksResult[0]?.total || '0')) || 0;
 
     const ctr = clicks > 0 && impressions > 0 ? parseFloat(((clicks / impressions) * 100).toFixed(2)) : 0;
     const cpc = clicks > 0 && totalCost > 0 ? parseFloat((totalCost / clicks).toFixed(2)) : 0;
@@ -605,8 +692,8 @@ export class DatabaseStorage implements IStorage {
       description: c.description || 'Nenhuma descrição',
       status: c.status,
       platforms: c.platforms || [],
-      budget: parseFloat(String(c.budget) || '0') || 0, // Convertendo o decimal (que pode vir como string do DB via Drizzle) para número
-      spent: parseFloat(String(c.dailyBudget) || '0') || 0, // Idem
+      budget: parseFloat(String(c.budget ?? '0')) || 0, 
+      spent: parseFloat(String(c.dailyBudget ?? '0')) || 0, // Usando dailyBudget como "spent" para o mock
       performance: Math.floor(Math.random() * (95 - 60 + 1)) + 60 
     }));
 
