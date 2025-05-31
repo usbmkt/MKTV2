@@ -5,7 +5,163 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+/* Adicione ao seu client/src/index.css */
+@layer base {
+  :root {
+    /* Cores base para o tema claro (fallback) - ajuste conforme seu tema claro se necessário */
+    --background-light: 220 15% 97%; --foreground-light: 220 10% 20%;
+    --card-light: 0 0% 100%; --card-foreground-light: 220 10% 20%;
+    --popover-light: 0 0% 100%; --popover-foreground-light: 220 10% 20%;
+    --primary-light: 210 85% 50%; 
+    --primary-foreground-light: 0 0% 100%;
+    --secondary-light: 220 10% 95%; --secondary-foreground-light: 220 10% 20%;
+    --muted-light: 220 10% 95%; --muted-foreground-light: 220 5% 50%;
+    --accent-light: 220 10% 95%; --accent-foreground-light: 220 10% 20%;
+    --destructive-light: 0 84% 60%; --destructive-foreground-light: 0 0% 100%;
+    --border-light: 220 13% 91%; --input-light: 220 13% 93%; --ring-light: 210 85% 55%;
+    --radius: 0.75rem;
 
+    --neu-shadow-light-light-theme: rgba(255, 255, 255, 0.9);
+    --neu-shadow-dark-light-theme: rgba(190, 190, 210, 0.5);
+
+    /* Variáveis Neomórficas para tema claro - ajuste as cores se necessário */
+    --neu-shadow-dark-source-hsl-light: 220 15% 70%; /* Sombra escura no claro */
+    --neu-shadow-light-source-hsl-light: 0 0% 100%; /* Sombra clara no claro */
+  }
+
+  .dark {
+    --background: 224 71% 4%; /* Azul escuro profundo - neoBgMain */
+    --foreground: 210 20% 98%; /* Branco suave - neoTextPrimary */
+
+    --card: 224 71% 9%; /* Azul um pouco mais claro que o fundo - neoBgBase */
+    --card-foreground: 210 20% 91%; /* neoTextSecondary */
+
+    --popover: 224 71% 6%; 
+    --popover-foreground: 210 20% 91%;
+
+    --primary: 260 85% 65%; /* Roxo vibrante */
+    --primary-foreground: 210 20% 98%;
+
+    --secondary: 224 71% 12%; 
+    --secondary-foreground: 210 15% 92%;
+
+    --muted: 224 71% 12%; 
+    --muted-foreground: 210 15% 60%; 
+
+    --accent: 260 85% 65%; /* Roxo para acentos */
+    --accent-foreground: 210 20% 98%;
+
+    --destructive: 0 63% 50%; 
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 224 71% 15%; 
+    --input: 224 71% 7%;   
+    --ring: 260 85% 70%;   
+
+    /* Variáveis Neomórficas para tema escuro */
+    --neu-shadow-dark-source-hsl: 224 70% 2%; /* Sombra escura no escuro */
+    --neu-shadow-light-source-hsl: 224 70% 12%; /* Sombra clara no escuro */
+  }
+
+  /* Definições comuns de sombras neomórficas */
+  :root, .dark {
+    --neu-outset-offset: 5px; 
+    --neu-outset-blur: 10px;
+    --neu-outset-spread: 0px;
+
+    --neu-pressed-offset: 4px;
+    --neu-pressed-blur: 8px;
+
+    --neu-inset-offset: 4px;
+    --neu-inset-blur: 8px;
+  }
+
+  .dark {
+    --neu-shadow-outset: 
+      var(--neu-outset-offset) var(--neu-outset-offset) var(--neu-outset-blur) var(--neu-outset-spread) hsl(var(--neu-shadow-dark-source-hsl) / 0.7), 
+      calc(-1 * var(--neu-outset-offset)) calc(-1 * var(--neu-outset-offset)) var(--neu-outset-blur) var(--neu-outset-spread) hsl(var(--neu-shadow-light-source-hsl) / 0.6);
+    --neu-shadow-pressed: 
+      inset var(--neu-pressed-offset) var(--neu-pressed-offset) var(--neu-pressed-blur) hsl(var(--neu-shadow-dark-source-hsl) / 0.75), 
+      inset calc(-1 * var(--neu-pressed-offset)) calc(-1 * var(--neu-pressed-offset)) var(--neu-pressed-blur) hsl(var(--neu-shadow-light-source-hsl) / 0.65);
+    --neu-shadow-inset: 
+      inset var(--neu-inset-offset) var(--neu-inset-offset) var(--neu-inset-blur) hsl(var(--neu-shadow-dark-source-hsl) / 0.8), 
+      inset calc(-1 * var(--neu-inset-offset)) calc(-1 * var(--neu-inset-offset)) var(--neu-inset-blur) hsl(var(--neu-shadow-light-source-hsl) / 0.7);
+  }
+
+  :root:not(.dark) {
+    --neu-shadow-outset: 
+      var(--neu-outset-offset) var(--neu-outset-offset) var(--neu-outset-blur) var(--neu-outset-spread) hsl(var(--neu-shadow-dark-source-hsl-light) / 0.2), 
+      calc(-1 * var(--neu-outset-offset)) calc(-1 * var(--neu-outset-offset)) var(--neu-outset-blur) var(--neu-outset-spread) hsl(var(--neu-shadow-light-source-hsl-light) / 0.7);
+    --neu-shadow-pressed: 
+      inset var(--neu-pressed-offset) var(--neu-pressed-offset) var(--neu-pressed-blur) hsl(var(--neu-shadow-dark-source-hsl-light) / 0.25), 
+      inset calc(-1 * var(--neu-pressed-offset)) calc(-1 * var(--neu-pressed-offset)) var(--neu-pressed-blur) hsl(var(--neu-shadow-light-source-hsl-light) / 0.75);
+    --neu-shadow-inset: 
+      inset var(--neu-inset-offset) var(--neu-inset-offset) var(--neu-inset-blur) hsl(var(--neu-shadow-dark-source-hsl-light) / 0.3), 
+      inset calc(-1 * var(--neu-inset-offset)) calc(-1 * var(--neu-inset-offset)) var(--neu-inset-blur) hsl(var(--neu-shadow-light-source-hsl-light) / 0.8);
+  }
+
+  * { @apply border-border; } /* Garante que a cor da borda padrão seja usada */
+  body {
+    @apply bg-background text-foreground font-sans antialiased transition-colors duration-300;
+    font-family: 'Montserrat', sans-serif; /* Se você adicionou Montserrat */
+  }
+}
+
+@layer components {
+  .neo-card { 
+    @apply rounded-xl bg-card shadow-[var(--neu-shadow-outset)] transition-all duration-300 ease-out;
+  }
+  .neo-card:hover {
+     /* Ajuste leve para hover, pode ser mais sutil ou pronunciado */
+    box-shadow: 
+      calc(var(--neu-outset-offset) * 1.2) calc(var(--neu-outset-offset) * 1.2) calc(var(--neu-outset-blur) * 1.2) var(--neu-outset-spread) hsl(var(--neu-shadow-dark-source-hsl) / 0.75), 
+      calc(-1 * var(--neu-outset-offset) * 1.2) calc(-1 * var(--neu-outset-offset) * 1.2) calc(var(--neu-outset-blur) * 1.2) var(--neu-outset-spread) hsl(var(--neu-shadow-light-source-hsl) / 0.65);
+    transform: translateY(-1px);
+  }
+  .neo-card-inset {
+    @apply rounded-lg bg-input shadow-[var(--neu-shadow-inset)] text-foreground;
+  }
+  .neo-button {
+    @apply rounded-lg px-4 py-2 text-sm font-medium transition-all duration-150 ease-out active:scale-[0.97] flex items-center justify-center
+           bg-card text-foreground shadow-[var(--neu-shadow-outset)];
+  }
+  .neo-button:hover:not(:disabled) {
+    filter: brightness(1.15);
+  }
+  .neo-button:active:not(:disabled) {
+    box-shadow: var(--neu-shadow-pressed); 
+    filter: brightness(0.95);
+  }
+  .neo-button-primary {
+    @apply neo-button bg-primary text-primary-foreground;
+  }
+  .neo-button-primary:hover:not(:disabled) {
+    @apply bg-primary/90;
+    filter: brightness(1.1);
+  }
+  .neo-input {
+    @apply w-full p-3 rounded-lg bg-input text-foreground placeholder:text-muted-foreground shadow-[var(--neu-shadow-inset)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background transition-shadow duration-200;
+  }
+  .neo-textarea {
+    @apply w-full p-3 rounded-lg bg-input text-foreground placeholder:text-muted-foreground shadow-[var(--neu-shadow-inset)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background transition-shadow duration-200 min-h-[80px];
+  }
+  .neo-select-trigger {
+     @apply w-full p-3 h-auto min-h-10 rounded-lg bg-input text-foreground shadow-[var(--neu-shadow-inset)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background transition-shadow duration-200 flex items-center justify-between;
+  }
+   .neo-select-content {
+    @apply bg-popover text-popover-foreground border-border shadow-[var(--neu-shadow-outset)];
+  }
+  .neo-select-item {
+    @apply hover:bg-accent focus:bg-accent;
+  }
+   .neo-badge {
+    @apply inline-flex items-center rounded-full border border-transparent px-2.5 py-0.5 text-xs font-semibold shadow-[var(--neu-shadow-outset)] transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2;
+  }
+  .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+  .custom-scrollbar::-webkit-scrollbar-track { background: hsl(var(--muted) / 0.3); border-radius: 3px; }
+  .custom-scrollbar::-webkit-scrollbar-thumb { background: hsl(var(--muted-foreground) / 0.5); border-radius: 3px; }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground) / 0.7); }
+}
 @layer base {
   :root {
     /* Cores base para o tema claro (fallback) */
