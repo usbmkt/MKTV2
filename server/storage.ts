@@ -2,10 +2,10 @@
 import { db } from './db'; 
 import {
   users, campaigns, creatives, metrics, whatsappMessages, copies, alerts, budgets, landingPages,
-  chatSessions, chatMessages, funnels, funnelStages, launchPhaseEnum,
+  chatSessions, chatMessages, funnels, funnelStages, launchPhaseEnum, // Importar launchPhaseEnum
   type User, type InsertUser, type Campaign, type InsertCampaign,
   type Creative, type InsertCreative, type Metric, type InsertMetric,
-  type WhatsappMessage, type InsertWhatsappMessage, type Copy, type InsertCopy,
+  type WhatsappMessage, type InsertWhatsappMessage, type Copy, type InsertCopy, // Usar os tipos corretos
   type Alert, type InsertAlert, type Budget, type InsertBudget,
   type LandingPage, type InsertLandingPage,
   type ChatSession, type InsertChatSession, type ChatMessage, type InsertChatMessage,
@@ -16,16 +16,14 @@ import { eq, count, sum, sql, desc, and, or, gte, lte, isNull, asc } from 'drizz
 import * as bcrypt from 'bcrypt'; 
 // import { JWT_SECRET } from './config'; // JWT_SECRET não é usado diretamente aqui
 
-// ... (suas outras funções de storage e simulação de gráfico permanecem iguais) ...
-// Simulação de dados de gráfico e cores...
-const chartColors = { /* ... */ };
-function generateSimulatedLineChartData(/* ... */) { /* ... */ return { labels: [], datasets: []}; }
-function generateSimulatedBarChartData(/* ... */) { /* ... */ return { labels: [], datasets: []}; }
-function generateSimulatedDoughnutChartData(/* ... */) { /* ... */ return { labels: [], datasets: []}; }
+// Funções de simulação de gráfico e cores (mantidas como no seu arquivo original)
+const chartColors = { palette: [ 'rgba(75, 192, 192, 1)', 'rgba(255, 99, 132, 1)', 'rgba(54, 162, 235, 1)', 'rgba(255, 206, 86, 1)', 'rgba(153, 102, 255, 1)', 'rgba(255, 159, 64, 1)', 'rgba(200, 200, 200, 1)' ], background: [ 'rgba(75, 192, 192, 0.2)', 'rgba(255, 99, 132, 0.2)', 'rgba(54, 162, 235, 0.2)', 'rgba(255, 206, 86, 0.2)', 'rgba(153, 102, 255, 0.2)', 'rgba(255, 159, 64, 0.2)', 'rgba(200, 200, 200, 0.2)' ] };
+function generateSimulatedLineChartData(label: string, startValue: number, countNum: number, maxFluctuation: number, color: string): { labels: string[], datasets: { label: string, data: number[], borderColor: string, backgroundColor: string, fill: boolean, tension: number }[] } { const dataPoints: number[] = []; const labels: string[] = []; let currentValue = startValue; for (let i = 0; i < countNum; i++) { labels.push(`Dia ${i + 1}`); dataPoints.push(Math.round(currentValue)); currentValue += (Math.random() * maxFluctuation * 2) - maxFluctuation; if (currentValue < 0) currentValue = 0; } return { labels: labels, datasets: [ { label: label, data: dataPoints, borderColor: color, backgroundColor: color.replace('1)', '0.2)'), fill: true, tension: 0.4, }, ], }; }
+function generateSimulatedBarChartData(label: string, categories: string[], baseValue: number, maxFluctuation: number, colors: string[]): { labels: string[], datasets: { label: string, data: number[], backgroundColor: string[] }[] } { const dataPoints: number[] = categories.map(() => Math.round(baseValue + (Math.random() * maxFluctuation * 2) - maxFluctuation)); return { labels: categories, datasets: [ { label: label, data: dataPoints, backgroundColor: colors, }, ], }; }
+function generateSimulatedDoughnutChartData(chartLabels: string[], baseValue: number, maxFluctuation: number, colors: string[]): { labels: string[], datasets: { data: number[], backgroundColor: string[], borderWidth: number }[] } { const dataPoints: number[] = chartLabels.map(() => Math.round(baseValue + (Math.random() * maxFluctuation * 2) - maxFluctuation)); return { labels: chartLabels, datasets: [ { data: dataPoints, backgroundColor: colors.map(color => color.replace('1)', '0.8)')), borderWidth: 0, }, ], }; }
 
 
 export interface IStorage {
-  // ... (declarações de outras funções)
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
@@ -48,10 +46,9 @@ export interface IStorage {
   markMessageAsRead(id: number, userId: number): Promise<boolean>;
   getContacts(userId: number): Promise<{ contactNumber: string; contactName: string | null; lastMessage: string; timestamp: Date, unreadCount: number }[]>;
   
-  // Funções de Copy
-  getCopies(userId: number, campaignId?: number | null): Promise<Copy[]>;
-  createCopy(copy: InsertCopy): Promise<Copy>; // Usar InsertCopy atualizado
-  updateCopy(id: number, copyData: Partial<Omit<InsertCopy, 'userId' | 'id'>>, userId: number): Promise<Copy | undefined>; // Usar InsertCopy atualizado
+  getCopies(userId: number, campaignId?: number | null, phase?: string, purposeKey?: string, searchTerm?: string): Promise<Copy[]>;
+  createCopy(copy: InsertCopy): Promise<Copy>;
+  updateCopy(id: number, copyData: Partial<Omit<InsertCopy, 'userId' | 'id'>>, userId: number): Promise<Copy | undefined>;
   deleteCopy(id: number, userId: number): Promise<boolean>; 
   
   getAlerts(userId: number, onlyUnread?: boolean): Promise<Alert[]>;
@@ -87,7 +84,6 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
-  // ... (implementações de outras funções de IStorage)
   async getUser(id: number): Promise<User | undefined> { const result = await db.select().from(users).where(eq(users.id, id)).limit(1); return result[0]; }
   async getUserByUsername(username: string): Promise<User | undefined> { const result = await db.select().from(users).where(eq(users.username, username)).limit(1); return result[0]; }
   async getUserByEmail(email: string): Promise<User | undefined> { const result = await db.select().from(users).where(eq(users.email, email)).limit(1); return result[0]; }
@@ -110,30 +106,46 @@ export class DatabaseStorage implements IStorage {
   async markMessageAsRead(id: number, userId: number): Promise<boolean> { const result = await db.update(whatsappMessages).set({ isRead: true }).where(and(eq(whatsappMessages.id, id), eq(whatsappMessages.userId, userId), eq(whatsappMessages.isRead, false))); return (result.rowCount ?? 0) > 0; }
   async getContacts(userId: number): Promise<{ contactNumber: string; contactName: string | null; lastMessage: string; timestamp: Date, unreadCount: number }[]> { const allMessages = await db.select().from(whatsappMessages).where(eq(whatsappMessages.userId, userId)).orderBy(desc(whatsappMessages.timestamp)); const contactsMap = new Map<string, { contactNumber: string; contactName: string | null; lastMessage: string; timestamp: Date, unreadCount: number }>(); for (const msg of allMessages) { if (!contactsMap.has(msg.contactNumber)) { contactsMap.set(msg.contactNumber, { contactNumber: msg.contactNumber, contactName: msg.contactName || null, lastMessage: msg.message, timestamp: new Date(msg.timestamp), unreadCount: 0, }); } const contact = contactsMap.get(msg.contactNumber)!; if (!msg.isRead && msg.direction === 'incoming') { contact.unreadCount++; } } return Array.from(contactsMap.values()).sort((a,b) => b.timestamp.getTime() - a.timestamp.getTime()); }
   
-  // --- Funções de Copy ATUALIZADAS ---
-  async getCopies(userId: number, campaignId?: number | null): Promise<Copy[]> {
-    const conditions = [eq(copies.userId, userId)];
+  async getCopies(userId: number, campaignId?: number | null, phase?: string, purposeKey?: string, searchTerm?: string): Promise<Copy[]> {
+    const conditions: any[] = [eq(copies.userId, userId)]; // Tipar como any[] para flexibilidade
     if (campaignId !== undefined) {
       conditions.push(campaignId === null ? isNull(copies.campaignId) : eq(copies.campaignId, campaignId));
+    }
+    if (phase && phase !== 'all') {
+        conditions.push(eq(copies.launchPhase, phase as typeof launchPhaseEnum.enumValues[number]));
+    }
+    if (purposeKey && purposeKey !== 'all') {
+        conditions.push(eq(copies.purposeKey, purposeKey));
+    }
+    if (searchTerm) {
+        const searchPattern = `%${searchTerm.toLowerCase()}%`;
+        conditions.push(
+            or(
+                sql`lower(${copies.title}) like ${searchPattern}`,
+                sql`lower(${copies.content}) like ${searchPattern}`
+            )
+        );
     }
     return db.select().from(copies).where(and(...conditions)).orderBy(desc(copies.createdAt));
   }
 
   async createCopy(copyData: InsertCopy): Promise<Copy> {
-    // Os campos JSONB (details, baseInfo, fullGeneratedResponse) já devem ser objetos JS
-    // A validação Zod já tratou os tipos.
-    const [newCopy] = await db.insert(copies).values({
-      ...copyData,
-      // userId já está em copyData
-      // createdAt e lastUpdatedAt são definidos pelo banco
-    }).returning();
+    const dataToInsert = {
+        ...copyData,
+        userId: copyData.userId, // userId já deve estar no copyData validado
+        // Se campaignId for undefined no frontend, o Zod schema já o converteu para null
+        campaignId: copyData.campaignId === undefined ? null : copyData.campaignId,
+        // createdAt e lastUpdatedAt são definidos pelo banco
+    };
+    const [newCopy] = await db.insert(copies).values(dataToInsert).returning();
     if (!newCopy) throw new Error("Falha ao salvar a copy no banco de dados.");
     return newCopy;
   }
 
   async updateCopy(id: number, copyData: Partial<Omit<InsertCopy, 'userId' | 'id'>>, userId: number): Promise<Copy | undefined> {
-    const existingCopy = await db.select({id: copies.id}).from(copies).where(and(eq(copies.id, id), eq(copies.userId, userId))).limit(1);
-    if(!existingCopy.length) {
+    const existingCopyResult = await db.select({id: copies.id}).from(copies).where(and(eq(copies.id, id), eq(copies.userId, userId))).limit(1);
+    if(!existingCopyResult.length) {
+      console.warn(`Tentativa de atualizar copy inexistente ou não pertencente ao usuário. ID: ${id}, UserID: ${userId}`);
       return undefined; 
     }
     
@@ -141,11 +153,19 @@ export class DatabaseStorage implements IStorage {
         ...copyData,
         lastUpdatedAt: new Date(),
     };
+    // Garantir que campaignId seja null se for undefined ou string vazia após o parse do Zod (embora o schema já deva tratar)
+    if (dataToUpdate.campaignId === undefined) {
+        dataToUpdate.campaignId = null;
+    }
 
     const [updatedCopy] = await db.update(copies)
       .set(dataToUpdate)
       .where(and(eq(copies.id, id), eq(copies.userId, userId)))
       .returning();
+      
+    if (!updatedCopy) {
+        console.error(`Falha ao atualizar copy ID: ${id} para usuário ${userId} no banco, embora ela exista.`);
+    }
     return updatedCopy;
   }
 
@@ -153,7 +173,6 @@ export class DatabaseStorage implements IStorage {
     const result = await db.delete(copies).where(and(eq(copies.id, id), eq(copies.userId, userId)));
     return (result.rowCount ?? 0) > 0;
   }
-  // --- Fim das Funções de Copy ---
 
   async getAlerts(userId: number, onlyUnread?: boolean): Promise<Alert[]> { const conditions = [eq(alerts.userId, userId)]; if (onlyUnread) { conditions.push(eq(alerts.isRead, false)); } return db.select().from(alerts).where(and(...conditions)).orderBy(desc(alerts.createdAt)); }
   async createAlert(alertData: InsertAlert): Promise<Alert> { const [newAlert] = await db.insert(alerts).values(alertData).returning(); if (!newAlert) throw new Error("Falha ao criar alerta."); return newAlert; }
