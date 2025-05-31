@@ -18,18 +18,10 @@ import {
   insertLandingPageSchema,
   insertChatSessionSchema,
   insertChatMessageSchema,
-  insertFunnelSchema,      // <<--- ADICIONADO
-  insertFunnelStageSchema, // <<--- ADICIONADO
   User,
   LandingPage,
   ChatMessage,
-  ChatSession,
-  Campaign,     // Adicionado para updateCampaign
-  Creative,     // Adicionado para updateCreative
-  Copy,         // Adicionado para updateCopy
-  Budget,       // Adicionado para updateBudget
-  Funnel,       // Adicionado para funcs de Funil
-  FunnelStage   // Adicionado para funcs de FunilStage
+  ChatSession
 } from "../shared/schema";
 import { ZodError } from "zod";
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
@@ -40,6 +32,7 @@ const LP_ASSETS_DIR = path.resolve(UPLOADS_ROOT_DIR, 'lp-assets');
 const CREATIVES_ASSETS_DIR = path.resolve(UPLOADS_ROOT_DIR, 'creatives-assets');
 const MCP_ATTACHMENTS_DIR = path.resolve(UPLOADS_ROOT_DIR, 'mcp-attachments');
 
+// Garantir que os diretórios de upload existam
 [UPLOADS_ROOT_DIR, LP_ASSETS_DIR, CREATIVES_ASSETS_DIR, MCP_ATTACHMENTS_DIR].forEach(dir => {
     if (!fs.existsSync(dir)){
         fs.mkdirSync(dir, { recursive: true });
@@ -103,7 +96,7 @@ const mcpAttachmentUpload = multer({
       cb(null, 'mcp-attachment-' + uniqueSuffix + path.extname(file.originalname));
     }
   }),
-  limits: { fileSize: 5 * 1024 * 1024 }, 
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
   fileFilter: (req, file, cb) => {
     const allowedTypes = /jpeg|jpg|png|gif|webp|pdf|doc|docx|mp4|mov|avi/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
@@ -123,10 +116,10 @@ const authenticateToken = async (req: AuthenticatedRequest, res: Response, next:
   if (process.env.FORCE_AUTH_BYPASS === 'true') {
     console.log('[AUTH] Bypass ativo - criando usuário mock');
     req.user = {
-      id: 1, // Assumindo que o ID 1 é um admin ou usuário de teste válido
-      username: 'admin_bypass',
-      email: 'admin_bypass@usbmkt.com',
-      password: 'hashed_password_bypass', // Senha não é usada diretamente aqui
+      id: 1,
+      username: 'admin',
+      email: 'admin@usbmkt.com',
+      password: 'hashed_password',
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -183,7 +176,7 @@ const handleError = (err: any, req: Request, res: Response, next: NextFunction) 
   if (err instanceof multer.MulterError && err.code === 'LIMIT_UNEXPECTED_FILE') {
     return res.status(400).json({ error: `Campo de arquivo inesperado: ${err.field}. Verifique o nome do campo esperado.`});
   }
-  if (err.message && (err.message.includes('Tipo de arquivo inválido') || err.code === 'LIMIT_FILE_SIZE' || err.code === 'ENOENT')) {
+  if (err.message && (err.message.includes('Tipo de arquivo inválido') || (err as any).code === 'LIMIT_FILE_SIZE' || (err as any).code === 'ENOENT')) {
     return res.status(400).json({ error: err.message });
   }
 
@@ -288,9 +281,8 @@ export async function registerRoutes(app: Express): Promise<HttpServer> {
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ error: 'ID da campanha inválido.' });
-      // Removendo userId do corpo, ele vem do token
-      const { userId, ...updateData } = req.body; 
-      const campaignData = insertCampaignSchema.partial().parse(updateData); // Validar apenas os campos enviados
+      const { userId, ...updateData } = req.body;
+      const campaignData = insertCampaignSchema.partial().parse(updateData);
       const campaign = await storage.updateCampaign(id, campaignData, req.user!.id);
       if (!campaign) return res.status(404).json({ error: 'Campanha não encontrada ou não pertence ao usuário.' });
       res.json(campaign);
@@ -308,28 +300,15 @@ export async function registerRoutes(app: Express): Promise<HttpServer> {
 
   app.get('/api/creatives', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
-      const campaignIdQuery = req.query.campaignId as string | undefined;
-      let campaignId: number | null | undefined = undefined;
-
-      if (campaignIdQuery !== undefined) {
-        if (campaignIdQuery.toLowerCase() === 'null' || campaignIdQuery === '') {
-          campaignId = null; // Para buscar criativos não associados
-        } else {
-          campaignId = parseInt(campaignIdQuery);
-          if (isNaN(campaignId)) return res.status(400).json({ error: 'ID da campanha inválido.' });
-        }
-      }
+      const campaignId = req.query.campaignId ? parseInt(req.query.campaignId as string) : undefined;
+      if (req.query.campaignId && isNaN(campaignId!)) return res.status(400).json({ error: 'ID da campanha inválido.' });
       res.json(await storage.getCreatives(req.user!.id, campaignId));
     } catch (error) { next(error); }
   });
-
   app.post('/api/creatives', authenticateToken, creativesUpload.single('file'), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
-      const parsedCampaignId = req.body.campaignId === 'null' || req.body.campaignId === '' ? null : (req.body.campaignId ? parseInt(req.body.campaignId) : undefined);
-
       const creativeData = insertCreativeSchema.parse({
         ...req.body,
-        campaignId: parsedCampaignId, // Usar o valor parseado
         userId: req.user!.id,
         fileUrl: req.file ? `/${UPLOADS_ROOT_DIR}/creatives-assets/${req.file.filename}` : req.body.fileUrl || null,
       });
@@ -348,21 +327,16 @@ export async function registerRoutes(app: Express): Promise<HttpServer> {
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ error: 'ID do criativo inválido.' });
-      const creative = await storage.getCreative(id, req.user!.id); // Pega o criativo para saber o fileUrl
+      const creative = await storage.getCreative(id, req.user!.id);
       if (!creative) return res.status(404).json({ error: 'Criativo não encontrado.' });
-      
       const success = await storage.deleteCreative(id, req.user!.id);
       if (!success) return res.status(404).json({ error: 'Criativo não encontrado ou não pode ser excluído.' });
-      
       if (creative.fileUrl) {
         const filePath = path.join(process.cwd(), creative.fileUrl.startsWith('/') ? creative.fileUrl.substring(1) : creative.fileUrl);
         if (fs.existsSync(filePath)) {
           fs.unlink(filePath, (err) => {
             if (err) console.error(`Erro ao deletar arquivo físico ${filePath}:`, err);
-            else console.log(`Arquivo físico ${filePath} deletado com sucesso.`);
           });
-        } else {
-            console.warn(`Arquivo físico ${filePath} não encontrado para exclusão.`);
         }
       }
       res.status(200).json({ message: 'Criativo excluído com sucesso.' });
@@ -377,53 +351,56 @@ export async function registerRoutes(app: Express): Promise<HttpServer> {
 
       const existingCreative = await storage.getCreative(id, userId);
       if (!existingCreative) {
-        if (req.file) fs.unlinkSync(req.file.path); // Remove o novo arquivo se o criativo não existe
         return res.status(404).json({ error: 'Criativo não encontrado ou não pertence ao usuário.' });
       }
-      
-      const parsedCampaignId = req.body.campaignId === 'null' || req.body.campaignId === '' ? null : (req.body.campaignId ? parseInt(req.body.campaignId) : undefined);
 
       const { userId: _, ...updateDataRaw } = req.body;
-      const updateData = insertCreativeSchema.partial().parse({
-        ...updateDataRaw,
-        campaignId: parsedCampaignId, // Usar o valor parseado
-      }); 
+      const updateData = insertCreativeSchema.partial().parse(updateDataRaw);
 
-      // Lógica para lidar com fileUrl
-      let newFileUrl: string | null | undefined = undefined; // undefined significa "não mudar"
+      let newFileUrl: string | null | undefined = undefined;
       const appBaseUrl = process.env.APP_BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
 
-      if (req.file) { // Novo arquivo enviado
+      if (req.file) {
         newFileUrl = `${appBaseUrl}/${UPLOADS_ROOT_DIR}/creatives-assets/${req.file.filename}`;
-        // Se havia um arquivo antigo e um novo foi enviado, delete o antigo
-        if (existingCreative.fileUrl) {
-          const oldFilePath = path.join(process.cwd(), existingCreative.fileUrl.replace(appBaseUrl, '').substring(1));
-          if (fs.existsSync(oldFilePath)) fs.unlinkSync(oldFilePath);
+        if (existingCreative.fileUrl && existingCreative.fileUrl !== newFileUrl) {
+          try {
+            const oldFilePath = path.join(process.cwd(), existingCreative.fileUrl.startsWith('/') ? existingCreative.fileUrl.substring(1) : existingCreative.fileUrl);
+            if (fs.existsSync(oldFilePath)) {
+              fs.unlinkSync(oldFilePath);
+              console.log(`[CREATIVE_UPDATE] Old file deleted: ${oldFilePath}`);
+            }
+          } catch (unlinkErr) {
+            console.error(`[CREATIVE_UPDATE] Error deleting old file ${existingCreative.fileUrl}:`, unlinkErr);
+          }
         }
-      } else if (req.body.fileUrl === "null" || req.body.fileUrl === null) { // Usuário explicitamente removeu o arquivo
-        newFileUrl = null;
-        if (existingCreative.fileUrl) {
-          const oldFilePath = path.join(process.cwd(), existingCreative.fileUrl.replace(appBaseUrl, '').substring(1));
-           if (fs.existsSync(oldFilePath)) fs.unlinkSync(oldFilePath);
-        }
+      } else if (req.body.fileUrl === "null" && existingCreative.fileUrl) {
+          try {
+            const oldFilePath = path.join(process.cwd(), existingCreative.fileUrl.startsWith('/') ? existingCreative.fileUrl.substring(1) : existingCreative.fileUrl);
+            if (fs.existsSync(oldFilePath)) {
+              fs.unlinkSync(oldFilePath);
+              console.log(`[CREATIVE_UPDATE] Existing file removed: ${oldFilePath}`);
+            }
+          } catch (unlinkErr) {
+            console.error(`[CREATIVE_UPDATE] Error deleting existing file ${existingCreative.fileUrl}:`, unlinkErr);
+          }
+          newFileUrl = null;
+      } else {
+        newFileUrl = existingCreative.fileUrl;
       }
-      // Se newFileUrl permanecer undefined, não o inclua no updateData, mantendo o fileUrl existente.
-      // Se for null, ele será setado para null. Se for uma nova string, será atualizado.
+
       if (newFileUrl !== undefined) {
         updateData.fileUrl = newFileUrl;
       }
 
-
       const updatedCreative = await storage.updateCreative(id, updateData, userId);
       if (!updatedCreative) {
-        if (req.file) fs.unlinkSync(req.file.path); // Remove o novo arquivo se o update falhou por outra razão
-        return res.status(404).json({ error: 'Falha ao atualizar criativo.' }); // Pode ser 500 também
+        return res.status(404).json({ error: 'Criativo não encontrado ou não pertence ao usuário.' });
       }
       res.json(updatedCreative);
     } catch (error) {
-      if (req.file) { // Se houve erro e um novo arquivo foi upado, remova-o
+      if (req.file) {
         fs.unlink(req.file.path, (unlinkErr) => {
-          if (unlinkErr) console.error("Erro ao deletar novo arquivo de criativo após falha no PUT:", unlinkErr);
+          if (unlinkErr) console.error("Erro ao deletar novo arquivo de criativo após falha:", unlinkErr);
         });
       }
       next(error);
@@ -449,16 +426,8 @@ export async function registerRoutes(app: Express): Promise<HttpServer> {
 
   app.get('/api/copies', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
-      const campaignIdQuery = req.query.campaignId as string | undefined;
-      let campaignId: number | null | undefined = undefined;
-      if (campaignIdQuery !== undefined) {
-        if (campaignIdQuery.toLowerCase() === 'null' || campaignIdQuery === '') {
-          campaignId = null;
-        } else {
-          campaignId = parseInt(campaignIdQuery);
-          if (isNaN(campaignId)) return res.status(400).json({ error: 'ID da campanha inválido.' });
-        }
-      }
+      const campaignId = req.query.campaignId ? parseInt(req.query.campaignId as string) : undefined;
+      if (req.query.campaignId && isNaN(campaignId!)) return res.status(400).json({ error: 'ID da campanha inválido.' });
       res.json(await storage.getCopies(req.user!.id, campaignId));
     } catch (error) { next(error); }
   });
@@ -491,22 +460,45 @@ export async function registerRoutes(app: Express): Promise<HttpServer> {
       const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
       
       const prompts = [
-        { type: 'headline', platform: 'Facebook', prompt: `Crie um headline persuasivo para Facebook sobre "${product}" direcionado para "${audience}" com objetivo de "${objective}" em tom "${tone}". Máximo 60 caracteres. Seja direto e impactante.`},
-        { type: 'cta', platform: 'Google', prompt: `Crie um call-to-action (CTA) convincente para Google Ads sobre "${product}" direcionado para "${audience}" com objetivo de "${objective}" em tom "${tone}". Máximo 30 palavras.`},
-        { type: 'description', platform: 'Instagram', prompt: `Crie uma descrição persuasiva para Instagram sobre "${product}" direcionado para "${audience}" com objetivo de "${objective}" em tom "${tone}". Máximo 125 caracteres.`}
+        {
+          type: 'headline',
+          platform: 'Facebook',
+          prompt: `Crie um headline persuasivo para Facebook sobre "${product}" direcionado para "${audience}" com objetivo de "${objective}" em tom "${tone}". Máximo 60 caracteres. Seja direto e impactante.`
+        },
+        {
+          type: 'cta',
+          platform: 'Google',
+          prompt: `Crie um call-to-action (CTA) convincente para Google Ads sobre "${product}" direcionado para "${audience}" com objetivo de "${objective}" em tom "${tone}". Máximo 30 palavras.`
+        },
+        {
+          type: 'description',
+          platform: 'Instagram',
+          prompt: `Crie uma descrição persuasiva para Instagram sobre "${product}" direcionado para "${audience}" com objetivo de "${objective}" em tom "${tone}". Máximo 125 caracteres.`
+        }
       ];
 
       const generatedCopies = [];
+      
       for (const promptData of prompts) {
         try {
           const result = await model.generateContent(promptData.prompt);
           const content = result.response.text().trim();
-          generatedCopies.push({ type: promptData.type, content: content, platform: promptData.platform });
+          
+          generatedCopies.push({
+            type: promptData.type,
+            content: content,
+            platform: promptData.platform
+          });
         } catch (error) {
           console.error(`[GEMINI] Erro ao gerar ${promptData.type}:`, error);
-          generatedCopies.push({ type: promptData.type, content: `Fallback: ${promptData.type} para ${product}`, platform: promptData.platform });
+          generatedCopies.push({
+            type: promptData.type,
+            content: `${promptData.type === 'headline' ? '🚀' : promptData.type === 'cta' ? 'Clique aqui e descubra como' : 'Solução perfeita para'} ${audience} ${promptData.type === 'headline' ? 'com nossa solução inovadora para' : promptData.type === 'cta' ? 'estão revolucionando seus resultados com' : 'que buscam'} ${objective.toLowerCase()}${promptData.type === 'headline' ? '!' : promptData.type === 'cta' ? '!' : '. Com nosso'} ${promptData.type !== 'headline' ? product + (promptData.type === 'description' ? ', você alcança resultados extraordinários em tempo recorde.' : '!') : product + '!'}`,
+            platform: promptData.platform
+          });
         }
       }
+
       res.json(generatedCopies);
     } catch (error) { 
       console.error('[COPIES] Erro na geração:', error);
@@ -532,16 +524,8 @@ export async function registerRoutes(app: Express): Promise<HttpServer> {
 
   app.get('/api/budgets', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
-      const campaignIdQuery = req.query.campaignId as string | undefined;
-      let campaignId: number | null | undefined = undefined;
-      if (campaignIdQuery !== undefined) {
-        if (campaignIdQuery.toLowerCase() === 'null' || campaignIdQuery === '') {
-          campaignId = null;
-        } else {
-          campaignId = parseInt(campaignIdQuery);
-          if (isNaN(campaignId)) return res.status(400).json({ error: 'ID da campanha inválido.' });
-        }
-      }
+      const campaignId = req.query.campaignId ? parseInt(req.query.campaignId as string) : undefined;
+      if (req.query.campaignId && isNaN(campaignId!)) return res.status(400).json({ error: 'ID da campanha inválido.' });
       res.json(await storage.getBudgets(req.user!.id, campaignId));
     } catch (error) { next(error); }
   });
@@ -552,21 +536,8 @@ export async function registerRoutes(app: Express): Promise<HttpServer> {
     } catch (error) { next(error); }
   });
 
-  // Landing Pages
   app.get('/api/landingpages', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try { res.json(await storage.getLandingPages(req.user!.id)); } catch (error) { next(error); }
-  });
-  app.get('/api/landingpages/slug/:slug', async (req: Request, res: Response, next: NextFunction) => { // Rota pública
-    try {
-        const { slug } = req.params;
-        const landingPage = await storage.getLandingPageBySlug(slug);
-        if (!landingPage || landingPage.status !== 'published') {
-            return res.status(404).json({ error: 'Landing Page não encontrada ou não publicada.' });
-        }
-        res.json(landingPage);
-    } catch (error) {
-        next(error);
-    }
   });
   app.post('/api/landingpages', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
@@ -584,7 +555,7 @@ export async function registerRoutes(app: Express): Promise<HttpServer> {
       const { studioProjectId } = req.params;
       const landingPage = await storage.getLandingPageByStudioProjectId(studioProjectId, req.user!.id);
       if (!landingPage) return res.status(404).json({ error: 'Projeto de Landing Page não encontrado.' });
-      res.json({ project: landingPage.grapesJsData || {} }); // Retorna o objeto esperado pelo SDK
+      res.json({ project: landingPage.grapesJsData || {} });
     }
     catch (error) { next(error); }
   });
@@ -593,21 +564,13 @@ export async function registerRoutes(app: Express): Promise<HttpServer> {
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ error: 'ID da Landing Page inválido.' });
       const { userId: _, slug, grapesJsData, ...otherData } = req.body;
-      const lpDataToValidate: Partial<Omit<LandingPage, "id" | "userId" | "createdAt" | "updatedAt">> = { 
-        ...otherData, 
-        grapesJsData: grapesJsData || undefined // Manter como undefined se não enviado
-      };
-      
-      if (slug) { // Apenas valida e atualiza o slug se ele for fornecido
-        const validatedSlug = insertLandingPageSchema.shape.slug.parse(slug);
-        const existingSlugPage = await storage.getLandingPageBySlug(validatedSlug);
+      const lpDataToValidate = { ...otherData, grapesJsData: grapesJsData || {} };
+      const lpData = insertLandingPageSchema.partial().parse(lpDataToValidate);
+      if (slug) {
+        const existingSlugPage = await storage.getLandingPageBySlug(slug);
         if (existingSlugPage && existingSlugPage.id !== id) return res.status(409).json({ error: 'Este slug já está em uso.' });
-        lpDataToValidate.slug = validatedSlug;
+        (lpData as any).slug = slug;
       }
-
-      // Zod parseia apenas os campos presentes em lpDataToValidate
-      const lpData = insertLandingPageSchema.partial().parse(lpDataToValidate); 
-
       const updatedLandingPage = await storage.updateLandingPage(id, lpData, req.user!.id);
       if (!updatedLandingPage) return res.status(404).json({ error: 'Landing Page não encontrada.' });
       res.json(updatedLandingPage);
@@ -623,65 +586,73 @@ export async function registerRoutes(app: Express): Promise<HttpServer> {
     } catch (error) { next(error); }
   });
 
-  // Assets para Landing Pages (GrapesJS Studio)
   app.post('/api/assets/lp-upload', authenticateToken, lpAssetUpload.single('file'), (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       if (!req.file) {
+        console.log('[ASSET_UPLOAD_LP] Nenhum arquivo recebido.');
         return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
       }
       const appBaseUrl = process.env.APP_BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
       const publicUrl = `${appBaseUrl}/${UPLOADS_ROOT_DIR}/lp-assets/${req.file.filename}`;
-      // GrapesJS Studio espera um array de objetos com 'src'
-      res.status(200).json([{ src: publicUrl, name: req.file.filename, type: req.file.mimetype }]);
+      console.log(`[ASSET_UPLOAD_LP] Arquivo: ${req.file.originalname}, Salvo como: ${req.file.filename}, Campo: ${req.file.fieldname}, URL Pública: ${publicUrl}`);
+      res.status(200).json([{ src: publicUrl }]);
     } catch(error) {
+      console.error('[ASSET_UPLOAD_LP] Erro no handler:', error);
       next(error);
     }
   });
 
   app.post('/api/assets/lp-delete', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
-      const { assets } = req.body; // assets é esperado como [{ src: 'url1' }, { src: 'url2' }]
+      const { assets } = req.body;
       if (!Array.isArray(assets) || assets.length === 0) return res.status(400).json({ error: 'Nenhum asset para exclusão.' });
-      
-      const appBaseUrl = process.env.APP_BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
-
+      console.log('[ASSET_DELETE_LP] Solicitado para deletar:', assets);
       assets.forEach(asset => {
         if (asset && typeof asset.src === 'string') {
           try {
-            let relativePath = asset.src;
-            if (asset.src.startsWith(appBaseUrl)) {
-                relativePath = asset.src.substring(appBaseUrl.length);
+            const assetUrl = new URL(asset.src);
+            const filename = path.basename(assetUrl.pathname);
+            if (filename.includes('..') || !assetUrl.pathname.includes(`/${UPLOADS_ROOT_DIR}/lp-assets/`)) {
+                console.warn(`[ASSET_DELETE_LP] Tentativa de path traversal ou URL inválida: ${asset.src}`);
+                return;
             }
-            if (relativePath.startsWith(`/${UPLOADS_ROOT_DIR}/lp-assets/`)) {
-              const filename = path.basename(relativePath);
-              if (filename.includes('..')) {
-                  console.warn(`[ASSET_DELETE_LP] Tentativa de path traversal: ${asset.src}`);
-                  return; 
-              }
-              const filePath = path.join(LP_ASSETS_DIR, filename);
-              if (fs.existsSync(filePath)) {
-                fs.unlink(filePath, (err) => {
-                  if (err) console.error(`[ASSET_DELETE_LP] Erro ao deletar: ${filePath}`, err);
-                  else console.log(`[ASSET_DELETE_LP] Deletado: ${filePath}`);
-                });
-              } else { console.warn(`[ASSET_DELETE_LP] Não encontrado: ${filePath}`); }
-            } else { console.warn(`[ASSET_DELETE_LP] Path inválido ou não pertence a lp-assets: ${relativePath}`); }
-          } catch (e) { console.warn(`[ASSET_DELETE_LP] URL inválida ou erro ao parsear: ${asset.src}`, e); }
+            const filePath = path.join(LP_ASSETS_DIR, filename);
+            console.log(`[ASSET_DELETE_LP] Tentando deletar: ${filePath}`);
+            if (fs.existsSync(filePath)) {
+              fs.unlink(filePath, (err) => {
+                if (err) console.error(`[ASSET_DELETE_LP] Erro ao deletar: ${filePath}`, err);
+                else console.log(`[ASSET_DELETE_LP] Deletado: ${filePath}`);
+              });
+            } else {
+              console.warn(`[ASSET_DELETE_LP] Não encontrado: ${filePath}`);
+            }
+          } catch (e) {
+            console.warn(`[ASSET_DELETE_LP] URL inválida ou erro ao parsear: ${asset.src}`, e);
+          }
         }
       });
       res.status(200).json({ message: 'Solicitação de exclusão de assets processada.' });
-    } catch (error) { next(error); }
+    } catch (error) {
+      next(error);
+    }
   });
 
-  // Chat / MCP
   app.post('/api/mcp/upload-attachment', authenticateToken, mcpAttachmentUpload.single('attachment'), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
-      if (!req.file) { return res.status(400).json({ error: 'Nenhum arquivo de anexo enviado.' }); }
+      const userId = req.user!.id;
+      if (!req.file) {
+        console.log('[MCP_ATTACHMENT_UPLOAD] Nenhum arquivo recebido.');
+        return res.status(400).json({ error: 'Nenhum arquivo de anexo enviado.' });
+      }
       const appBaseUrl = process.env.APP_BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
       const attachmentUrl = `${appBaseUrl}/${UPLOADS_ROOT_DIR}/mcp-attachments/${req.file.filename}`;
+      console.log(`[MCP_ATTACHMENT_UPLOAD] Arquivo: ${req.file.originalname}, Salvo como: ${req.file.filename}, URL Pública: ${attachmentUrl}`);
       res.status(200).json({ url: attachmentUrl });
-    } catch (error) { next(error); }
+    } catch (error) {
+      next(error);
+    }
   });
+
 
   app.post('/api/mcp/converse', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
@@ -692,88 +663,145 @@ export async function registerRoutes(app: Express): Promise<HttpServer> {
         return res.status(400).json({ error: 'Mensagem ou anexo é obrigatório.' });
       }
 
+      console.log(`[MCP_AGENT] User ${userId} disse: "${message || '[Anexo]'}" (Session: ${sessionId || 'Nova'})`);
+
       let currentSession: ChatSession | undefined;
       if (sessionId) {
         currentSession = await storage.getChatSession(sessionId, userId);
-        if (!currentSession) { // Sessão não encontrada ou não pertence ao usuário
-          console.warn(`[MCP_AGENT] Tentativa de usar sessão ${sessionId} inválida para usuário ${userId}. Criando nova.`);
-          currentSession = undefined; // Força criação de nova sessão
-        }
       }
-      
       if (!currentSession) {
-        const newSessionTitle = message ? `Conversa: ${message.substring(0,30)}...` : (attachmentUrl ? 'Conversa com Anexo' : 'Nova Conversa');
-        currentSession = await storage.createChatSession(userId, newSessionTitle);
+        console.log(`[MCP_AGENT] Criando nova sessão de chat para o usuário ${userId}`);
+        currentSession = await storage.createChatSession(userId, `Conversa com IA ${new Date().toLocaleDateString('pt-BR')}`);
       }
 
       await storage.addChatMessage({
         sessionId: currentSession.id,
         sender: 'user',
         text: message || (attachmentUrl ? 'Anexo enviado.' : ''),
-        attachmentUrl: attachmentUrl || undefined, // Garante que seja undefined se não houver
+        attachmentUrl: attachmentUrl || null,
       });
 
       let agentReplyText: string;
-      let actionResponse: { action?: string; payload?: string } = {};
+      let actionResponse: { action?: string, payload?: any } = {};
 
-      if (genAI && message) { // Prioriza IA se houver mensagem de texto
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
-        const messagesFromDb = await storage.getChatMessages(currentSession.id, userId);
-        const historyForGemini = messagesFromDb.map(msg => ({
-          role: msg.sender === 'user' ? 'user' : 'model',
-          parts: [{ text: msg.text || (msg.attachmentUrl ? `[usuário enviou anexo: ${msg.attachmentUrl}]` : '') }]
-        }));
+      if (genAI && message) {
+        const intentModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+        // COORDENADA 1: Prompt de intenção atualizado
+        const promptForIntent = `O usuário perguntou: "${message}".
+        Ele está pedindo para NAVEGAR para alguma seção da plataforma OU para EXECUTAR ALGUMA AÇÃO como CRIAR algo?
+        Se for NAVEGAÇÃO, responda com a rota (ex: /dashboard, /campaigns).
+        Se for AÇÃO DE CRIAÇÃO, responda com "create_campaign" se for sobre criar campanha.
+        Outras ações possíveis (responda com o código da ação):
+          - ver_metricas_campanha_X (onde X é o nome ou ID) -> get_campaign_metrics
+          - adicionar_criativo_Y_campanha_X (onde Y é o tipo e X é o nome/ID) -> add_creative
+        Se não for navegação nem uma ação reconhecida, responda "NÃO".
+        Exemplos:
+        - "Me leve para campanhas" -> /campaigns
+        - "Criar uma campanha chamada Fim de Ano" -> create_campaign
+        - "Nova campanha Teste de Verão" -> create_campaign
+        - "Por favor, crie a campanha Dias das Mães" -> create_campaign
+        `;
 
-        // Tenta detectar intenção de navegação
-        const intentPrompt = `O usuário disse: "${message}". Ele está pedindo para navegar para alguma seção da plataforma (dashboard, campaigns, creatives, budget, landingpages, whatsapp, copy, funnel, metrics, alerts, export, integrations)? Se sim, responda APENAS com a rota exata (ex: /dashboard). Se não, responda "NÃO".`;
-        try {
-            const intentResult = await model.generateContent(intentPrompt);
-            const intentResponse = intentResult.response.text().trim();
-            const validRoutes = ["/dashboard", "/campaigns", "/creatives", "/budget", "/landingpages", "/whatsapp", "/copy", "/funnel", "/metrics", "/alerts", "/export", "/integrations"];
-            if (validRoutes.includes(intentResponse)) {
-                actionResponse = { action: "navigate", payload: intentResponse };
-                agentReplyText = `Claro! Navegando para ${intentResponse.replace('/', '') || 'o Dashboard'}...`;
+        const intentResult = await intentModel.generateContent(promptForIntent);
+        const intentResponse = intentResult.response.text().trim();
+        const validRoutes = [
+          "/dashboard", "/campaigns", "/creatives", "/budget", "/landingpages",
+          "/whatsapp", "/copy", "/funnel", "/metrics", "/alerts", "/export", "/integrations"
+        ];
+
+        // COORDENADA 2: Lógica para a nova intenção 'create_campaign'
+        if (validRoutes.includes(intentResponse)) {
+            console.log(`[MCP_AGENT] Intenção de navegação detectada: ${intentResponse}`);
+            agentReplyText = `Claro! Te levarei para ${intentResponse.replace('/', '') || 'o Dashboard'}...`;
+            actionResponse = { action: "navigate", payload: intentResponse };
+        } else if (intentResponse === 'create_campaign') {
+            console.log(`[MCP_AGENT] Intenção de criar campanha detectada.`);
+            // COORDENADA 3: Extração de parâmetros com Gemini
+            const nameExtractionModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+            const promptForName = `O usuário disse: "${message}". Qual é o NOME da campanha que ele quer criar? Responda APENAS com o nome da campanha. Se não conseguir identificar um nome claro, responda "NOME_NAO_IDENTIFICADO".`;
+            const nameResult = await nameExtractionModel.generateContent(promptForName);
+            let campaignName = nameResult.response.text().trim();
+
+            if (campaignName && campaignName !== "NOME_NAO_IDENTIFICADO") {
+                 // COORDENADA 4: Chamada ao storage.createCampaign
+                try {
+                    const newCampaign = await storage.createCampaign({
+                        userId: req.user!.id,
+                        name: campaignName,
+                        status: 'draft', // Default status
+                        platforms: [],   // Default empty
+                        objectives: []   // Default empty
+                    });
+                    agentReplyText = `Campanha "${newCampaign.name}" criada com sucesso como rascunho! Você pode editá-la na seção de Campanhas.`;
+                    console.log(`[MCP_AGENT] Campanha "${newCampaign.name}" criada para usuário ${userId}.`);
+                } catch (creationError: any) {
+                    console.error("[MCP_AGENT] Erro ao criar campanha via MCP:", creationError);
+                    agentReplyText = `Houve um problema ao tentar criar a campanha "${campaignName}". Detalhes: ${creationError.message || 'Erro desconhecido.'}`;
+                }
             } else {
-                 // Se não for navegação, gera resposta normal
-                const chat = model.startChat({ history: historyForGemini, generationConfig: { maxOutputTokens: 300, temperature: 0.7 }, safetySettings: [/*...*/] });
-                const result = await chat.sendMessage(message);
-                agentReplyText = result.response.text();
+                agentReplyText = "Entendi que você quer criar uma nova campanha, mas não consegui identificar o nome. Poderia me dizer qual nome você gostaria de dar para a nova campanha?";
+                // Em uma implementação mais avançada, aqui poderíamos guardar o estado da conversa
+                // para pegar o nome na próxima interação do usuário.
             }
-        } catch (geminiError) {
-            console.error("[MCP_AGENT] Erro na API Gemini (intent ou chat):", geminiError);
-            agentReplyText = "Desculpe, estou com dificuldades para processar sua solicitação no momento. Tente mais tarde.";
-        }
 
-      } else if (attachmentUrl) {
-        agentReplyText = `Recebi seu anexo. No momento, não consigo processá-lo, mas ele foi registrado. Como posso ajudar com mais alguma coisa?`;
-      } else { // Sem mensagem de texto e sem anexo (não deveria acontecer devido à validação inicial) ou genAI indisponível
-        agentReplyText = `O serviço de IA não está configurado ou não houve mensagem.`;
+        } else { // Resposta geral da IA
+          const modelName = "gemini-1.5-flash-latest";
+          console.log(`[MCP_AGENT] Usando modelo para resposta geral: "${modelName}"`);
+          const model = genAI.getGenerativeModel({ model: modelName });
+          const messagesFromDb: ChatMessage[] = await storage.getChatMessages(currentSession.id, userId);
+          const historyForGemini = messagesFromDb.map(msg => ({
+            role: msg.sender === 'user' ? 'user' : 'model',
+            parts: [{ text: msg.text }]
+          }));
+          const systemPrompt = { role: "user", parts: [{ text: "Você é o Agente MCP, um assistente de IA para a plataforma de marketing digital USB MKT PRO V2. Sua principal função é auxiliar os usuários com informações sobre a plataforma e marketing digital. Responda sempre em Português do Brasil. Mantenha as respostas concisas e úteis." }] };
+          const initialAgentResponse = { role: "model", parts: [{ text: "Olá! Eu sou o Agente MCP, seu assistente inteligente na plataforma USB MKT PRO V2. Como posso te ajudar com marketing digital hoje?" }] };
+          const fullHistory = [systemPrompt, initialAgentResponse, ...historyForGemini];
+
+          const chat = model.startChat({
+            history: fullHistory,
+            generationConfig: { maxOutputTokens: 300, temperature: 0.7 },
+            safetySettings: [
+              { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+              { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+              { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+              { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+            ],
+          });
+          const result = await chat.sendMessage(message || "Processar anexo");
+          const response = result.response;
+          agentReplyText = response.text();
+          console.log(`[MCP_AGENT] Gemini respondeu (resposta geral): "${agentReplyText}"`);
+        }
+      } else { // Se Gemini não estiver disponível ou não houver mensagem de texto
+        agentReplyText = `Recebido: "${message || 'Anexo'}". ${!genAI ? 'O serviço de IA (Gemini) não está configurado corretamente no servidor.' : ''}`;
+        console.log(`[MCP_AGENT] Respondendo (sem IA ou sem texto): "${agentReplyText}"`);
       }
 
+      // COORDENADA 5: Salvar resposta do agente e enviar ao frontend
       await storage.addChatMessage({
         sessionId: currentSession.id,
         sender: 'agent',
         text: agentReplyText,
       });
 
-      return res.json({ reply: agentReplyText, sessionId: currentSession.id, ...actionResponse });
+      return res.json({ 
+        reply: agentReplyText, 
+        sessionId: currentSession.id,
+        ...(actionResponse.action && { action: actionResponse.action }),
+        ...(actionResponse.payload && { payload: actionResponse.payload }),
+      });
 
     } catch (error) {
-      console.error('[MCP_AGENT] Erro detalhado no endpoint /api/mcp/converse:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
+      console.error('[MCP_AGENT] Erro detalhado no endpoint /api/mcp/converse:', JSON.stringify(error, Object.getOwnPropertyNames(error as any), 2));
       next(error);
     }
   });
-  
+
   app.post('/api/chat/sessions', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       const userId = req.user!.id;
-      // O Zod schema 'insertChatSessionSchema' espera 'userId', mas ele vem do token.
-      // Usamos .partial() para tornar todos os campos opcionais na validação do req.body,
-      // e então pegamos apenas o 'title', se existir.
-      const parsedBody = insertChatSessionSchema.partial().parse(req.body);
-      const title = parsedBody.title; // title pode ser undefined aqui
-  
-      const newSession = await storage.createChatSession(userId, title); // storage.createChatSession tem default para title
+      const { title } = insertChatSessionSchema.partial().parse(req.body);
+      const newSession = await storage.createChatSession(userId, title || 'Nova Conversa');
       res.status(201).json(newSession);
     } catch (error) {
       next(error);
@@ -796,7 +824,7 @@ export async function registerRoutes(app: Express): Promise<HttpServer> {
       const sessionId = parseInt(req.params.sessionId);
       if (isNaN(sessionId)) return res.status(400).json({ error: 'ID da sessão inválido.' });
       const userId = req.user!.id;
-      const messages = await storage.getChatMessages(sessionId, userId); // userId é usado para checar propriedade da sessão
+      const messages = await storage.getChatMessages(sessionId, userId);
       res.json(messages);
     } catch (error) {
       next(error);
@@ -808,11 +836,11 @@ export async function registerRoutes(app: Express): Promise<HttpServer> {
       const sessionId = parseInt(req.params.sessionId);
       if (isNaN(sessionId)) return res.status(400).json({ error: 'ID da sessão inválido.' });
       const userId = req.user!.id;
-      const { title } = req.body; // Espera { "title": "Novo Título" }
+      const { title } = req.body;
       if (!title || typeof title !== 'string' || title.trim() === '') {
         return res.status(400).json({ error: 'Novo título inválido.' });
       }
-      const updatedSession = await storage.updateChatSessionTitle(sessionId, userId, title.trim());
+      const updatedSession = await storage.updateChatSessionTitle(sessionId, userId, title);
       if (!updatedSession) return res.status(404).json({ error: 'Sessão não encontrada ou não pertence ao usuário.' });
       res.json(updatedSession);
     } catch (error) {
@@ -833,108 +861,6 @@ export async function registerRoutes(app: Express): Promise<HttpServer> {
     }
   });
 
-  // Rotas de Funis
-    app.get('/api/funnels', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-        try {
-            const campaignIdQuery = req.query.campaignId as string | undefined;
-            let campaignId: number | null | undefined = undefined;
-            if (campaignIdQuery !== undefined) {
-                if (campaignIdQuery.toLowerCase() === 'null' || campaignIdQuery === '') {
-                    campaignId = null;
-                } else {
-                    campaignId = parseInt(campaignIdQuery);
-                    if (isNaN(campaignId)) return res.status(400).json({ error: 'ID da campanha inválido.' });
-                }
-            }
-            res.json(await storage.getFunnels(req.user!.id, campaignId));
-        } catch (error) { next(error); }
-    });
-
-    app.post('/api/funnels', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-        try {
-            const funnelData = insertFunnelSchema.parse({ ...req.body, userId: req.user!.id });
-            res.status(201).json(await storage.createFunnel(funnelData));
-        } catch (error) { next(error); }
-    });
-
-    app.get('/api/funnels/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-        try {
-            const id = parseInt(req.params.id);
-            if (isNaN(id)) return res.status(400).json({ error: 'ID do funil inválido.' });
-            const funnel = await storage.getFunnel(id, req.user!.id);
-            if (!funnel) return res.status(404).json({ error: 'Funil não encontrado.' });
-            res.json(funnel);
-        } catch (error) { next(error); }
-    });
-    
-    app.put('/api/funnels/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-        try {
-            const id = parseInt(req.params.id);
-            if (isNaN(id)) return res.status(400).json({ error: 'ID do funil inválido.' });
-            const { userId, ...updateData } = req.body;
-            const funnelData = insertFunnelSchema.partial().parse(updateData);
-            const funnel = await storage.updateFunnel(id, funnelData, req.user!.id);
-            if (!funnel) return res.status(404).json({ error: 'Funil não encontrado ou não pertence ao usuário.' });
-            res.json(funnel);
-        } catch (error) { next(error); }
-    });
-
-    app.delete('/api/funnels/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-        try {
-            const id = parseInt(req.params.id);
-            if (isNaN(id)) return res.status(400).json({ error: 'ID do funil inválido.' });
-            const success = await storage.deleteFunnel(id, req.user!.id);
-            if (!success) return res.status(404).json({ error: 'Funil não encontrado ou não pode ser excluído.' });
-            res.status(200).json({ message: 'Funil excluído com sucesso.' });
-        } catch (error) { next(error); }
-    });
-
-    // Rotas de Etapas de Funis
-    app.get('/api/funnels/:funnelId/stages', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-        try {
-            const funnelId = parseInt(req.params.funnelId);
-            if (isNaN(funnelId)) return res.status(400).json({ error: 'ID do funil inválido.' });
-            res.json(await storage.getFunnelStages(funnelId, req.user!.id));
-        } catch (error) { next(error); }
-    });
-
-    app.post('/api/funnels/:funnelId/stages', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-        try {
-            const funnelId = parseInt(req.params.funnelId);
-            if (isNaN(funnelId)) return res.status(400).json({ error: 'ID do funil inválido.' });
-            // Verificar se o funil pai pertence ao usuário antes de criar a etapa
-            const funnel = await storage.getFunnel(funnelId, req.user!.id);
-            if (!funnel) return res.status(404).json({ error: 'Funil pai não encontrado ou não pertence ao usuário.' });
-
-            const stageData = insertFunnelStageSchema.parse({ ...req.body, funnelId });
-            res.status(201).json(await storage.createFunnelStage(stageData));
-        } catch (error) { next(error); }
-    });
-    
-    app.put('/api/stages/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-        try {
-            const id = parseInt(req.params.id);
-            if (isNaN(id)) return res.status(400).json({ error: 'ID da etapa inválido.' });
-            const { funnelId, ...updateData } = req.body; // funnelId não deve ser atualizável por esta rota
-            const stageData = insertFunnelStageSchema.partial().parse(updateData);
-            const stage = await storage.updateFunnelStage(id, stageData, req.user!.id);
-            if (!stage) return res.status(404).json({ error: 'Etapa do funil não encontrada ou não pertence ao usuário.' });
-            res.json(stage);
-        } catch (error) { next(error); }
-    });
-
-    app.delete('/api/stages/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-        try {
-            const id = parseInt(req.params.id);
-            if (isNaN(id)) return res.status(400).json({ error: 'ID da etapa inválido.' });
-            const success = await storage.deleteFunnelStage(id, req.user!.id);
-            if (!success) return res.status(404).json({ error: 'Etapa do funil não encontrada ou não pode ser excluída.' });
-            res.status(200).json({ message: 'Etapa do funil excluída com sucesso.' });
-        } catch (error) { next(error); }
-    });
-
-
-  // Servir arquivos estáticos da pasta uploads (geral)
   app.use(`/${UPLOADS_ROOT_DIR}`, express.static(path.join(process.cwd(), UPLOADS_ROOT_DIR)));
 
   app.use(handleZodError);
