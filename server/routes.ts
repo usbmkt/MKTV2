@@ -7,12 +7,14 @@ import jwt from 'jsonwebtoken';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+
+// Importar schemas Zod e tipos do shared/schema.ts
 import {
   insertUserSchema,
   insertCampaignSchema,
   insertCreativeSchema,
   insertWhatsappMessageSchema,
-  insertCopySchema, // Usar o schema atualizado de shared/schema.ts
+  insertCopySchema, // Este é o schema ZOD ATUALIZADO
   insertAlertSchema,
   insertBudgetSchema,
   insertLandingPageSchema,
@@ -21,9 +23,17 @@ import {
   insertFunnelSchema,
   insertFunnelStageSchema,
   User,
-  allCopyPurposesConfig, // Importar para usar na rota /api/copies/generate se mover a lógica para cá
-  aiResponseSchema, // Importar para usar na rota /api/copies/generate se mover a lógica para cá
-} from "../shared/schema"; // Assumindo que allCopyPurposesConfig e aiResponseSchema estão em shared/schema.ts
+} from "../shared/schema";
+
+// Importar configurações de copy e schemas de IA de client/src/config/copyConfigurations.ts
+// O caminho relativo pode precisar de ajuste dependendo da estrutura do seu build.
+// Se o `esbuild` não conseguir resolver, você pode precisar de uma estratégia diferente
+// para compartilhar essa configuração (ex: um pacote 'shared-config' ou duplicar).
+import {
+  allCopyPurposesConfig,
+  aiResponseSchema, // Usado para a rota de GERAÇÃO DE COPY no backend
+} from "../client/src/config/copyConfigurations"; // <--- ATENÇÃO AO CAMINHO
+
 import { ZodError } from "zod";
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import { JWT_SECRET, GEMINI_API_KEY } from './config';
@@ -39,17 +49,17 @@ const MCP_ATTACHMENTS_DIR = path.resolve(UPLOADS_ROOT_DIR, 'mcp-attachments');
     }
 });
 
-const creativesUpload = multer({ storage: multer.diskStorage({ destination: (req, file, cb) => cb(null, CREATIVES_ASSETS_DIR), filename: (req, file, cb) => { const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9); cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname)); } }), limits: { fileSize: 15 * 1024 * 1024 }, fileFilter: (req, file, cb) => { const allowedTypes = /jpeg|jpg|png|gif|mp4|mov|avi|webp/; if (allowedTypes.test(path.extname(file.originalname).toLowerCase()) && allowedTypes.test(file.mimetype)) return cb(null, true); cb(new Error('Tipo de arquivo inválido para criativos.')); }, });
-const lpAssetUpload = multer({ storage: multer.diskStorage({ destination: (req, file, cb) => cb(null, LP_ASSETS_DIR), filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname.replace(/\s+/g, '_').toLowerCase()) }), limits: { fileSize: 5 * 1024 * 1024 }, fileFilter: (req, file, cb) => { const allowedTypes = /jpeg|jpg|png|gif|svg|webp/; if (allowedTypes.test(path.extname(file.originalname).toLowerCase()) && allowedTypes.test(file.mimetype)) return cb(null, true); cb(new Error('Tipo de arquivo inválido para assets de landing page. Apenas imagens são permitidas.')); } });
-const mcpAttachmentUpload = multer({ storage: multer.diskStorage({ destination: (req, file, cb) => cb(null, MCP_ATTACHMENTS_DIR), filename: (req, file, cb) => { const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9); cb(null, 'mcp-attachment-' + uniqueSuffix + path.extname(file.originalname)); } }), limits: { fileSize: 5 * 1024 * 1024 }, fileFilter: (req, file, cb) => { const allowedTypes = /jpeg|jpg|png|gif|webp|pdf|doc|docx|mp4|mov|avi/; if (allowedTypes.test(path.extname(file.originalname).toLowerCase()) && allowedTypes.test(file.mimetype)) return cb(null, true); cb(new Error('Tipo de arquivo não permitido para anexos do MCP.')); }, });
+const creativesUpload = multer({ /* ... (configuração do multer) ... */ storage: multer.diskStorage({ destination: (req, file, cb) => cb(null, CREATIVES_ASSETS_DIR), filename: (req, file, cb) => { const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9); cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname)); } }), limits: { fileSize: 15 * 1024 * 1024 }, fileFilter: (req, file, cb) => { const allowedTypes = /jpeg|jpg|png|gif|mp4|mov|avi|webp/; if (allowedTypes.test(path.extname(file.originalname).toLowerCase()) && allowedTypes.test(file.mimetype)) return cb(null, true); cb(new Error('Tipo de arquivo inválido para criativos.')); }, });
+const lpAssetUpload = multer({ /* ... (configuração do multer) ... */ storage: multer.diskStorage({ destination: (req, file, cb) => cb(null, LP_ASSETS_DIR), filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname.replace(/\s+/g, '_').toLowerCase()) }), limits: { fileSize: 5 * 1024 * 1024 }, fileFilter: (req, file, cb) => { const allowedTypes = /jpeg|jpg|png|gif|svg|webp/; if (allowedTypes.test(path.extname(file.originalname).toLowerCase()) && allowedTypes.test(file.mimetype)) return cb(null, true); cb(new Error('Tipo de arquivo inválido para assets de landing page. Apenas imagens são permitidas.')); } });
+const mcpAttachmentUpload = multer({ /* ... (configuração do multer) ... */ storage: multer.diskStorage({ destination: (req, file, cb) => cb(null, MCP_ATTACHMENTS_DIR), filename: (req, file, cb) => { const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9); cb(null, 'mcp-attachment-' + uniqueSuffix + path.extname(file.originalname)); } }), limits: { fileSize: 5 * 1024 * 1024 }, fileFilter: (req, file, cb) => { const allowedTypes = /jpeg|jpg|png|gif|webp|pdf|doc|docx|mp4|mov|avi/; if (allowedTypes.test(path.extname(file.originalname).toLowerCase()) && allowedTypes.test(file.mimetype)) return cb(null, true); cb(new Error('Tipo de arquivo não permitido para anexos do MCP.')); }, });
 
 interface AuthenticatedRequest extends Request {
   user?: User;
 }
 
-const authenticateToken = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => { if (process.env.FORCE_AUTH_BYPASS === 'true') { req.user = { id: 1, username: 'admin', email: 'admin@usbmkt.com', password: 'hashed_password', createdAt: new Date(), updatedAt: new Date() }; return next(); } const authHeader = req.headers['authorization']; const token = authHeader && authHeader.split(' ')[1]; if (!token) return res.status(401).json({ error: 'Token não fornecido.' }); try { const decoded = jwt.verify(token, JWT_SECRET) as { userId: number; email: string; }; const user = await storage.getUser(decoded.userId); if (!user) return res.status(401).json({ error: 'Usuário não encontrado.' }); req.user = user; next(); } catch (error) { if (error instanceof jwt.TokenExpiredError) return res.status(401).json({ error: 'Token expirado.' }); if (error instanceof jwt.JsonWebTokenError) return res.status(403).json({ error: 'Token inválido.' }); console.error("[AUTH_MIDDLEWARE] Erro token:", error); return res.status(500).json({ error: 'Erro interno ao verificar token.' }); }};
-const handleZodError = (err: any, req: Request, res: Response, next: NextFunction) => { if (err instanceof ZodError) { console.warn(`[ZOD_ERROR] ${req.method} ${req.originalUrl}:`, err.errors); return res.status(400).json({ error: "Erro de validação", details: err.errors.map(e => ({ path: e.path.join('.'), message: e.message }))}); } next(err); };
-const handleError = (err: any, req: Request, res: Response, next: NextFunction) => { console.error(`[HANDLE_ERROR] Unhandled error for ${req.method} ${req.originalUrl}:`, err.message); if (err.stack) { console.error(err.stack); } if (err instanceof multer.MulterError && err.code === "LIMIT_UNEXPECTED_FILE") { return res.status(400).json({ error: `Campo de arquivo inesperado: ${err.field}. Verifique o nome do campo esperado.` }); } if (err.message && (err.message.includes("Tipo de arquivo inválido") || err.code === "LIMIT_FILE_SIZE" || err.code === "ENOENT")) { return res.status(400).json({ error: err.message }); } if (err.constructor && err.constructor.name === "GoogleGenerativeAIFetchError") { const generativeError = err as any; const status = generativeError.status || 500; const message = generativeError.message || "Erro ao comunicar com o serviço de IA."; console.error(`[GEMINI_API_ERROR] Status: ${status}, Message: ${message}`, generativeError.errorDetails || generativeError); return res.status(status).json({ error: `Erro na IA: ${message}` }); } const statusCode = err.statusCode || 500; const message = err.message || "Erro interno do servidor."; res.status(statusCode).json({ error: message });};
+const authenticateToken = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => { /* ... (seu middleware de autenticação) ... */ if (process.env.FORCE_AUTH_BYPASS === 'true') { req.user = { id: 1, username: 'admin', email: 'admin@usbmkt.com', password: 'hashed_password', createdAt: new Date(), updatedAt: new Date() }; return next(); } const authHeader = req.headers['authorization']; const token = authHeader && authHeader.split(' ')[1]; if (!token) return res.status(401).json({ error: 'Token não fornecido.' }); try { const decoded = jwt.verify(token, JWT_SECRET) as { userId: number; email: string; }; const user = await storage.getUser(decoded.userId); if (!user) return res.status(401).json({ error: 'Usuário não encontrado.' }); req.user = user; next(); } catch (error) { if (error instanceof jwt.TokenExpiredError) return res.status(401).json({ error: 'Token expirado.' }); if (error instanceof jwt.JsonWebTokenError) return res.status(403).json({ error: 'Token inválido.' }); console.error("[AUTH_MIDDLEWARE] Erro token:", error); return res.status(500).json({ error: 'Erro interno ao verificar token.' }); }};
+const handleZodError = (err: any, req: Request, res: Response, next: NextFunction) => { /* ... (seu handler de erro Zod) ... */ if (err instanceof ZodError) { console.warn(`[ZOD_ERROR] ${req.method} ${req.originalUrl}:`, err.errors); return res.status(400).json({ error: "Erro de validação", details: err.errors.map(e => ({ path: e.path.join('.'), message: e.message }))}); } next(err); };
+const handleError = (err: any, req: Request, res: Response, next: NextFunction) => { /* ... (seu handler de erro geral) ... */ console.error(`[HANDLE_ERROR] Unhandled error for ${req.method} ${req.originalUrl}:`, err.message); if (err.stack) { console.error(err.stack); } if (err instanceof multer.MulterError && err.code === "LIMIT_UNEXPECTED_FILE") { return res.status(400).json({ error: `Campo de arquivo inesperado: ${err.field}. Verifique o nome do campo esperado.` }); } if (err.message && (err.message.includes("Tipo de arquivo inválido") || err.code === "LIMIT_FILE_SIZE" || err.code === "ENOENT")) { return res.status(400).json({ error: err.message }); } if (err.constructor && err.constructor.name === "GoogleGenerativeAIFetchError") { const generativeError = err as any; const status = generativeError.status || 500; const message = generativeError.message || "Erro ao comunicar com o serviço de IA."; console.error(`[GEMINI_API_ERROR] Status: ${status}, Message: ${message}`, generativeError.errorDetails || generativeError); return res.status(status).json({ error: `Erro na IA: ${message}` }); } const statusCode = err.statusCode || 500; const message = err.message || "Erro interno do servidor."; res.status(statusCode).json({ error: message });};
 
 let genAI: GoogleGenerativeAI | null = null;
 if (GEMINI_API_KEY && GEMINI_API_KEY !== "SUA_CHAVE_API_GEMINI_AQUI" && GEMINI_API_KEY.length > 10) {
@@ -57,25 +67,24 @@ if (GEMINI_API_KEY && GEMINI_API_KEY !== "SUA_CHAVE_API_GEMINI_AQUI" && GEMINI_A
   catch (error) { console.error("[GEMINI_MAIN] Falha ao inicializar SDK Gemini:", error); genAI = null; }
 } else { console.warn("[GEMINI_MAIN] GEMINI_API_KEY não configurada ou inválida."); }
 
-async function doRegisterRoutes(app: Express): Promise<HttpServer> { // Renomeado para doRegisterRoutes
+async function doRegisterRoutes(app: Express): Promise<HttpServer> {
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
   app.get('/api/health', (req, res) => res.status(200).json({ status: 'ok', timestamp: new Date().toISOString(), service: 'MKTV5', version: '1.0.0' }));
 
-  app.post('/api/auth/register', async (req: Request, res: Response, next: NextFunction) => { try { const userData = insertUserSchema.parse(req.body); const existingUser = await storage.getUserByEmail(userData.email); if (existingUser) { return res.status(409).json({ error: 'Usuário com este email já existe.' }); } const user = await storage.createUser(userData); const token = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }); res.status(201).json({ user: { id: user.id, username: user.username, email: user.email }, token }); } catch (error) { next(error); }});
-  app.post('/api/auth/login', async (req: Request, res: Response, next: NextFunction) => { try { const { email, password } = req.body; if (!email || !password) return res.status(400).json({ error: 'Email e senha são obrigatórios.' }); const user = await storage.getUserByEmail(email); if (!user) return res.status(401).json({ error: 'Credenciais inválidas.' }); const isValidPassword = await storage.validatePassword(password, user.password); if (!isValidPassword) return res.status(401).json({ error: 'Credenciais inválidas.' }); const token = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN ||'7d' }); res.json({ user: { id: user.id, username: user.username, email: user.email }, token }); } catch (error) { next(error); }});
-  app.get('/api/dashboard', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => { try { res.json(await storage.getDashboardData(req.user!.id, req.query.timeRange as string || '30d')); } catch (error) { next(error); }});
-  app.get('/api/campaigns', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => { try { res.json(await storage.getCampaigns(req.user!.id)); } catch (error) { next(error); }});
-  app.post('/api/campaigns', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => { try { const campaignData = insertCampaignSchema.parse({ ...req.body, userId: req.user!.id }); res.status(201).json(await storage.createCampaign(campaignData)); } catch (error) { next(error); }});
-  app.get('/api/campaigns/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => { try { const id = parseInt(req.params.id); if (isNaN(id)) return res.status(400).json({ error: 'ID da campanha inválido.' }); const campaign = await storage.getCampaign(id, req.user!.id); if (!campaign) return res.status(404).json({ error: 'Campanha não encontrada.' }); res.json(campaign); } catch (error) { next(error); }});
-  app.put('/api/campaigns/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => { try { const id = parseInt(req.params.id); if (isNaN(id)) return res.status(400).json({ error: 'ID da campanha inválido.' }); const { userId, ...updateData } = req.body; const campaignData = insertCampaignSchema.partial().parse(updateData); const campaign = await storage.updateCampaign(id, campaignData, req.user!.id); if (!campaign) return res.status(404).json({ error: 'Campanha não encontrada ou não pertence ao usuário.' }); res.json(campaign); } catch (error) { next(error); }});
-  app.delete('/api/campaigns/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => { try { const id = parseInt(req.params.id); if (isNaN(id)) return res.status(400).json({ error: 'ID da campanha inválido.' }); const success = await storage.deleteCampaign(id, req.user!.id); if (!success) return res.status(404).json({ error: 'Campanha não encontrada ou não pode ser excluída.' }); res.status(200).json({ message: 'Campanha excluída com sucesso.' }); } catch (error) { next(error); }});
-  app.get('/api/creatives', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => { try { const campaignIdQuery = req.query.campaignId as string | undefined; const campaignId = campaignIdQuery === 'null' || campaignIdQuery === '' ? null : (campaignIdQuery ? parseInt(campaignIdQuery) : undefined); if (campaignIdQuery && campaignIdQuery !== 'null' && campaignIdQuery !== '' && isNaN(campaignId!)) return res.status(400).json({ error: 'ID da campanha inválido.' }); res.json(await storage.getCreatives(req.user!.id, campaignId)); } catch (error) { next(error); }});
-  app.post('/api/creatives', authenticateToken, creativesUpload.single('file'), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => { try { const creativeData = insertCreativeSchema.parse({ ...req.body, userId: req.user!.id, fileUrl: req.file ? `/${UPLOADS_ROOT_DIR}/creatives-assets/${req.file.filename}` : req.body.fileUrl || null }); res.status(201).json(await storage.createCreative(creativeData)); } catch (error) { next(error); }});
-  app.delete('/api/creatives/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => { try { const id = parseInt(req.params.id); if (isNaN(id)) return res.status(400).json({ error: 'ID do criativo inválido.' }); const creative = await storage.getCreative(id, req.user!.id); if (!creative) return res.status(404).json({ error: 'Criativo não encontrado.' }); const success = await storage.deleteCreative(id, req.user!.id); if (!success) return res.status(404).json({ error: 'Criativo não encontrado ou não pode ser excluído.' }); if (creative.fileUrl) { const filePath = path.join(process.cwd(), creative.fileUrl.startsWith('/') ? creative.fileUrl.substring(1) : creative.fileUrl); if (fs.existsSync(filePath)) fs.unlink(filePath, (err) => { if (err) console.error(`Erro ao deletar arquivo ${filePath}:`, err);});} res.status(200).json({ message: 'Criativo excluído com sucesso.' }); } catch (error) { next(error); }});
-  app.put('/api/creatives/:id', authenticateToken, creativesUpload.single('file'), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => { try { const id = parseInt(req.params.id); if (isNaN(id)) return res.status(400).json({ error: 'ID do criativo inválido.' }); const userId = req.user!.id; const existingCreative = await storage.getCreative(id, userId); if (!existingCreative) return res.status(404).json({ error: 'Criativo não encontrado.' }); const { userId: _, ...updateDataRaw } = req.body; const updateData = insertCreativeSchema.partial().parse(updateDataRaw); let newFileUrl: string | null | undefined = existingCreative.fileUrl; if (req.file) { newFileUrl = `/${UPLOADS_ROOT_DIR}/creatives-assets/${req.file.filename}`; if (existingCreative.fileUrl && existingCreative.fileUrl !== newFileUrl) { const oldFilePath = path.join(process.cwd(), existingCreative.fileUrl.startsWith('/') ? existingCreative.fileUrl.substring(1) : existingCreative.fileUrl); if (fs.existsSync(oldFilePath)) fs.unlink(oldFilePath, (err) => { if (err) console.error("Erro ao deletar arquivo antigo:", err);}); } } else if (req.body.fileUrl === "null" || req.body.fileUrl === null) { newFileUrl = null; if (existingCreative.fileUrl) { const oldFilePath = path.join(process.cwd(), existingCreative.fileUrl.startsWith('/') ? existingCreative.fileUrl.substring(1) : existingCreative.fileUrl); if (fs.existsSync(oldFilePath)) fs.unlink(oldFilePath, (err) => { if (err) console.error("Erro ao deletar arquivo existente:", err);}); } } updateData.fileUrl = newFileUrl; const updatedCreative = await storage.updateCreative(id, updateData, userId); if (!updatedCreative) return res.status(404).json({ error: 'Criativo não atualizado.' }); res.json(updatedCreative); } catch (error) { next(error); }});
+  app.post('/api/auth/register', async (req: Request, res: Response, next: NextFunction) => { /* ... */ });
+  app.post('/api/auth/login', async (req: Request, res: Response, next: NextFunction) => { /* ... */ });
+  app.get('/api/dashboard', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => { /* ... */ });
+  app.get('/api/campaigns', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => { /* ... */ });
+  app.post('/api/campaigns', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => { /* ... */ });
+  // ... (outras rotas de campanha)
+  app.get('/api/creatives', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => { /* ... */ });
+  app.post('/api/creatives', authenticateToken, creativesUpload.single('file'), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => { /* ... */ });
+  // ... (outras rotas de criativos)
   
-  // Rota de Geração de Copy AVANÇADA (Backend)
+  // --- Rota de Geração de Copy AVANÇADA (Backend) ---
+  // Se você decidir mover a lógica de chamada à API Gemini para cá,
+  // o frontend chamaria este endpoint em vez de chamar a Gemini diretamente.
   app.post('/api/copies/generate', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       const { product, audience, objective, tone, copyPurposeKey, details, launchPhase } = req.body;
@@ -127,7 +136,7 @@ Observações importantes para sua geração:
 - Para e-mails, estruture com parágrafos curtos e CTA claro.`;
 
       if (currentPurposeConfig.promptEnhancer) {
-        // @ts-ignore TODO: Ajustar tipo de BaseGeneratorFormState se importado de config
+        // @ts-ignore
         prompt = currentPurposeConfig.promptEnhancer(prompt, details, {product, audience, objective, tone});
       }
       
@@ -137,7 +146,7 @@ Observações importantes para sua geração:
             responseMimeType: "application/json", 
             // @ts-ignore
             responseSchema: aiResponseSchema, 
-            maxOutputTokens: 2048, // Aumentado
+            maxOutputTokens: 2048, 
             temperature: 0.75 
         },
         safetySettings: [ { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE }, { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE }, { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE }, { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE }, ],
@@ -149,7 +158,7 @@ Observações importantes para sua geração:
       console.log(`[GEMINI_BACKEND_COPIES_GENERATE] Resposta da IA: ${responseText.substring(0,150)}...`);
       
       const generatedData = JSON.parse(responseText);
-      res.json([generatedData]); // Enviar como array para o frontend
+      res.json([generatedData]);
 
     } catch (error) {
       console.error('[BACKEND /api/copies/generate] Erro:', error);
@@ -157,6 +166,7 @@ Observações importantes para sua geração:
     }
   });
   
+  // --- ROTAS CRUD para COPIES (ATUALIZADAS) ---
   app.get('/api/copies', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       const campaignIdQuery = req.query.campaignId as string | undefined;
@@ -185,6 +195,14 @@ Observações importantes para sua geração:
         ...req.body,
         userId: req.user!.id,
       };
+      // Assegurar que os campos JSONB default sejam objetos vazios se não vierem do frontend
+      dataToValidate.details = dataToValidate.details || {};
+      dataToValidate.baseInfo = dataToValidate.baseInfo || {};
+      dataToValidate.fullGeneratedResponse = dataToValidate.fullGeneratedResponse || {};
+      dataToValidate.tags = dataToValidate.tags || [];
+      dataToValidate.isFavorite = dataToValidate.isFavorite === undefined ? false : dataToValidate.isFavorite;
+
+
       const validatedData = insertCopySchema.parse(dataToValidate);
       const newCopy = await storage.createCopy(validatedData);
       res.status(201).json(newCopy);
@@ -210,8 +228,7 @@ Observações importantes para sua geração:
         const id = parseInt(req.params.id);
         if (isNaN(id)) return res.status(400).json({ error: 'ID da copy inválido.' });
         const dataToValidate = { ...req.body };
-        // Omitir userId, id, createdAt do payload de update, pois não devem ser alterados pelo cliente ou são gerenciados pelo DB
-        const validatedData = insertCopySchema.partial().omit({ userId: true, id: true, createdAt: true }).parse(dataToValidate);
+        const validatedData = insertCopySchema.partial().omit({ userId: true, id: true, createdAt: true, lastUpdatedAt: true }).parse(dataToValidate);
         
         const updatedCopy = await storage.updateCopy(id, validatedData, req.user!.id);
         if (!updatedCopy) {
@@ -223,8 +240,13 @@ Observações importantes para sua geração:
     }
   });
 
-  app.get('/api/alerts', authenticateToken, async (req: AuthenticatedRequest, res, next) => { try { const onlyUnread = req.query.unread === 'true'; res.json(await storage.getAlerts(req.user!.id, onlyUnread)); } catch (error) { next(error); }});
-  app.put('/api/alerts/:id/read', authenticateToken, async (req: AuthenticatedRequest, res, next) => { try { const id = parseInt(req.params.id); if (isNaN(id)) return res.status(400).json({ error: 'ID do alerta inválido.' }); const success = await storage.markAlertAsRead(id, req.user!.id); if (!success) return res.status(404).json({ error: 'Alerta não encontrado.' }); res.json({ success: true, message: 'Alerta lido.' }); } catch (error) { next(error); }});
+  // --- Outras rotas (manter as suas) ---
+  app.get('/api/alerts', authenticateToken, async (req: AuthenticatedRequest, res, next) => { /* ... */ });
+  app.put('/api/alerts/:id/read', authenticateToken, async (req: AuthenticatedRequest, res, next) => { /* ... */ });
+  // ... (manter suas outras rotas como estão)
+  app.get('/api/whatsapp/messages', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => { try { const contactNumber = req.query.contact as string | undefined; res.json(await storage.getMessages(req.user!.id, contactNumber)); } catch (error) { next(error); }});
+  app.post('/api/whatsapp/messages', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => { try { const messageData = insertWhatsappMessageSchema.parse({ ...req.body, userId: req.user!.id }); res.status(201).json(await storage.createMessage(messageData)); } catch (error) { next(error); }});
+  app.get('/api/whatsapp/contacts', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => { try { res.json(await storage.getContacts(req.user!.id)); } catch (error) { next(error); }});
   app.get('/api/budgets', authenticateToken, async (req: AuthenticatedRequest, res, next) => { try { const campaignIdQuery = req.query.campaignId as string | undefined; const campaignId = campaignIdQuery === 'null' || campaignIdQuery === '' ? null : (campaignIdQuery ? parseInt(campaignIdQuery) : undefined); if (campaignIdQuery && campaignIdQuery !== 'null' && campaignIdQuery !== '' && isNaN(campaignId!)) return res.status(400).json({ error: 'ID da campanha inválido.' }); res.json(await storage.getBudgets(req.user!.id, campaignId)); } catch (error) { next(error); }});
   app.post('/api/budgets', authenticateToken, async (req: AuthenticatedRequest, res, next) => { try { const budgetData = insertBudgetSchema.parse({ ...req.body, userId: req.user!.id }); res.status(201).json(await storage.createBudget(budgetData)); } catch (error) { next(error); }});
   app.get('/api/landingpages', authenticateToken, async (req: AuthenticatedRequest, res, next) => { try { res.json(await storage.getLandingPages(req.user!.id)); } catch (error) { next(error); }});
@@ -258,7 +280,6 @@ Observações importantes para sua geração:
   return httpServer;
 }
 
-// Correção para o erro de build: exportar a função como parte de um objeto
 export const RouterSetup = {
   registerRoutes: doRegisterRoutes
 };
