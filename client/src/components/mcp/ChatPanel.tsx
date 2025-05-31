@@ -1,10 +1,12 @@
 // client/src/components/mcp/ChatPanel.tsx
+// Abaixo, indicar o caminho completo da pasta de destino.
+// client/src/components/mcp/ChatPanel.tsx
 import React, { useState, useRef, useEffect } from 'react';
-import { useMCPStore, sendMessageToMCP, ChatSession, Message } from '@/lib/mcpStore';
+import { useMCPStore, sendMessageToMCP, ChatSession } from '@/lib/mcpStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Send, X, RotateCcw, MoreVertical, Plus, History, Trash, Edit, Mic, StopCircle, Paperclip, Loader2 } from 'lucide-react'; 
+import { Send, X, RotateCcw, MoreVertical, Plus, History, Trash, Edit, Mic, StopCircle, Paperclip } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -28,6 +30,7 @@ export const ChatPanel: React.FC = () => {
     setCurrentInput,
     clearCurrentInput,
     isLoading,
+    // resetChat, // Comentado pois o reset agora é mais focado na sessão
     currentSessionId,
     chatSessions,
     loadChatSessions,
@@ -36,7 +39,7 @@ export const ChatPanel: React.FC = () => {
     updateCurrentSessionTitle,
     deleteChatSession,
     isSessionsLoading,
-    addMessage: mcpAddMessage, // Renomeado para evitar conflito com a função local, se houver
+    addMessage, // Adicionado para feedback de erro do microfone
   } = useMCPStore();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -49,80 +52,69 @@ export const ChatPanel: React.FC = () => {
   const recognitionRef = useRef<any>(null);
   const speechRecognitionAvailable = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition);
 
-  console.log("[ChatPanel] Renderizando. Messages no store:", JSON.stringify(messages.map(m=>({text: m.text, sender: m.sender}))));
 
   useEffect(() => {
     if (isPanelOpen) {
       loadChatSessions();
-      if (!isLoading && !isSessionsLoading && inputRef.current) {
-          inputRef.current.focus();
-      }
     }
-  }, [isPanelOpen, loadChatSessions, isLoading, isSessionsLoading]);
+  }, [isPanelOpen, loadChatSessions]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setCurrentInput(e.target.value); // Esta chamada já tem log no mcpStore
+    setCurrentInput(e.target.value);
   };
 
   const handleSendMessage = async (e?: React.FormEvent<HTMLFormElement>) => {
     e?.preventDefault();
-    // COORDENADA 2 (ChatPanel.tsx): Logs diagnósticos em handleSendMessage
-    console.log('[ChatPanel] handleSendMessage disparado.');
-    console.log('[ChatPanel] currentInput do store ANTES de trim:', currentInput);
-    console.log('[ChatPanel] isLoading do store:', isLoading);
-
     const messageText = currentInput.trim();
-    console.log('[ChatPanel] messageText (após trim):', `"${messageText}"`);
-
-    if (!messageText || isLoading) {
-      console.warn('[ChatPanel] handleSendMessage: Retornando. messageText vazio ou isLoading é true.');
-      return;
-    }
+    if (!messageText || isLoading) return;
     
+    clearCurrentInput();
     if (isListening && recognitionRef.current) {
         recognitionRef.current.stop();
         setIsListening(false);
     }
-    console.log('[ChatPanel] handleSendMessage: Chamando clearCurrentInput e sendMessageToMCP com texto:', messageText);
-    clearCurrentInput(); // Limpa o input visualmente ANTES de enviar
     await sendMessageToMCP(messageText);
   };
 
   useEffect(() => {
-    if (isPanelOpen && inputRef.current && !isLoading && !isListening) {
+    if (isPanelOpen && inputRef.current) {
       inputRef.current.focus();
     }
-  }, [isPanelOpen, isLoading, isListening, messages]);
+  }, [isPanelOpen]);
 
   useEffect(() => {
     if (scrollAreaRef.current) {
-      const viewport = scrollAreaRef.current.querySelector('div[data-radix-scroll-area-viewport]');
+      const viewport = scrollAreaRef.current.querySelector('div[style*="overflow: scroll"]');
       if (viewport) {
         viewport.scrollTop = viewport.scrollHeight;
+      } else {
+        // Fallback para tentar o primeiro filho direto que seja DIV
+        const firstChildDiv = scrollAreaRef.current.children[0] as HTMLElement;
+        if (firstChildDiv && firstChildDiv.tagName === 'DIV') {
+            firstChildDiv.scrollTop = firstChildDiv.scrollHeight;
+        }
       }
     }
-  }, [messages, isLoading]);
+  }, [messages, isLoading]); // Adicionado isLoading para scroll quando "Digitando..." aparece
 
   const handleStartNewChat = async () => {
     await startNewChat();
     setIsHistoryModalOpen(false);
-    if (inputRef.current) inputRef.current.focus();
   };
 
   const handleLoadSession = async (session: ChatSession) => {
     await loadSessionHistory(session.id, session.title);
     setIsHistoryModalOpen(false);
-    if (inputRef.current) inputRef.current.focus();
   };
 
   const handleEditTitleClick = () => {
     const currentSession = chatSessions.find(s => s.id === currentSessionId);
-    setNewTitle(currentSession?.title || `Sessão #${currentSessionId || ''}`);
+    setNewTitle(currentSession?.title || `Sessão #${currentSessionId || new Date().toLocaleDateString('pt-BR')}`);
     setIsEditTitleModalOpen(true);
   };
 
   const handleSaveTitle = async () => {
-    if (newTitle.trim() && currentSessionId) {
+    if (newTitle.trim() && currentSessionId) { // Garante que currentSessionId não é null
       await updateCurrentSessionTitle(newTitle.trim());
       setIsEditTitleModalOpen(false);
     }
@@ -131,60 +123,112 @@ export const ChatPanel: React.FC = () => {
   const handleDeleteSession = async (sessionId: number) => {
     if (window.confirm('Tem certeza que deseja excluir esta conversa?')) {
       await deleteChatSession(sessionId);
-      if (isHistoryModalOpen) {
-          await loadChatSessions();
+      if (currentSessionId === sessionId) {
+        await startNewChat(); // Inicia uma nova conversa se a atual foi deletada
       }
-      if (inputRef.current) inputRef.current.focus();
+      await loadChatSessions(); 
     }
   };
 
   const handleVoiceInput = () => {
-    if (!speechRecognitionAvailable) { 
-      mcpAddMessage({ id: `speech-error-${Date.now()}`, text: 'Seu navegador não suporta reconhecimento de voz.', sender: 'system', timestamp: new Date() });
+    if (!speechRecognitionAvailable) {
+      addMessage({
+        id: `speech-error-${Date.now()}`,
+        text: 'Seu navegador não suporta reconhecimento de voz. Tente usar Chrome ou Edge.',
+        sender: 'system',
+        timestamp: new Date(),
+      });
       return;
     }
+
     if (!recognitionRef.current) {
         const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
         recognitionRef.current = new SpeechRecognitionAPI();
         recognitionRef.current.continuous = false;
         recognitionRef.current.lang = 'pt-BR';
         recognitionRef.current.interimResults = true;
-        recognitionRef.current.onstart = () => { setIsListening(true); setCurrentInput('Ouvindo...'); };
+
+        recognitionRef.current.onstart = () => {
+            setIsListening(true);
+            setCurrentInput('Ouvindo...');
+            console.log("Reconhecimento de voz iniciado.");
+        };
+
         recognitionRef.current.onresult = (event: any) => {
-            let finalTranscript = ''; let interimTranscript = '';
+            let finalTranscript = '';
+            let interimTranscript = '';
             for (let i = event.resultIndex; i < event.results.length; ++i) {
-                if (event.results[i].isFinal) finalTranscript += event.results[i][0].transcript;
-                else interimTranscript += event.results[i][0].transcript;
+                if (event.results[i].isFinal) {
+                    finalTranscript += event.results[i][0].transcript;
+                } else {
+                    interimTranscript += event.results[i][0].transcript;
+                }
             }
+            
             setCurrentInput(finalTranscript || interimTranscript);
+
             if (finalTranscript.trim()) {
-              recognitionRef.current.stop(); // Para de ouvir após resultado final
-              // handleSendMessage(); // Poderia chamar o envio aqui se quisesse envio automático
+                console.log("Transcrição final recebida:", finalTranscript);
+                recognitionRef.current.stop(); 
             }
         };
+
         recognitionRef.current.onerror = (event: any) => {
-            let errMsg = 'Erro no reconhecimento de voz.';
-            if (event.error === 'not-allowed') errMsg = 'Permissão do microfone negada.';
-            else if (event.error === 'no-speech') errMsg = 'Nenhuma fala detectada.';
-            mcpAddMessage({ id: `speech-error-detail-${Date.now()}`, text: errMsg, sender: 'system', timestamp: new Date() });
-            setIsListening(false); setCurrentInput('');
+            console.error('Erro de reconhecimento de voz:', event.error, event.message);
+            let errorMessage = 'Ocorreu um erro durante o reconhecimento de voz.';
+            if (event.error === 'not-allowed') {
+                errorMessage = 'Permissão para usar o microfone negada. Por favor, habilite nas configurações do seu navegador.';
+            } else if (event.error === 'no-speech') {
+                errorMessage = 'Nenhuma fala detectada. Tente falar mais alto ou verifique seu microfone.';
+            } else if (event.error === 'audio-capture') {
+                errorMessage = 'Problema na captura de áudio. Verifique seu microfone.';
+            } else if (event.error === 'network') {
+                errorMessage = 'Erro de rede durante o reconhecimento de voz.';
+            }
+            
+            addMessage({
+                id: `speech-error-detail-${Date.now()}`,
+                text: errorMessage,
+                sender: 'system',
+                timestamp: new Date(),
+            });
+            setIsListening(false);
+            setCurrentInput(''); 
         };
+
         recognitionRef.current.onend = () => {
             setIsListening(false);
-            if (currentInput === 'Ouvindo...') setCurrentInput('');
+            console.log("Reconhecimento de voz finalizado.");
+            if (currentInput === 'Ouvindo...') { 
+                setCurrentInput('');
+            }
             inputRef.current?.focus(); 
         };
     }
+    
     if (!isListening) {
-        try { recognitionRef.current.start(); } 
-        catch (error) {
-            setIsListening(false); setCurrentInput('');
-            mcpAddMessage({ id: `speech-start-error-${Date.now()}`, text: 'Não foi possível iniciar reconhecimento de voz.', sender: 'system', timestamp: new Date() });
+        try {
+            recognitionRef.current.start();
+        } catch (error) {
+            console.error("Erro ao tentar iniciar o reconhecimento:", error);
+            setIsListening(false);
+            setCurrentInput('');
+            addMessage({
+                id: `speech-start-error-${Date.now()}`,
+                text: 'Não foi possível iniciar o reconhecimento de voz. Tente novamente.',
+                sender: 'system',
+                timestamp: new Date(),
+            });
         }
-    } else { recognitionRef.current.stop(); }
+    } else {
+        recognitionRef.current.stop();
+    }
   };
 
-  if (!isPanelOpen) return null;
+
+  if (!isPanelOpen) {
+    return null;
+  }
 
   const currentChatTitle = currentSessionId 
     ? chatSessions.find(s => s.id === currentSessionId)?.title || `Sessão #${currentSessionId}`
@@ -196,7 +240,9 @@ export const ChatPanel: React.FC = () => {
         "fixed bottom-20 right-5 z-[100] w-full max-w-md h-[70vh] max-h-[600px] bg-card border border-border shadow-xl rounded-lg flex flex-col transition-all duration-300 ease-in-out",
         isPanelOpen ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10 pointer-events-none"
       )}
-      role="dialog" aria-modal="true" aria-labelledby="mcp-chat-panel-title"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="mcp-chat-panel-title"
     >
       <header className="flex items-center justify-between p-4 border-b border-border">
         <h3 id="mcp-chat-panel-title" className="font-semibold text-lg text-foreground truncate max-w-[calc(100%-100px)]">
@@ -205,23 +251,47 @@ export const ChatPanel: React.FC = () => {
         <div className="flex items-center gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" title="Opções da Conversa" aria-label="Opções da Conversa"><MoreVertical className="h-5 w-5" /></Button>
+              <Button variant="ghost" size="icon" title="Opções da Conversa" aria-label="Opções da Conversa">
+                <MoreVertical className="h-5 w-5" />
+              </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="z-[101]"> 
-              <DropdownMenuItem onClick={handleStartNewChat}><Plus className="mr-2 h-4 w-4" /> Nova Conversa</DropdownMenuItem>
-              <DropdownMenuItem onClick={handleEditTitleClick} disabled={!currentSessionId}><Edit className="mr-2 h-4 w-4" /> Renomear</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setIsHistoryModalOpen(true)}><History className="mr-2 h-4 w-4" /> Histórico</DropdownMenuItem>
+              <DropdownMenuItem onClick={handleStartNewChat}>
+                <Plus className="mr-2 h-4 w-4" /> Nova Conversa
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleEditTitleClick} disabled={currentSessionId === null}>
+                <Edit className="mr-2 h-4 w-4" /> Renomear Conversa
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setIsHistoryModalOpen(true)}>
+                <History className="mr-2 h-4 w-4" /> Ver Conversas Antigas
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => {
-                 const csId = useMCPStore.getState().currentSessionId;
-                 const defaultMsg = {...initialAgentMessageDefault, text: 'Conversa reiniciada. Como posso ajudar?', sessionId: csId || undefined };
-                 if (csId) useMCPStore.setState({ messages: [defaultMsg]});
-                 else handleStartNewChat();
-              }}><RotateCcw className="mr-2 h-4 w-4" /> Reiniciar Atual</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => { if(currentSessionId) handleDeleteSession(currentSessionId); }} disabled={!currentSessionId} className="text-destructive focus:text-destructive hover:bg-destructive/10 focus:bg-destructive/10"><Trash className="mr-2 h-4 w-4" /> Excluir Atual</DropdownMenuItem>
+                if (currentSessionId) { 
+                    useMCPStore.setState({ messages: [
+                      { id: 'reset-agent-message', text: 'Conversa reiniciada. Como posso ajudar?', sender: 'agent', timestamp: new Date(), sessionId: currentSessionId }
+                    ]});
+                } else {
+                    handleStartNewChat().then(() => {
+                        const newSessionId = useMCPStore.getState().currentSessionId;
+                        if (newSessionId) {
+                             useMCPStore.setState({ messages: [
+                                { id: 'reset-agent-message', text: 'Conversa reiniciada. Como posso ajudar?', sender: 'agent', timestamp: new Date(), sessionId: newSessionId }
+                            ]});
+                        }
+                    });
+                }
+              }} >
+                <RotateCcw className="mr-2 h-4 w-4" /> Reiniciar Conversa Atual
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => { if(currentSessionId) handleDeleteSession(currentSessionId); }} disabled={currentSessionId === null}>
+                <Trash className="mr-2 h-4 w-4" /> Excluir Conversa Atual
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button variant="ghost" size="icon" onClick={togglePanel} title="Fechar Painel" aria-label="Fechar painel do Agente MCP"><X className="h-5 w-5" /></Button>
+          <Button variant="ghost" size="icon" onClick={togglePanel} title="Fechar Painel" aria-label="Fechar painel do Agente MCP">
+            <X className="h-5 w-5" />
+          </Button>
         </div>
       </header>
 
@@ -234,13 +304,17 @@ export const ChatPanel: React.FC = () => {
                 "flex flex-col p-3 rounded-lg max-w-[80%]",
                 msg.sender === 'user' ? 'bg-primary text-primary-foreground self-end rounded-br-none' :
                 msg.sender === 'agent' ? 'bg-muted text-muted-foreground self-start rounded-bl-none' :
-                'bg-transparent text-xs text-muted-foreground self-center text-center w-full py-1'
+                'bg-transparent text-xs text-muted-foreground self-center text-center w-full py-1' 
               )}
             >
               <p className={cn("text-sm whitespace-pre-wrap", msg.sender === 'system' ? 'italic' : '')}>{msg.text}</p>
               {msg.sender !== 'system' && (
-                <span className={cn("text-xs mt-1", msg.sender === 'user' ? 'text-primary-foreground/70 self-end' : 'text-muted-foreground/70 self-start')}>
-                  {format(new Date(msg.timestamp), 'HH:mm', { locale: ptBR })}
+                <span className={cn(
+                  "text-xs mt-1",
+                  msg.sender === 'user' ? 'text-primary-foreground/70 self-end' : 
+                  'text-muted-foreground/70 self-start'
+                )}>
+                  {format(msg.timestamp, 'HH:mm', { locale: ptBR })}
                 </span>
               )}
             </div>
@@ -258,79 +332,100 @@ export const ChatPanel: React.FC = () => {
 
       <form onSubmit={handleSendMessage} className="p-4 border-t border-border">
         <div className="flex items-center gap-2">
-          <Button type="button" variant="ghost" size="icon" title="Anexar arquivo" aria-label="Anexar arquivo" disabled={isLoading}><Paperclip className="h-5 w-5" /></Button>
+          <Button type="button" variant="ghost" size="icon" title="Anexar arquivo" aria-label="Anexar arquivo" disabled={isLoading}>
+            <Paperclip className="h-5 w-5" />
+          </Button>
+
           <Input
-            ref={inputRef} id="mcp-message-input" name="mcp-message-input" type="text"
-            placeholder={isListening ? "Ouvindo..." : "Iniciar o chat"}
-            value={currentInput} onChange={handleInputChange} className="flex-grow" disabled={isLoading} 
+            ref={inputRef}
+            id="mcp-message-input"
+            name="mcp-message-input"
+            type="text"
+            placeholder={isListening ? "Ouvindo..." : "Digite sua mensagem..."}
+            value={currentInput}
+            onChange={handleInputChange}
+            className="flex-grow"
+            disabled={isLoading} 
           />
-          <Button type="button" variant="ghost" size="icon" onClick={handleVoiceInput} 
-            title={isListening ? "Parar" : "Voz"} aria-label={isListening ? "Parar" : "Voz"} 
-            disabled={isLoading || !speechRecognitionAvailable}>
+          <Button 
+            type="button" 
+            variant="ghost" 
+            size="icon" 
+            onClick={handleVoiceInput} 
+            title={isListening ? "Parar de ouvir" : "Ativar entrada de voz"} 
+            aria-label={isListening ? "Parar de ouvir" : "Ativar entrada de voz"} 
+            disabled={isLoading || !speechRecognitionAvailable} 
+          >
             {isListening ? <StopCircle className="h-5 w-5 text-destructive animate-pulse" /> : <Mic className="h-5 w-5" />}
           </Button>
-          <Button type="submit" size="icon" disabled={isLoading || !currentInput.trim()} aria-label="Enviar mensagem"><Send className="h-5 w-5" /></Button>
+          <Button type="submit" size="icon" disabled={isLoading || !currentInput.trim()} aria-label="Enviar mensagem">
+            <Send className="h-5 w-5" />
+          </Button>
         </div>
       </form>
 
       <Dialog open={isHistoryModalOpen} onOpenChange={setIsHistoryModalOpen}>
-        <DialogContent className="sm:max-w-md md:max-w-lg">
+        <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>Conversas Antigas</DialogTitle>
-            <DialogDescription>Selecione uma conversa para carregar o histórico ou inicie uma nova.</DialogDescription>
+            <DialogDescription>
+              Selecione uma conversa para carregar o histórico.
+            </DialogDescription>
           </DialogHeader>
-          <ScrollArea className="max-h-[calc(70vh-200px)] py-4 pr-3">
-            <div className="grid gap-3">
+          <ScrollArea className="max-h-[400px] py-4">
+            <div className="grid gap-4">
                 {isSessionsLoading ? (
-                  <div className="text-center text-muted-foreground py-4">Carregando conversas... <Loader2 className="inline w-4 h-4 animate-spin"/></div>
+                <div className="text-center text-muted-foreground">Carregando conversas...</div>
                 ) : chatSessions.length === 0 ? (
-                  <div className="text-center text-muted-foreground py-4">Nenhuma conversa salva ainda.</div>
+                <div className="text-center text-muted-foreground">Nenhuma conversa salva ainda.</div>
                 ) : (
                 chatSessions.map((session) => (
-                    <div key={session.id} className="flex items-center justify-between p-3 border rounded-md hover:bg-muted/50 transition-colors">
-                      <div onClick={() => handleLoadSession(session)} className="flex-grow cursor-pointer pr-2 overflow-hidden">
-                          <h4 className="font-medium text-sm truncate" title={session.title}>{session.title}</h4>
-                          <p className="text-xs text-muted-foreground">
-                            {format(new Date(session.updatedAt), "dd/MM/yy 'às' HH:mm", { locale: ptBR })}
-                          </p>
-                      </div>
-                      <Button variant="ghost" size="icon" className="ml-auto flex-shrink-0 h-7 w-7" onClick={(e) => { e.stopPropagation(); handleDeleteSession(session.id); }} title="Excluir Conversa">
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
+                    <div key={session.id} className="flex items-center justify-between p-2 border rounded-md hover:bg-muted">
+                    <div onClick={() => handleLoadSession(session)} className="flex-grow cursor-pointer pr-2">
+                        <h4 className="font-medium text-sm truncate">{session.title}</h4>
+                        <p className="text-xs text-muted-foreground">
+                        Última atualização: {format(new Date(session.updatedAt), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
+                        </p>
+                    </div>
+                    <Button variant="ghost" size="icon" className="ml-auto flex-shrink-0" onClick={(e) => { e.stopPropagation(); handleDeleteSession(session.id); }} title="Excluir Conversa">
+                        <Trash className="h-4 w-4 text-destructive" />
+                    </Button>
                     </div>
                 ))
                 )}
             </div>
           </ScrollArea>
-          <DialogFooter className="pt-4">
-            <Button variant="outline" onClick={() => setIsHistoryModalOpen(false)}>Cancelar</Button>
+          <DialogFooter>
             <Button onClick={handleStartNewChat}>
-              <Plus className="mr-2 h-4 w-4" /> Nova Conversa
+              <Plus className="mr-2 h-4 w-4" /> Iniciar Nova Conversa
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={isEditTitleModalOpen} onOpenChange={setIsEditTitleModalOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>Renomear Conversa</DialogTitle>
-            <DialogDescription>Dê um novo nome para a conversa atual.</DialogDescription>
+            <DialogDescription>
+              Dê um novo nome para a conversa atual.
+            </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="newSessionTitleInput" className="text-left">Novo Título</Label>
-              <Input
-                id="newSessionTitleInput"
-                value={newTitle}
-                onChange={(e) => setNewTitle(e.target.value)}
-                placeholder="Digite o novo título aqui"
-              />
-            </div>
+            <Label htmlFor="newTitle"> 
+              Novo Título
+            </Label>
+            <Input
+              id="newTitle"
+              name="newTitle"
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
+              className="col-span-3"
+            />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsEditTitleModalOpen(false)}>Cancelar</Button>
-            <Button onClick={handleSaveTitle} disabled={!newTitle.trim()}>Salvar Título</Button>
+            <Button onClick={handleSaveTitle}>Salvar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
