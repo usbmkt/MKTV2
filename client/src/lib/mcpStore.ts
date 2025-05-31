@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import { useAuthStore } from './auth';
 import { useLocation } from 'wouter'; // Para navegação
-// import { Message as GeminiMessagePart } from '@google/generative-ai'; // Para tipagem do histórico do Gemini
 
 // Definir a interface da mensagem de chat que o frontend usa
 export interface Message {
@@ -122,7 +121,14 @@ export const useMCPStore = create<MCPState>((set, get) => ({
         },
         body: JSON.stringify({ title: title || 'Nova Conversa' }),
       });
-      if (!response.ok) throw new Error('Falha ao iniciar novo chat.');
+      if (!response.ok) {
+        let errorMessage = 'Falha ao iniciar novo chat.';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorData.message || errorMessage;
+        } catch (e) { /* Nenhuma ação se não conseguir parsear o JSON do erro */ }
+        throw new Error(errorMessage);
+      }
       const newSession: ChatSession = await response.json();
       set({
         messages: [
@@ -131,12 +137,12 @@ export const useMCPStore = create<MCPState>((set, get) => ({
             text: 'Olá! Sou o Agente MCP. Uma nova conversa foi iniciada. Como posso ajudar?',
             sender: 'agent',
             timestamp: new Date(),
+            sessionId: newSession.id, // CORRIGIDO: Adicionado sessionId aqui
           },
         ],
         currentSessionId: newSession.id,
         chatSessions: [newSession, ...get().chatSessions], // Adiciona a nova sessão ao topo
       });
-      // A primeira mensagem da IA será adicionada ao banco quando o usuário responder
     } catch (error) {
       console.error('Erro ao iniciar novo chat:', error);
       get().addMessage({
@@ -162,19 +168,16 @@ export const useMCPStore = create<MCPState>((set, get) => ({
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!response.ok) throw new Error('Falha ao carregar histórico da sessão.');
-      const messages: Message[] = await response.json();
+      const messagesFromDb: Message[] = await response.json(); // Assumindo que a API já retorna no formato Message[] ou similar
       
-      // Formata mensagens do banco para o formato do frontend
-      const formattedMessages: Message[] = messages.map(msg => ({
-        id: String(msg.id), // Garante que o ID é string
-        text: msg.text,
-        sender: msg.sender as ('user' | 'agent' | 'system'), // Cast para tipo correto
-        timestamp: new Date(msg.timestamp), // Converte string de volta para Date
-        sessionId: msg.sessionId,
+      const formattedMessages: Message[] = messagesFromDb.map(msg => ({
+        ...msg,
+        id: String(msg.id),
+        timestamp: new Date(msg.timestamp), 
       }));
 
       set({
-        messages: formattedMessages.length > 0 ? formattedMessages : [{ id: 'empty-session', text: `Sessão "${sessionTitle || 'Sem Título'}" carregada. Comece a conversar!`, sender: 'system', timestamp: new Date() }],
+        messages: formattedMessages.length > 0 ? formattedMessages : [{ id: 'empty-session', text: `Sessão "${sessionTitle || 'Sem Título'}" carregada. Comece a conversar!`, sender: 'system', timestamp: new Date(), sessionId }],
         currentSessionId: sessionId,
         isLoading: false,
       });
@@ -191,7 +194,7 @@ export const useMCPStore = create<MCPState>((set, get) => ({
   },
 
   updateCurrentSessionTitle: async (newTitle: string) => {
-    const { currentSessionId, chatSessions } = get();
+    const { currentSessionId } = get(); // Removido chatSessions daqui pois não é usado
     const token = useAuthStore.getState().token;
     if (!currentSessionId || !newTitle.trim() || !token) return;
     try {
@@ -238,7 +241,7 @@ export const useMCPStore = create<MCPState>((set, get) => ({
       if (!response.ok) throw new Error('Falha ao deletar sessão.');
       set((state) => ({
         chatSessions: state.chatSessions.filter((session) => session.id !== sessionId),
-        currentSessionId: state.currentSessionId === sessionId ? null : state.currentSessionId, // Limpa se for a sessão atual
+        currentSessionId: state.currentSessionId === sessionId ? null : state.currentSessionId,
       }));
       get().addMessage({
         id: `system-delete-session-${Date.now()}`,
@@ -260,7 +263,7 @@ export const useMCPStore = create<MCPState>((set, get) => ({
 
 // Função para enviar mensagem ao backend e receber resposta
 export const sendMessageToMCP = async (text: string): Promise<void> => {
-  const { addMessage, setLoading, navigate, currentSessionId, startNewChat } = useMCPStore.getState();
+  const { addMessage, setLoading, navigate, currentSessionId, startNewChat, clearCurrentInput } = useMCPStore.getState(); // Adicionado clearCurrentInput
   const token = useAuthStore.getState().token;
 
   if (!text.trim()) return;
@@ -274,20 +277,18 @@ export const sendMessageToMCP = async (text: string): Promise<void> => {
     return;
   }
 
-  // Se não houver sessão ativa, cria uma nova antes de enviar a mensagem
   let sessionToUseId = currentSessionId;
   if (sessionToUseId === null) {
-    // Isso é um pouco complexo, pois startNewChat já adiciona uma mensagem inicial
-    // e setta o sessionId. Podemos ter um "session zero" ou criar na primeira msg
-    await startNewChat(); // Isso vai setar currentSessionId
-    sessionToUseId = useMCPStore.getState().currentSessionId; // Pega o ID da nova sessão
-    if (sessionToUseId === null) { // Fallback se a criação da sessão falhou
+    await startNewChat(); 
+    sessionToUseId = useMCPStore.getState().currentSessionId; 
+    if (sessionToUseId === null) { 
       addMessage({
         id: `error-session-creation-${Date.now()}`,
         text: 'Não foi possível iniciar uma nova sessão de chat. Tente reiniciar.',
         sender: 'system',
         timestamp: new Date(),
       });
+      setLoading(false); // Certifica-se de parar o loading se a sessão não puder ser criada
       return;
     }
   }
@@ -297,9 +298,10 @@ export const sendMessageToMCP = async (text: string): Promise<void> => {
     text,
     sender: 'user',
     timestamp: new Date(),
-    sessionId: sessionToUseId, // Associar mensagem à sessão
+    sessionId: sessionToUseId, 
   };
-  addMessage(userMessage); // Adiciona a mensagem do usuário ao chat visualmente
+  addMessage(userMessage); 
+  clearCurrentInput(); // Limpa o input do usuário visualmente após adicionar a mensagem
   setLoading(true);
 
   try {
@@ -309,7 +311,7 @@ export const sendMessageToMCP = async (text: string): Promise<void> => {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
       },
-      body: JSON.stringify({ message: text, sessionId: sessionToUseId }), // Enviar sessionId
+      body: JSON.stringify({ message: text, sessionId: sessionToUseId }), 
     });
 
     setLoading(false);
@@ -319,7 +321,7 @@ export const sendMessageToMCP = async (text: string): Promise<void> => {
       try {
         const errorData = await response.json();
         errorMessage = errorData.error || errorData.message || errorMessage;
-      } catch (e) { /* silent */ }
+      } catch (e) { /* Nenhuma ação se não conseguir parsear o JSON do erro */ }
       console.error("MCP API Error:", response.status, errorMessage);
       addMessage({
         id: `error-api-${Date.now()}`,
@@ -337,15 +339,17 @@ export const sendMessageToMCP = async (text: string): Promise<void> => {
       text: data.reply,
       sender: 'agent',
       timestamp: new Date(),
-      sessionId: data.sessionId, // Certifica que a mensagem do agente também tem o sessionId
+      sessionId: data.sessionId, 
     };
     addMessage(agentMessage);
 
     if (data.action === 'navigate' && data.payload && navigate) {
       console.log(`[MCP_STORE] Navegando para: ${data.payload}`);
       setTimeout(() => {
-        navigate(data.payload || '/', { replace: false });
-        useMCPStore.getState().togglePanel();
+        if (useMCPStore.getState().navigate) { // Verifica se navigate ainda está definido
+            useMCPStore.getState().navigate!(data.payload || '/', { replace: false });
+            useMCPStore.getState().togglePanel();
+        }
       }, 1000); 
     }
 
