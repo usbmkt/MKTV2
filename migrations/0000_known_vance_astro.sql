@@ -23,7 +23,7 @@ END $$;
 --> statement-breakpoint
 
 -- O restante do arquivo permanece o mesmo
-CREATE TABLE "alerts" (
+CREATE TABLE IF NOT EXISTS "alerts" ( -- Adicionado IF NOT EXISTS aqui
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" integer NOT NULL,
 	"campaign_id" integer,
@@ -33,6 +33,8 @@ CREATE TABLE "alerts" (
 	"is_read" boolean DEFAULT false NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
+--> statement-breakpoint
+-- ... (outros comandos CREATE TABLE e ALTER TABLE) ...
 --> statement-breakpoint
 CREATE TABLE "budgets" (
 	"id" serial PRIMARY KEY NOT NULL,
