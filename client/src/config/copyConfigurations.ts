@@ -1,8 +1,13 @@
 // client/src/config/copyConfigurations.ts
-// Importe BaseGeneratorFormState de onde ele será definido, ex: diretamente em CopyPage.tsx ou um arquivo de tipos compartilhado
-// Por agora, vamos assumir que CopyPage.tsx exportará ou o definirá localmente e passará quando necessário.
-// Se BaseGeneratorFormState for usado aqui, precisaria ser importado ou definido aqui.
-// Para este exemplo, vou assumir que CopyPage.tsx lida com BaseGeneratorFormState e passa para promptEnhancer.
+
+// Definição do tipo BaseGeneratorFormState para referência
+// Em um projeto maior, isso poderia vir de um arquivo de tipos compartilhado.
+export interface BaseGeneratorFormState {
+  product: string;
+  audience: string;
+  objective: 'sales' | 'leads' | 'engagement' | 'awareness';
+  tone: 'professional' | 'casual' | 'urgent' | 'inspirational' | 'educational' | 'empathetic' | 'divertido' | 'sofisticado';
+}
 
 export type LaunchPhase = 'pre_launch' | 'launch' | 'post_launch';
 
@@ -15,8 +20,8 @@ export interface FieldDefinition {
   required?: boolean;
   options?: Array<{ value: string; label: string }>;
   defaultValue?: string | number | boolean;
-  dependsOn?: string;
-  showIf?: (formData: Record<string, any>, baseData?: any /* BaseGeneratorFormState */) => boolean;
+  dependsOn?: string; // Para lógica condicional de campos
+  showIf?: (formData: Record<string, any>, baseData?: BaseGeneratorFormState) => boolean; // Para mostrar/ocultar campos
 }
 
 export interface CopyPurposeConfig {
@@ -25,10 +30,11 @@ export interface CopyPurposeConfig {
   phase: LaunchPhase;
   fields: FieldDefinition[];
   category: string;
-  // promptEnhancer?: (basePrompt: string, details: Record<string, any>, baseForm: BaseGeneratorFormState) => string; // Ajustar tipo de baseForm se necessário
+  description?: string; // Descrição da finalidade da copy
+  promptEnhancer?: (basePrompt: string, details: Record<string, any>, baseForm: BaseGeneratorFormState) => string;
 }
 
-// Definição da configuração (conforme seu prompt detalhado)
+// Campos placeholder para serem usados em finalidades não detalhadas ainda
 const placeholderFields: FieldDefinition[] = [
   { name: 'mainPoint', label: 'Ponto Principal*', type: 'textarea', placeholder: 'Qual a mensagem chave para esta copy?', tooltip: 'Descreva o cerne da copy.', required: true },
   { name: 'secondaryDetail', label: 'Detalhe Secundário', type: 'text', placeholder: 'Alguma informação complementar importante?', tooltip: 'Adicione um detalhe que enriqueça a copy.' },
@@ -42,6 +48,7 @@ export const allCopyPurposesConfig: CopyPurposeConfig[] = [
     label: 'Anúncio: Convite para Evento Online Gratuito',
     phase: 'pre_launch',
     category: 'Anúncios (Pré-Lançamento)',
+    description: 'Crie anúncios chamativos para convidar pessoas para seu webinar, masterclass ou live.',
     fields: [
       { name: 'eventName', label: 'Nome do Evento *', type: 'text', placeholder: 'Ex: Masterclass "Decole Seu Negócio Online"', tooltip: 'O título principal do seu evento.', required: true },
       { name: 'eventSubtitle', label: 'Subtítulo do Evento (Opcional)', type: 'text', placeholder: 'Ex: O guia definitivo para...', tooltip: 'Uma frase curta para complementar o nome.'},
@@ -60,6 +67,7 @@ export const allCopyPurposesConfig: CopyPurposeConfig[] = [
     label: 'Anúncio: Download de Material Rico',
     phase: 'pre_launch',
     category: 'Anúncios (Pré-Lançamento)',
+    description: 'Desenvolva anúncios que incentivam o download de e-books, checklists ou outros materiais gratuitos.',
     fields: [
       { name: 'leadMagnetTitle', label: 'Título do Material Rico *', type: 'text', placeholder: 'Ex: Guia Completo: 5 Passos Para Organizar Suas Finanças', tooltip: 'O nome chamativo do seu e-book, checklist, template, etc.', required: true },
       { name: 'leadMagnetFormat', label: 'Formato do Material Rico', type: 'text', placeholder: 'Ex: E-book em PDF com 30 páginas', tooltip: 'Qual o formato prático do material?', defaultValue: 'E-book PDF' },
@@ -74,6 +82,7 @@ export const allCopyPurposesConfig: CopyPurposeConfig[] = [
     label: 'E-mail: Boas-vindas e Confirmação',
     phase: 'pre_launch',
     category: 'E-mails (Pré-Lançamento)',
+    description: 'Crie e-mails de boas-vindas para novos inscritos, confirmando a inscrição e entregando o prometido.',
     fields: [
       { name: 'signupReason', label: 'Motivo da Inscrição do Lead *', type: 'text', placeholder: 'Ex: Inscrição na Masterclass XPTO, Download do Guia Y', tooltip: 'O que o lead fez para entrar na sua lista e receber este e-mail?', required: true },
       { name: 'deliveredItemName', label: 'Nome do Item Entregue (se houver)', type: 'text', placeholder: 'Ex: Acesso à Masterclass, Seu Guia de Finanças', tooltip: 'Nome do evento/material que está sendo confirmado/entregue.'},
@@ -88,6 +97,7 @@ export const allCopyPurposesConfig: CopyPurposeConfig[] = [
     label: 'Post Social: Conteúdo de Valor',
     phase: 'pre_launch',
     category: 'Posts Redes Sociais (Pré-Lançamento)',
+    description: 'Elabore posts para redes sociais que eduquem e engajem sua audiência antes do lançamento.',
     fields: [
       { name: 'postTopic', label: 'Tópico Central do Post *', type: 'text', placeholder: 'Ex: 3 Mitos sobre Investimentos', tooltip: 'Sobre qual assunto específico será o post?', required: true },
       { name: 'postFormatSuggestion', label: 'Formato Sugerido', type: 'select', options: [{value: 'carrossel', label: 'Carrossel'}, {value: 'reels_script', label: 'Roteiro Reels/TikTok'}, {value: 'imagem_unica_texto', label: 'Imagem Única com Texto Longo'}, {value: 'enquete_story', label: 'Enquete para Story'}], tooltip: 'Qual formato visual/de conteúdo é mais adequado?', defaultValue: 'carrossel'},
@@ -103,6 +113,7 @@ export const allCopyPurposesConfig: CopyPurposeConfig[] = [
     label: 'Página de Vendas: Headline Principal',
     phase: 'launch',
     category: 'Página de Vendas',
+    description: 'Crie headlines impactantes e persuasivas para o topo da sua página de vendas.',
     fields: [
       { name: 'productName', label: 'Nome do Produto/Oferta Principal *', type: 'text', placeholder: 'Ex: Curso Online "Método Vendas Imparáveis"', required: true, tooltip: 'O nome exato do seu produto/serviço.'  },
       { name: 'mainTransformation', label: 'Principal Transformação/Resultado da Oferta *', type: 'textarea', placeholder: 'Ex: Conquistar seus primeiros 10 clientes em 30 dias.', required: true, tooltip: 'O resultado final mais desejado que seu cliente alcançará.' },
@@ -116,6 +127,7 @@ export const allCopyPurposesConfig: CopyPurposeConfig[] = [
     label: 'Anúncio: Direto para Página de Vendas',
     phase: 'launch',
     category: 'Anúncios (Lançamento)',
+    description: 'Desenvolva anúncios focados em levar tráfego qualificado diretamente para sua página de vendas.',
     fields: [
       { name: 'productName', label: 'Nome do Produto/Oferta Principal *', type: 'text', required: true, tooltip: 'O nome exato do seu produto/serviço.'  },
       { name: 'offerHeadline', label: 'Headline Principal do Anúncio *', type: 'text', placeholder: 'Ex: Cansado de...? Descubra como!', required: true, tooltip: 'A frase de impacto para o anúncio.'},
@@ -130,6 +142,7 @@ export const allCopyPurposesConfig: CopyPurposeConfig[] = [
     label: 'E-mail: Abertura de Carrinho',
     phase: 'launch',
     category: 'E-mails (Lançamento)',
+    description: 'Escreva o e-mail crucial que anuncia a abertura das vendas do seu produto ou serviço.',
     fields: [
       { name: 'productName', label: 'Nome do Produto/Oferta Principal *', type: 'text', required: true, tooltip: 'O nome exato do seu produto/serviço.'  },
       { name: 'greetingLine', label: 'Saudação Personalizada (Opcional)', type: 'text', placeholder: 'Ex: Chegou o momento, [Nome]!', tooltip: 'Uma abertura de e-mail mais pessoal.'},
@@ -146,6 +159,7 @@ export const allCopyPurposesConfig: CopyPurposeConfig[] = [
     label: 'E-mail: Agradecimento para Não Compradores',
     phase: 'post_launch',
     category: 'E-mails (Pós-Lançamento)',
+    description: 'Prepare um e-mail de agradecimento para quem participou do lançamento mas não comprou, mantendo o relacionamento.',
     fields: [
       { name: 'launchName', label: 'Nome do Lançamento Encerrado *', type: 'text', placeholder: 'Ex: Lançamento Curso Vendas Imparáveis', required: true, tooltip: 'Qual produto/oferta teve o carrinho fechado?' },
       { name: 'mainThankYouMessage', label: 'Mensagem Principal de Agradecimento *', type: 'textarea', placeholder: 'Ex: Gostaria de agradecer imensamente seu interesse e participação.', required: true, tooltip: 'Seja genuíno no agradecimento.' },
@@ -154,17 +168,35 @@ export const allCopyPurposesConfig: CopyPurposeConfig[] = [
       { name: 'feedbackRequestLink', label: 'Link para Pesquisa de Feedback (Opcional)', type: 'text', placeholder: 'Ex: https://forms.gle/suapesquisa', tooltip: 'Se for pedir feedback, coloque o link aqui.'},
     ],
   },
-  { key: 'prelaunch_ad_waitlist_vip', label: 'Anúncio: Lista de Espera/VIP', phase: 'pre_launch', category: 'Anúncios (Pré-Lançamento)', fields: placeholderFields },
-  { key: 'prelaunch_social_post_anticipation', label: 'Post Social: Curiosidade/Antecipação', phase: 'pre_launch', category: 'Posts Redes Sociais (Pré-Lançamento)', fields: placeholderFields },
-  { key: 'prelaunch_landing_page_title', label: 'Página de Captura: Título Principal', phase: 'pre_launch', category: 'Página de Captura', fields: placeholderFields },
-  { key: 'prelaunch_email_value_nurturing', label: 'E-mail: Conteúdo de Valor (Aquecimento)', phase: 'pre_launch', category: 'E-mails (Pré-Lançamento)', fields: placeholderFields },
-  { key: 'launch_email_testimonial_proof', label: 'E-mail: Prova Social/Depoimentos', phase: 'launch', category: 'E-mails (Lançamento)', fields: placeholderFields },
-  { key: 'launch_email_objection_handling', label: 'E-mail: Quebra de Objeções', phase: 'launch', category: 'E-mails (Lançamento)', fields: placeholderFields },
-  { key: 'launch_email_last_chance_24h', label: 'E-mail: Última Chance (24h)', phase: 'launch', category: 'E-mails (Lançamento)', fields: placeholderFields },
-  { key: 'launch_email_cart_closing_soon', label: 'E-mail: Carrinho Fechando em Breve', phase: 'launch', category: 'E-mails (Lançamento)', fields: placeholderFields },
-  { key: 'launch_social_post_product_demo', label: 'Post Social: Demonstração do Produto', phase: 'launch', category: 'Posts Redes Sociais (Lançamento)', fields: placeholderFields },
-  { key: 'launch_social_post_live_qa', label: 'Post Social: Sessão de Q&A Ao Vivo', phase: 'launch', category: 'Posts Redes Sociais (Lançamento)', fields: placeholderFields },
-  { key: 'postlaunch_email_survey_buyers', label: 'E-mail: Pesquisa de Satisfação (Compradores)', phase: 'post_launch', category: 'E-mails (Pós-Lançamento)', fields: placeholderFields },
-  { key: 'postlaunch_email_upsell_cross_sell', label: 'E-mail: Upsell/Cross-sell para Compradores', phase: 'post_launch', category: 'E-mails (Pós-Lançamento)', fields: placeholderFields },
-  { key: 'postlaunch_social_post_student_results', label: 'Post Social: Resultados de Alunos/Clientes', phase: 'post_launch', category: 'Posts Redes Sociais (Pós-Lançamento)', fields: placeholderFields }
+  // Placeholders para outras finalidades - COMPLETE OS CAMPOS 'fields'
+  { key: 'prelaunch_ad_waitlist_vip', label: 'Anúncio: Lista de Espera/VIP', phase: 'pre_launch', category: 'Anúncios (Pré-Lançamento)', description: 'Crie anúncios para construir uma lista de espera ou grupo VIP antes do lançamento.', fields: placeholderFields },
+  { key: 'prelaunch_social_post_anticipation', label: 'Post Social: Curiosidade/Antecipação', phase: 'pre_launch', category: 'Posts Redes Sociais (Pré-Lançamento)', description: 'Gere expectativa com posts que aguçam a curiosidade sobre o que está por vir.', fields: placeholderFields },
+  { key: 'prelaunch_landing_page_title', label: 'Página de Captura: Título Principal', phase: 'pre_launch', category: 'Página de Captura', description: 'Desenvolva títulos magnéticos para suas páginas de captura de leads.', fields: placeholderFields },
+  { key: 'prelaunch_email_value_nurturing', label: 'E-mail: Conteúdo de Valor (Aquecimento)', phase: 'pre_launch', category: 'E-mails (Pré-Lançamento)', description: 'Escreva e-mails que entregam valor e aquecem sua lista para o lançamento.', fields: placeholderFields },
+  { key: 'launch_email_testimonial_proof', label: 'E-mail: Prova Social/Depoimentos', phase: 'launch', category: 'E-mails (Lançamento)', description: 'Use o poder da prova social com e-mails que destacam depoimentos de clientes.', fields: placeholderFields },
+  { key: 'launch_email_objection_handling', label: 'E-mail: Quebra de Objeções', phase: 'launch', category: 'E-mails (Lançamento)', description: 'Antecipe e responda às principais objeções dos seus leads por e-mail.', fields: placeholderFields },
+  { key: 'launch_email_last_chance_24h', label: 'E-mail: Última Chance (24h)', phase: 'launch', category: 'E-mails (Lançamento)', description: 'Crie e-mails de urgência para as últimas 24 horas da sua oferta.', fields: placeholderFields },
+  { key: 'launch_email_cart_closing_soon', label: 'E-mail: Carrinho Fechando em Breve', phase: 'launch', category: 'E-mails (Lançamento)', description: 'Alerte sua lista que o carrinho de compras está prestes a fechar.', fields: placeholderFields },
+  { key: 'launch_social_post_product_demo', label: 'Post Social: Demonstração do Produto', phase: 'launch', category: 'Posts Redes Sociais (Lançamento)', description: 'Mostre seu produto em ação com posts de demonstração para redes sociais.', fields: placeholderFields },
+  { key: 'launch_social_post_live_qa', label: 'Post Social: Sessão de Q&A Ao Vivo', phase: 'launch', category: 'Posts Redes Sociais (Lançamento)', description: 'Promova e convide para sessões de Perguntas e Respostas ao vivo.', fields: placeholderFields },
+  { key: 'postlaunch_email_survey_buyers', label: 'E-mail: Pesquisa de Satisfação (Compradores)', phase: 'post_launch', category: 'E-mails (Pós-Lançamento)', description: 'Colete feedback valioso dos seus novos clientes através de e-mails de pesquisa.', fields: placeholderFields },
+  { key: 'postlaunch_email_upsell_cross_sell', label: 'E-mail: Upsell/Cross-sell para Compradores', phase: 'post_launch', category: 'E-mails (Pós-Lançamento)', description: 'Apresente ofertas complementares para quem já comprou de você.', fields: placeholderFields },
+  { key: 'postlaunch_social_post_student_results', label: 'Post Social: Resultados de Alunos/Clientes', phase: 'post_launch', category: 'Posts Redes Sociais (Pós-Lançamento)', description: 'Compartilhe o sucesso dos seus clientes com posts de resultados e depoimentos.', fields: placeholderFields }
+];
+
+// Schemas da IA (se não forem importados de outro lugar)
+export const aiResponseSchema = { type: "OBJECT", properties: { mainCopy: { type: "STRING" }, alternativeVariation1: { type: "STRING" }, alternativeVariation2: { type: "STRING" }, platformSuggestion: { type: "STRING" }, notes: { type: "STRING" } }, required: ["mainCopy", "platformSuggestion"] };
+export const contentIdeasResponseSchema = { type: "OBJECT", properties: { contentIdeas: { type: "ARRAY", items: { "type": "STRING" } } }, required: ["contentIdeas"] };
+export const optimizeCopyResponseSchema = { type: "OBJECT", properties: { optimizedCopy: { type: "STRING" }, optimizationNotes: { type: "STRING" } }, required: ["optimizedCopy"] };
+
+// Opções para Selects (se não forem importados de outro lugar)
+export const objectiveOptions: Array<{ value: BaseGeneratorFormState['objective']; label: string }> = [
+    { value: 'sales', label: 'Gerar Vendas' }, { value: 'leads', label: 'Gerar Leads' },
+    { value: 'engagement', label: 'Aumentar Engajamento' }, { value: 'awareness', label: 'Criar Reconhecimento' }
+];
+export const toneOptions: Array<{ value: BaseGeneratorFormState['tone']; label: string }> = [
+    { value: 'professional', label: 'Profissional' }, { value: 'casual', label: 'Casual' },
+    { value: 'urgent', label: 'Urgente' }, { value: 'inspirational', label: 'Inspiracional' },
+    { value: 'educational', label: 'Educativo' }, { value: 'empathetic', label: 'Empático' },
+    { value: 'divertido', label: 'Divertido' }, { value: 'sofisticado', label: 'Sofisticado' }
 ];
