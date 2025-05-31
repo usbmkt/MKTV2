@@ -4,14 +4,17 @@ import { useMCPStore, sendMessageToMCP, ChatSession } from '@/lib/mcpStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Send, X, RotateCcw, MoreVertical, Plus, History, Trash, Edit, Mic, StopCircle, Paperclip } from 'lucide-react';
+import { 
+  Send, X, RotateCcw, MoreVertical, Plus, History, Trash, Edit, Mic, 
+  StopCircle, Paperclip, Loader2 // ADICIONADO Loader2 AQUI
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import UbiePng from '@/img/ubie.png'; // Importando ubie.png
+import UbiePng from '@/img/ubie.png';
 
 declare global {
   interface Window {
@@ -240,14 +243,14 @@ export const ChatPanel: React.FC = () => {
       aria-modal="true"
       aria-labelledby="mcp-chat-panel-title"
     >
-      <header className="flex items-center justify-between p-3 border-b border-border"> {/* Padding ajustado */}
+      <header className="flex items-center justify-between p-3 border-b border-border">
         <div className="flex items-center gap-2">
-          <img src={UbiePng} alt="Ubie" className="w-8 h-8 rounded-full object-contain" /> {/* Logo Ubie adicionado */}
-          <h3 id="mcp-chat-panel-title" className="font-semibold text-md text-foreground truncate max-w-[calc(100%-110px)]"> {/* Text-md e max-width ajustado */}
+          <img src={UbiePng} alt="Ubie" className="w-8 h-8 rounded-full object-contain" />
+          <h3 id="mcp-chat-panel-title" className="font-semibold text-md text-foreground truncate max-w-[calc(100%-110px)]">
               Agente Ubie: {currentChatTitle}
           </h3>
         </div>
-        <div className="flex items-center gap-1"> {/* Gap reduzido */}
+        <div className="flex items-center gap-1">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="w-8 h-8" title="Opções da Conversa" aria-label="Opções da Conversa">
@@ -321,7 +324,7 @@ export const ChatPanel: React.FC = () => {
           {isLoading && (
             <div className="flex items-center justify-start p-3">
               <div className="bg-muted text-muted-foreground rounded-lg p-3 inline-flex items-center space-x-2 rounded-bl-none">
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin" /> {/* USANDO Loader2 */}
                 <span>Digitando...</span>
               </div>
             </div>
@@ -365,14 +368,14 @@ export const ChatPanel: React.FC = () => {
       </form>
 
       <Dialog open={isHistoryModalOpen} onOpenChange={setIsHistoryModalOpen}>
-        <DialogContent className="sm:max-w-md"> {/* Ajustado para sm:max-w-md */}
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Conversas Antigas</DialogTitle>
             <DialogDescription>
               Selecione uma conversa para carregar o histórico.
             </DialogDescription>
           </DialogHeader>
-          <ScrollArea className="max-h-[calc(70vh-150px)] py-4"> {/* Altura ajustada */}
+          <ScrollArea className="max-h-[calc(70vh-150px)] py-4">
             <div className="grid gap-3">
                 {isSessionsLoading ? (
                 <div className="text-center text-muted-foreground p-4">Carregando conversas... <Loader2 className="inline-block animate-spin h-4 w-4 ml-2"/></div>
