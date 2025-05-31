@@ -5,8 +5,22 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1748719462940,
-      "tag": "0000_living_jack_power",
+      "when": 1748526310169,
+      "tag": "0000_dusty_dexter_bennett", // CORRETO
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1748715954137,
+      "tag": "0001_faithful_maestro",   // CORRETO
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1748717782451,
+      "tag": "0002_far_juggernaut",     // CORRETO
       "breakpoints": true
     }
   ]
