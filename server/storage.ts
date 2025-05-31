@@ -17,7 +17,8 @@ import {
 
 import { eq, count, sum, sql, desc, and, or, gte, lte, isNull, asc } from 'drizzle-orm'; 
 import * as bcrypt from 'bcrypt'; 
-import jwt from 'jsonwebtoken';
+// jwt não é usado diretamente neste arquivo, mas JWT_SECRET é. Se jwt for necessário para outras funções futuras, pode ser mantido.
+// import jwt from 'jsonwebtoken'; 
 import { JWT_SECRET } from './config'; 
 
 const chartColors = {
@@ -30,12 +31,75 @@ const chartColors = {
     'rgba(255, 159, 64, 1)',  
     'rgba(200, 200, 200, 1)'  
   ],
-  background: [ /* ... (mantido) ... */ ]
+  background: [
+    'rgba(75, 192, 192, 0.2)',
+    'rgba(255, 99, 132, 0.2)',
+    'rgba(54, 162, 235, 0.2)',
+    'rgba(255, 206, 86, 0.2)',
+    'rgba(153, 102, 255, 0.2)',
+    'rgba(255, 159, 64, 0.2)',
+    'rgba(200, 200, 200, 0.2)'
+  ]
 };
 
-function generateSimulatedLineChartData(label: string, startValue: number, countNum: number, maxFluctuation: number, color: string) { /* ... (mantido) ... */ return {} as any;}
-function generateSimulatedBarChartData(label: string, categories: string[], baseValue: number, maxFluctuation: number, colors: string[]) { /* ... (mantido) ... */ return {} as any;}
-function generateSimulatedDoughnutChartData(labels: string[], baseValue: number, maxFluctuation: number, colors: string[]) { /* ... (mantido) ... */ return {} as any;}
+// CORRIGIDO: Garante que labels e datasets sejam sempre arrays
+function generateSimulatedLineChartData(label: string, startValue: number, countNum: number, maxFluctuation: number, color: string): { labels: string[], datasets: { label: string, data: number[], borderColor: string, backgroundColor: string, fill: boolean, tension: number }[] } {
+  const dataPoints: number[] = [];
+  const labels: string[] = [];
+  let currentValue = startValue;
+
+  for (let i = 0; i < countNum; i++) {
+    labels.push(`Dia ${i + 1}`);  
+    dataPoints.push(Math.round(currentValue));
+    currentValue += (Math.random() * maxFluctuation * 2) - maxFluctuation;
+    if (currentValue < 0) currentValue = 0;  
+  }
+
+  return {
+    labels: labels,
+    datasets: [
+      {
+        label: label,
+        data: dataPoints,
+        borderColor: color,
+        backgroundColor: color.replace('1)', '0.2)'),  
+        fill: true,
+        tension: 0.4,
+      },
+    ],
+  };
+}
+
+// CORRIGIDO: Garante que labels e datasets sejam sempre arrays
+function generateSimulatedBarChartData(label: string, categories: string[], baseValue: number, maxFluctuation: number, colors: string[]): { labels: string[], datasets: { label: string, data: number[], backgroundColor: string[] }[] } {
+  const dataPoints: number[] = categories.map(() => Math.round(baseValue + (Math.random() * maxFluctuation * 2) - maxFluctuation));
+  return {
+    labels: categories,
+    datasets: [
+      {
+        label: label,
+        data: dataPoints,
+        backgroundColor: colors,
+      },
+    ],
+  };
+}
+
+// CORRIGIDO: Garante que labels e datasets sejam sempre arrays
+function generateSimulatedDoughnutChartData(chartLabels: string[], baseValue: number, maxFluctuation: number, colors: string[]): { labels: string[], datasets: { data: number[], backgroundColor: string[], borderWidth: number }[] } {
+  const dataPoints: number[] = chartLabels.map(() => Math.round(baseValue + (Math.random() * maxFluctuation * 2) - maxFluctuation));
+  return {
+    labels: chartLabels,
+    datasets: [
+      {
+        data: dataPoints,
+        backgroundColor: colors.map(color => color.replace('1)', '0.8)')),  
+        borderWidth: 0,
+      },
+    ],
+  };
+}
+
 
 export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
@@ -48,7 +112,7 @@ export interface IStorage {
   createCampaign(campaign: InsertCampaign): Promise<Campaign>;
   updateCampaign(id: number, campaign: Partial<Omit<InsertCampaign, 'userId'>>, userId: number): Promise<Campaign | undefined>;
   deleteCampaign(id: number, userId: number): Promise<boolean>;
-  getCreatives(userId: number, campaignId?: number | null): Promise<Creative[]>; // Allow null for campaignId
+  getCreatives(userId: number, campaignId?: number | null): Promise<Creative[]>;
   getCreative(id: number, userId: number): Promise<Creative | undefined>;
   createCreative(creative: InsertCreative): Promise<Creative>;
   updateCreative(id: number, creative: Partial<Omit<InsertCreative, 'userId'>>, userId: number): Promise<Creative | undefined>;
@@ -59,14 +123,14 @@ export interface IStorage {
   createMessage(messageData: InsertWhatsappMessage): Promise<WhatsappMessage>;
   markMessageAsRead(id: number, userId: number): Promise<boolean>;
   getContacts(userId: number): Promise<{ contactNumber: string; contactName: string | null; lastMessage: string; timestamp: Date, unreadCount: number }[]>;
-  getCopies(userId: number, campaignId?: number | null): Promise<Copy[]>; // Allow null for campaignId
+  getCopies(userId: number, campaignId?: number | null): Promise<Copy[]>;
   createCopy(copy: InsertCopy): Promise<Copy>;
   deleteCopy(id: number, userId: number): Promise<boolean>; 
   updateCopy(id: number, copyData: Partial<Omit<InsertCopy, 'userId' | 'campaignId'>>, userId: number): Promise<Copy | undefined>;
   getAlerts(userId: number, onlyUnread?: boolean): Promise<Alert[]>;
   createAlert(alertData: InsertAlert): Promise<Alert>;
   markAlertAsRead(id: number, userId: number): Promise<boolean>;
-  getBudgets(userId: number, campaignId?: number | null): Promise<Budget[]>; // Allow null for campaignId
+  getBudgets(userId: number, campaignId?: number | null): Promise<Budget[]>;
   createBudget(budget: InsertBudget): Promise<Budget>;
   updateBudget(id: number, budgetData: Partial<Omit<InsertBudget, 'userId' | 'campaignId'>>, userId: number): Promise<Budget | undefined>;
   getLandingPages(userId: number): Promise<LandingPage[]>;
@@ -84,13 +148,12 @@ export interface IStorage {
   addChatMessage(messageData: InsertChatMessage): Promise<ChatMessage>;
   getChatMessages(sessionId: number, userId: number): Promise<ChatMessage[]>;
   getDashboardData(userId: number, timeRange: string): Promise<any>; 
-  // Funis
-  getFunnels(userId: number, campaignId?: number | null): Promise<Funnel[]>; // Allow null for campaignId
+  getFunnels(userId: number, campaignId?: number | null): Promise<Funnel[]>;
   getFunnel(id: number, userId: number): Promise<Funnel | undefined>;
   createFunnel(funnelData: InsertFunnel): Promise<Funnel>;
-  updateFunnel(id: number, funnelData: Partial<Omit<InsertFunnel, 'userId' | 'campaignId'>>, userId: number): Promise<Funnel | undefined>; // campaignId can be updated
+  updateFunnel(id: number, funnelData: Partial<Omit<InsertFunnel, 'userId' | 'campaignId'>>, userId: number): Promise<Funnel | undefined>;
   deleteFunnel(id: number, userId: number): Promise<boolean>;
-  getFunnelStages(funnelId: number, userId: number): Promise<FunnelStage[]>;
+  getFunnelStages(funnelId: number, userId: number): Promise<FunnelStage[]>; 
   createFunnelStage(stageData: InsertFunnelStage): Promise<FunnelStage>;
   updateFunnelStage(id: number, stageData: Partial<Omit<InsertFunnelStage, 'funnelId'>>, userId: number): Promise<FunnelStage | undefined>;
   deleteFunnelStage(id: number, userId: number): Promise<boolean>;
@@ -141,14 +204,13 @@ export class DatabaseStorage implements IStorage {
   async updateChatSessionTitle(sessionId: number, userId: number, newTitle: string): Promise<ChatSession | undefined> { const [updatedSession] = await db.update(chatSessions).set({ title: newTitle, updatedAt: new Date() }).where(and(eq(chatSessions.id, sessionId), eq(chatSessions.userId, userId))).returning(); return updatedSession; }
   async deleteChatSession(sessionId: number, userId: number): Promise<boolean> { const result = await db.delete(chatSessions).where(and(eq(chatSessions.id, sessionId), eq(chatSessions.userId, userId))); return (result.rowCount ?? 0) > 0; }
   async addChatMessage(messageData: InsertChatMessage): Promise<ChatMessage> { const [newMessage] = await db.insert(chatMessages).values({ ...messageData, timestamp: new Date() }).returning(); if (!newMessage) throw new Error("Falha ao adicionar mensagem ao chat."); await db.update(chatSessions).set({ updatedAt: new Date() }).where(eq(chatSessions.id, messageData.sessionId)); return newMessage; }
-  async getChatMessages(sessionId: number, userId: number): Promise<ChatMessage[]> { const sessionExists = await db.select({ id: chatSessions.id }).from(chatSessions).where(and(eq(chatSessions.id, sessionId), eq(chatSessions.userId, userId))).limit(1); if (!sessionExists.length) { console.warn(`Tentativa de acesso a mensagens da sessão ${sessionId} pelo usuário ${userId} falhou a verificação de propriedade.`); return []; } return db.select().from(chatMessages).where(eq(chatMessages.sessionId, sessionId)).orderBy(chatMessages.timestamp); }
+  async getChatMessages(sessionId: number, userId: number): Promise<ChatMessage[]> { const sessionExists = await db.select({ id: chatSessions.id }).from(chatSessions).where(and(eq(chatSessions.id, sessionId), eq(chatSessions.userId, userId))).limit(1); if (!sessionExists.length) { console.warn(`Tentativa de acesso a mensagens da sessão ${sessionId} pelo usuário ${userId} falhou a verificação de propriedade.`); return []; } return db.select().from(chatMessages).where(eq(chatMessages.sessionId, sessionId)).orderBy(asc(chatMessages.timestamp)); } // Alterado para asc(chatMessages.timestamp)
   
   async getFunnels(userId: number, campaignId?: number | null): Promise<Funnel[]> {
-    const conditions = [eq(funnels.userId, userId)];
+    const conditions: any[] = [eq(funnels.userId, userId)]; // Tipar conditions como any[] para flexibilidade com isNull
     if (campaignId !== undefined) {
         conditions.push(campaignId === null ? isNull(funnels.campaignId) : eq(funnels.campaignId, campaignId));
     }
-    // CORRIGIDO: Usar db.query para incluir 'stages'
     return db.query.funnels.findMany({
       where: and(...conditions),
       with: {
@@ -161,7 +223,6 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getFunnel(id: number, userId: number): Promise<Funnel | undefined> {
-    // CORRIGIDO: Usar db.query para incluir 'stages'
     return db.query.funnels.findFirst({
       where: and(eq(funnels.id, id), eq(funnels.userId, userId)),
       with: {
@@ -179,13 +240,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateFunnel(id: number, funnelData: Partial<Omit<InsertFunnel, 'userId' | 'campaignId'>>, userId: number): Promise<Funnel | undefined> {
-    const dataToSet: Partial<Funnel> = { ...funnelData, updatedAt: new Date() };
-    // Se campaignId estiver explicitamente no funnelData, permitir sua atualização.
-    // O Zod schema para InsertFunnel (parcial) já deve lidar com a presença/ausência de campaignId.
-    if ('campaignId' in funnelData) {
-        (dataToSet as InsertFunnel).campaignId = funnelData.campaignId;
+    const dataToSet: Partial<Funnel & { campaignId?: number | null }> = { ...funnelData, updatedAt: new Date() };
+    if (funnelData.hasOwnProperty('campaignId')) { // Checa se campaignId foi explicitamente passado
+        dataToSet.campaignId = funnelData.campaignId;
     }
-
     const [updatedFunnel] = await db.update(funnels)
       .set(dataToSet)
       .where(and(eq(funnels.id, id), eq(funnels.userId, userId)))
@@ -204,8 +262,6 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(funnels.id, funnelId), eq(funnels.userId, userId)))
       .limit(1);
     if (!funnelOwner.length) {
-      // Retornar array vazio em vez de lançar erro para o cliente não quebrar,
-      // mas logar o aviso no servidor.
       console.warn(`Tentativa de buscar etapas para funil ${funnelId} não pertencente ao usuário ${userId}.`);
       return [];
     }
@@ -227,6 +283,7 @@ export class DatabaseStorage implements IStorage {
     });
 
     if (!existingStage || existingStage.funnel?.userId !== userId) {
+        // Lançar erro ou retornar undefined? Lançar é mais informativo sobre a falha de permissão/existência.
         throw new Error("Etapa do funil não encontrada ou não pertence ao usuário.");
     }
 
@@ -244,7 +301,9 @@ export class DatabaseStorage implements IStorage {
     });
       
     if (!existingStage || existingStage.funnel?.userId !== userId) {
-        throw new Error("Etapa do funil não encontrada ou não pertence ao usuário para exclusão.");
+      // Não lançar erro, apenas indicar que não foi deletado
+      console.warn(`Tentativa de deletar etapa ${id} não encontrada ou não pertencente ao usuário ${userId}.`);
+      return false; 
     }
 
     const result = await db.delete(funnelStages).where(eq(funnelStages.id, id));
@@ -270,20 +329,19 @@ export class DatabaseStorage implements IStorage {
     const activeCampaignsResult = await db.select({ count: count() }).from(campaigns)
       .where(and(eq(campaigns.userId, userId), eq(campaigns.status, 'active')));
     const activeCampaigns = activeCampaignsResult[0]?.count || 0;
-
-    // Total gasto de todos os orçamentos do usuário
+    
+    // CORRIGIDO: Usar sql template para CAST, pois budgets.spentAmount é decimal (mas Drizzle pode tratá-lo como string)
     const totalSpentResult = await db.select({
-        total: sum(sql<number | string>`CAST(${budgets.spentAmount} AS DECIMAL)`) // Cast para decimal se stored as text/varchar
+        total: sum(sql<string | number>`CAST(${budgets.spentAmount} AS DECIMAL)`) 
     }).from(budgets).where(budgetsUserCondition);
     const totalSpent = parseFloat(String(totalSpentResult[0]?.total || "0")) || 0;
     
-    // Métricas do período
     const totalConversionsResult = await db.select({ total: sum(metrics.conversions) }).from(metrics).where(metricsTimeCondition); 
     const conversions = parseFloat(String(totalConversionsResult[0]?.total || '0')) || 0;
     const totalRevenueResult = await db.select({ total: sum(metrics.revenue) }).from(metrics).where(metricsTimeCondition); 
     const totalRevenue = parseFloat(String(totalRevenueResult[0]?.total || '0')) || 0;
     const totalCostResult = await db.select({ total: sum(metrics.cost) }).from(metrics).where(metricsTimeCondition); 
-    const totalCost = parseFloat(String(totalCostResult[0]?.total || '0')) || 0; // Custo do período
+    const totalCost = parseFloat(String(totalCostResult[0]?.total || '0')) || 0; 
 
     const avgROI = totalCost > 0 ? parseFloat((((totalRevenue - totalCost) / totalCost) * 100).toFixed(2)) : 0;
     const totalImpressionsResult = await db.select({ total: sum(metrics.impressions) }).from(metrics).where(metricsTimeCondition); 
@@ -291,12 +349,12 @@ export class DatabaseStorage implements IStorage {
     const totalClicksResult = await db.select({ total: sum(metrics.clicks) }).from(metrics).where(metricsTimeCondition); 
     const clicks = parseFloat(String(totalClicksResult[0]?.total || '0')) || 0;
     const ctr = clicks > 0 && impressions > 0 ? parseFloat(((clicks / impressions) * 100).toFixed(2)) : 0;
-    const cpc = clicks > 0 && totalCost > 0 ? parseFloat((totalCost / clicks).toFixed(2)) : 0; // CPC baseado no custo do período
+    const cpc = clicks > 0 && totalCost > 0 ? parseFloat((totalCost / clicks).toFixed(2)) : 0;
 
     const metricsData = {
       activeCampaigns,
-      totalSpent, // Total gasto histórico de todos os orçamentos
-      totalCostPeriod: totalCost, // Custo total apenas do período selecionado
+      totalSpent, 
+      totalCostPeriod: totalCost, 
       conversions, 
       avgROI, 
       impressions, 
@@ -305,7 +363,6 @@ export class DatabaseStorage implements IStorage {
       cpc 
     };
 
-    // ... (trends e dados simulados para gráficos mantidos como antes)
     const campaignsChange = parseFloat((Math.random() * 20 - 10).toFixed(1)); 
     const spentChange = parseFloat((Math.random() * 20 - 10).toFixed(1)); 
     const conversionsChange = parseFloat((Math.random() * 30 - 15).toFixed(1)); 
@@ -313,6 +370,8 @@ export class DatabaseStorage implements IStorage {
     const trends = { campaignsChange, spentChange, conversionsChange, roiChange, };
     const recentCampaignsRaw = await db.select().from(campaigns).where(eq(campaigns.userId, userId)).orderBy(desc(campaigns.createdAt)).limit(3);
     const recentCampaigns = recentCampaignsRaw.map(c => ({ id: c.id, name: c.name, description: c.description || 'Nenhuma descrição', status: c.status, platforms: c.platforms || [], budget: parseFloat(String(c.budget ?? '0')) || 0, spent: parseFloat(String(c.dailyBudget ?? '0')) || 0, performance: Math.floor(Math.random() * (95 - 60 + 1)) + 60 }));
+    
+    // CORRIGIDO: Garante que as funções de simulação de gráfico retornem a estrutura esperada
     const timeSeriesData = generateSimulatedLineChartData('Desempenho Geral', 1000, timeRange === '30d' ? 30 : 7, 50, chartColors.palette[0]);
     const channelPerformanceData = generateSimulatedDoughnutChartData(['Meta Ads', 'Google Ads', 'LinkedIn', 'TikTok'], 20, 10, chartColors.palette);
     const conversionData = generateSimulatedLineChartData('Conversões', 200, timeRange === '30d' ? 30 : 7, 30, chartColors.palette[1]);
@@ -323,10 +382,10 @@ export class DatabaseStorage implements IStorage {
       recentCampaigns,
       alertCount: (await db.select({ count: count() }).from(alerts).where(and(eq(alerts.userId, userId), eq(alerts.isRead, false))))[0]?.count || 0,
       trends,
-      timeSeriesData,
-      channelPerformanceData,
-      conversionData,
-      roiData,
+      timeSeriesData, // Agora tem a estrutura { labels: [], datasets: [] }
+      channelPerformanceData, // Agora tem a estrutura { labels: [], datasets: [] }
+      conversionData, // Agora tem a estrutura { labels: [], datasets: [] }
+      roiData, // Agora tem a estrutura { labels: [], datasets: [] }
     };
   }
 }
