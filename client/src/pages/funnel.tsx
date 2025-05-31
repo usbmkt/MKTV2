@@ -1,386 +1,742 @@
-import { useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Users, MousePointer, ShoppingCart, CreditCard, TrendingUp, TrendingDown, Plus, Loader2, AlertTriangle } from 'lucide-react';
-import { apiRequest } from '@/lib/api'; // Certifique-se que apiRequest está configurado para lidar com GET
+// server/storage.ts
+import dotenv from "dotenv";
+dotenv.config();
 
-interface FunnelStage {
-  id: number;
-  name: string;
-  visitors: number; // Este dado viria de métricas agregadas, não diretamente da tabela funnel_stages
-  conversions: number; // Idem
-  conversionRate: number; // Calculado
-  revenue: number; // Idem
-  trend: 'up' | 'down' | 'stable'; // Mockado ou de análise de tendências
-  // Campos da tabela funnel_stages (se necessário para exibição/edição)
-  description?: string | null;
-  order?: number;
-  config?: Record<string, any> | null;
+import { db } from './db'; 
+import {
+  users, campaigns, creatives, metrics, whatsappMessages, copies, alerts, budgets, landingPages,
+  chatSessions, chatMessages, funnels, funnelStages, 
+  type User, type InsertUser, type Campaign, type InsertCampaign,
+  type Creative, type InsertCreative, type Metric, type InsertMetric,
+  type WhatsappMessage, type InsertWhatsappMessage, type Copy, type InsertCopy,
+  type Alert, type InsertAlert, type Budget, type InsertBudget,
+  type LandingPage, type InsertLandingPage,
+  type ChatSession, type InsertChatSession, type ChatMessage, type InsertChatMessage,
+  type Funnel as FunnelTypeFromSchema, // Renomeado para evitar conflito com a interface local Funnel
+  type InsertFunnel, 
+  type FunnelStage as FunnelStageTypeFromSchema, // Renomeado
+  type InsertFunnelStage 
+} from '../shared/schema'; 
+
+// Adicionado asc para ordenação
+import { eq, count, sum, sql, desc, and, or, gte, lte, isNull, asc } from 'drizzle-orm'; 
+
+import * as bcrypt from 'bcrypt'; 
+import jwt from 'jsonwebtoken';
+import { JWT_SECRET } from './config'; 
+
+const chartColors = {
+  palette: [
+    'rgba(75, 192, 192, 1)', 
+    'rgba(255, 99, 132, 1)', 
+    'rgba(54, 162, 235, 1)', 
+    'rgba(255, 206, 86, 1)', 
+    'rgba(153, 102, 255, 1)',
+    'rgba(255, 159, 64, 1)', 
+    'rgba(200, 200, 200, 1)' 
+  ],
+  background: [
+    'rgba(75, 192, 192, 0.2)',
+    'rgba(255, 99, 132, 0.2)',
+    'rgba(54, 162, 235, 0.2)',
+    'rgba(255, 206, 86, 0.2)',
+    'rgba(153, 102, 255, 0.2)',
+    'rgba(255, 159, 64, 0.2)',
+    'rgba(200, 200, 200, 0.2)'
+  ]
+};
+
+// Interfaces para dados de Funil que incluem stages (para o retorno da API)
+interface FunnelWithStages extends FunnelTypeFromSchema {
+  stages: FunnelStageTypeFromSchema[];
 }
 
-interface Funnel {
-  id: number;
-  name: string;
-  campaignId: number | null;
-  description?: string | null;
-  // As 'stages' e métricas agregadas viriam idealmente de um endpoint mais elaborado
-  // ou seriam calculadas/buscadas separadamente.
-  // Para manter a estrutura do seu mock, vamos assumir que a API pode retornar isso.
-  stages?: FunnelStage[]; // Tornando opcional, pois /api/funnels não retorna isso por padrão
-  totalVisitors?: number;
-  totalConversions?: number;
-  totalRevenue?: number;
-  overallConversionRate?: number;
-  createdAt: string; 
-  updatedAt: string;
+
+function generateSimulatedLineChartData(label: string, startValue: number, countNum: number, maxFluctuation: number, color: string): { labels: string[], datasets: { label: string, data: number[], borderColor: string, backgroundColor: string, fill: boolean, tension: number }[] } {
+  const data = [];
+  const labels = [];
+  let currentValue = startValue;
+
+  for (let i = 0; i < countNum; i++) {
+    labels.push(`Dia ${i + 1}`); 
+    data.push(Math.round(currentValue));
+    currentValue += (Math.random() * maxFluctuation * 2) - maxFluctuation;
+    if (currentValue < 0) currentValue = 0; 
+  }
+
+  return {
+    labels: labels,
+    datasets: [
+      {
+        label: label,
+        data: data,
+        borderColor: color,
+        backgroundColor: color.replace('1)', '0.2)'), 
+        fill: true,
+        tension: 0.4,
+      },
+    ],
+  };
 }
 
-export default function FunnelPage() {
-  const [selectedFunnelId, setSelectedFunnelId] = useState<number | null>(null);
+function generateSimulatedBarChartData(label: string, categories: string[], baseValue: number, maxFluctuation: number, colors: string[]): { labels: string[], datasets: { label: string, data: number[], backgroundColor: string[] }[] } {
+  const data = categories.map(() => Math.round(baseValue + (Math.random() * maxFluctuation * 2) - maxFluctuation));
+  return {
+    labels: categories,
+    datasets: [
+      {
+        label: label,
+        data: data,
+        backgroundColor: colors,
+      },
+    ],
+  };
+}
 
-  const { data: funnels = [], isLoading: isLoadingFunnels, error: funnelsError } = useQuery<Funnel[]>({
-    queryKey: ['/api/funnels'],
-    queryFn: async () => {
-      const response = await apiRequest('GET', '/api/funnels');
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: 'Erro ao buscar funis' }));
-        throw new Error(errorData.error || errorData.message || 'Erro desconhecido ao buscar funis');
-      }
-      // TODO: A API /api/funnels atualmente não retorna 'stages' nem as métricas agregadas.
-      // Esses dados precisariam ser adicionados no backend ou buscados separadamente.
-      // Por enquanto, vamos simular que alguns funis podem vir sem stages para testar a robustez.
-      const fetchedFunnels = await response.json();
-      return fetchedFunnels.map((f: Funnel) => ({
-        ...f,
-        // Simulando que a API pode não trazer stages, ou que alguns funis podem não ter stages ainda
-        stages: f.stages || (f.id === 1 ? mockStagesEcommerce : (f.id === 2 ? mockStagesLeadGen : [])), // Fallback para mock stages por enquanto
-        totalVisitors: f.totalVisitors || (f.stages ? f.stages.reduce((sum, s) => sum + s.visitors, 0) : Math.floor(Math.random() * 10000) + 1000),
-        totalConversions: f.totalConversions || (f.stages && f.stages.length > 0 ? f.stages[f.stages.length-1].conversions : Math.floor(Math.random() * 500)),
-        totalRevenue: f.totalRevenue || (f.stages ? f.stages.reduce((sum, s) => sum + s.revenue, 0) : Math.floor(Math.random() * 20000)),
-        overallConversionRate: f.overallConversionRate || ((f.stages && f.stages.length > 0 && f.stages[0].visitors > 0) ? (f.stages[f.stages.length-1].conversions / f.stages[0].visitors * 100) : Math.random() * 10),
-      }));
-    },
-  });
+function generateSimulatedDoughnutChartData(labels: string[], baseValue: number, maxFluctuation: number, colors: string[]): { labels: string[], datasets: { data: number[], backgroundColor: string[], borderWidth: number }[] } {
+  const data = labels.map(() => Math.round(baseValue + (Math.random() * maxFluctuation * 2) - maxFluctuation));
+  return {
+    labels: labels,
+    datasets: [
+      {
+        data: data,
+        backgroundColor: colors.map(color => color.replace('1)', '0.8)')), 
+        borderWidth: 0,
+      },
+    ],
+  };
+}
+
+
+export interface IStorage {
+  getUser(id: number): Promise<User | undefined>;
+  getUserByUsername(username: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
+  createUser(user: InsertUser): Promise<User>;
+  validatePassword(password: string, hashedPassword: string): Promise<boolean>;
+
+  getCampaigns(userId: number, limit?: number): Promise<Campaign[]>;
+  getCampaign(id: number, userId: number): Promise<Campaign | undefined>;
+  createCampaign(campaign: InsertCampaign): Promise<Campaign>;
+  updateCampaign(id: number, campaign: Partial<Omit<InsertCampaign, 'userId'>>, userId: number): Promise<Campaign | undefined>;
+  deleteCampaign(id: number, userId: number): Promise<boolean>;
+
+  getCreatives(userId: number, campaignId?: number | null): Promise<Creative[]>; // campaignId pode ser null
+  getCreative(id: number, userId: number): Promise<Creative | undefined>;
+  createCreative(creative: InsertCreative): Promise<Creative>;
+  updateCreative(id: number, creative: Partial<Omit<InsertCreative, 'userId'>>, userId: number): Promise<Creative | undefined>;
+  deleteCreative(id: number, userId: number): Promise<boolean>;
+
+  getMetricsForCampaign(campaignId: number, userId: number): Promise<Metric[]>;
+  createMetric(metricData: InsertMetric): Promise<Metric>;
+
+  getMessages(userId: number, contactNumber?: string): Promise<WhatsappMessage[]>;
+  createMessage(messageData: InsertWhatsappMessage): Promise<WhatsappMessage>;
+  markMessageAsRead(id: number, userId: number): Promise<boolean>;
+  getContacts(userId: number): Promise<{ contactNumber: string; contactName: string | null; lastMessage: string; timestamp: Date, unreadCount: number }[]>;
+
+  getCopies(userId: number, campaignId?: number | null): Promise<Copy[]>; // campaignId pode ser null
+  createCopy(copy: InsertCopy): Promise<Copy>;
+  deleteCopy(id: number, userId: number): Promise<boolean>; 
+  updateCopy(id: number, copyData: Partial<Omit<InsertCopy, 'userId' | 'campaignId'>>, userId: number): Promise<Copy | undefined>;
+
+  getAlerts(userId: number, onlyUnread?: boolean): Promise<Alert[]>;
+  createAlert(alertData: InsertAlert): Promise<Alert>;
+  markAlertAsRead(id: number, userId: number): Promise<boolean>;
+
+  getBudgets(userId: number, campaignId?: number | null): Promise<Budget[]>; // campaignId pode ser null
+  createBudget(budget: InsertBudget): Promise<Budget>;
+  updateBudget(id: number, budgetData: Partial<Omit<InsertBudget, 'userId' | 'campaignId'>>, userId: number): Promise<Budget | undefined>;
+
+  getLandingPages(userId: number): Promise<LandingPage[]>;
+  getLandingPage(id: number, userId: number): Promise<LandingPage | undefined>;
+  getLandingPageBySlug(slug: string): Promise<LandingPage | undefined>;
+  getLandingPageByStudioProjectId(studioProjectId: string, userId: number): Promise<LandingPage | undefined>; 
+  createLandingPage(lpData: InsertLandingPage): Promise<LandingPage>;
+  updateLandingPage(id: number, lpData: Partial<Omit<InsertLandingPage, 'userId'>>, userId: number): Promise<LandingPage | undefined>;
+  deleteLandingPage(id: number, userId: number): Promise<boolean>;
+
+  createChatSession(userId: number, title?: string): Promise<ChatSession>;
+  getChatSession(sessionId: number, userId: number): Promise<ChatSession | undefined>;
+  getChatSessions(userId: number): Promise<ChatSession[]>;
+  updateChatSessionTitle(sessionId: number, userId: number, newTitle: string): Promise<ChatSession | undefined>;
+  deleteChatSession(sessionId: number, userId: number): Promise<boolean>;
+  addChatMessage(messageData: InsertChatMessage): Promise<ChatMessage>;
+  getChatMessages(sessionId: number, userId: number): Promise<ChatMessage[]>;
+
+  // Funis
+  getFunnels(userId: number, campaignId?: number | null): Promise<FunnelWithStages[]>; // campaignId pode ser null
+  getFunnel(id: number, userId: number): Promise<FunnelWithStages | undefined>;
+  createFunnel(funnelData: InsertFunnel): Promise<FunnelTypeFromSchema>; // Retorna o tipo base do schema
+  updateFunnel(id: number, funnelData: Partial<Omit<InsertFunnel, 'userId'>>, userId: number): Promise<FunnelTypeFromSchema | undefined>;
+  deleteFunnel(id: number, userId: number): Promise<boolean>;
+
+  getFunnelStages(funnelId: number, userId: number): Promise<FunnelStageTypeFromSchema[]>; 
+  createFunnelStage(stageData: InsertFunnelStage): Promise<FunnelStageTypeFromSchema>;
+  updateFunnelStage(id: number, stageData: Partial<Omit<InsertFunnelStage, 'funnelId'>>, userId: number): Promise<FunnelStageTypeFromSchema | undefined>;
+  deleteFunnelStage(id: number, userId: number): Promise<boolean>;
   
-  // Mock stages (usado como fallback se a API não os retornar)
-  const mockStagesEcommerce: FunnelStage[] = [
-    { id: 1, name: 'Visitantes', visitors: 10000, conversions: 3000, conversionRate: 30, revenue: 0, trend: 'up' },
-    { id: 2, name: 'Visualizaram Produto', visitors: 3000, conversions: 1500, conversionRate: 50, revenue: 0, trend: 'stable' },
-    { id: 3, name: 'Adicionaram ao Carrinho', visitors: 1500, conversions: 450, conversionRate: 30, revenue: 0, trend: 'down' },
-    { id: 4, name: 'Iniciaram Checkout', visitors: 450, conversions: 315, conversionRate: 70, revenue: 0, trend: 'up' },
-    { id: 5, name: 'Completaram Compra', visitors: 315, conversions: 252, conversionRate: 80, revenue: 12600, trend: 'up' }
-  ];
-  const mockStagesLeadGen: FunnelStage[] = [
-    { id: 1, name: 'Visitantes', visitors: 8500, conversions: 2550, conversionRate: 30, revenue: 0, trend: 'up' },
-    { id: 2, name: 'Leram Landing Page', visitors: 2550, conversions: 1275, conversionRate: 50, revenue: 0, trend: 'stable' },
-    { id: 3, name: 'Preencheram Formulário', visitors: 1275, conversions: 382, conversionRate: 30, revenue: 0, trend: 'up' },
-  ];
-
-
-  const selectedFunnelData = useMemo(() => {
-    if (funnels.length === 0) return null;
-    if (selectedFunnelId === null && funnels.length > 0) {
-      return funnels[0];
-    }
-    return funnels.find(f => f.id === selectedFunnelId) || funnels[0] || null;
-  }, [funnels, selectedFunnelId]);
-
-
-  const getTrendIcon = (trend?: 'up' | 'down' | 'stable') => {
-    if (trend === 'up') return <TrendingUp className="w-4 h-4 text-green-500" />;
-    if (trend === 'down') return <TrendingDown className="w-4 h-4 text-red-500" />;
-    return null;
-  };
-
-  const getStageIcon = (index: number) => {
-    const icons = [Users, MousePointer, ShoppingCart, CreditCard, CreditCard];
-    const Icon = icons[index] || Users;
-    return <Icon className="w-5 h-5" />;
-  };
-
-  if (isLoadingFunnels) {
-    return (
-      <div className="p-8 space-y-6 flex flex-col items-center justify-center h-[calc(100vh-150px)]">
-        <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-        <p className="text-muted-foreground">Carregando funis...</p>
-      </div>
-    );
-  }
-
-  if (funnelsError) {
-    return (
-      <div className="p-8 space-y-6 text-center">
-        <AlertTriangle className="h-12 w-12 text-destructive mx-auto mb-4" />
-        <h2 className="text-xl font-semibold text-destructive">Erro ao carregar funis</h2>
-        <p className="text-muted-foreground">{funnelsError.message}</p>
-        <Button onClick={() => queryClient.refetchQueries({queryKey: ['/api/funnels']})} className="mt-4">
-          Tentar Novamente
-        </Button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-6 p-4 md:p-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Análise de Funil</h1>
-          <p className="text-muted-foreground">
-            Monitore a jornada do cliente e otimize conversões
-          </p>
-        </div>
-        <Button>
-          <Plus className="w-4 h-4 mr-2" />
-          Novo Funil
-        </Button>
-      </div>
-
-      <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="overview">Visão Geral</TabsTrigger>
-          <TabsTrigger value="detailed">Análise Detalhada</TabsTrigger>
-          <TabsTrigger value="optimization">Otimização</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="overview" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Selecionar Funil</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {funnels.length === 0 ? (
-                <p className="text-muted-foreground">Nenhum funil encontrado. Crie um novo para começar.</p>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {funnels.map((funnel) => (
-                    <div
-                      key={funnel.id}
-                      className={`p-4 border rounded-lg cursor-pointer transition-colors ${
-                        selectedFunnelData?.id === funnel.id
-                          ? 'border-primary bg-primary/5'
-                          : 'border-border hover:border-primary/50'
-                      }`}
-                      onClick={() => setSelectedFunnelId(funnel.id)}
-                    >
-                      <h3 className="font-semibold">{funnel.name}</h3>
-                      <div className="flex justify-between items-center mt-2">
-                        <div className="text-sm text-muted-foreground">
-                          {(funnel.totalVisitors || 0).toLocaleString()} visitantes
-                        </div>
-                        <Badge variant="outline">
-                          {(funnel.overallConversionRate || 0).toFixed(2)}% conversão
-                        </Badge>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {selectedFunnelData && (
-            <>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Total de Visitantes</CardTitle>
-                    <Users className="h-4 w-4 text-muted-foreground" />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{(selectedFunnelData.totalVisitors || 0).toLocaleString()}</div>
-                    <p className="text-xs text-muted-foreground">
-                      +12% desde o mês passado (simulado)
-                    </p>
-                  </CardContent>
-                </Card>
-                {/* Outros cards de métricas principais */}
-                 <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Conversões</CardTitle>
-                        <MousePointer className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{(selectedFunnelData.totalConversions || 0).toLocaleString()}</div>
-                        <p className="text-xs text-muted-foreground">
-                        +8% desde o mês passado (simulado)
-                        </p>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Taxa de Conversão</CardTitle>
-                        <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{(selectedFunnelData.overallConversionRate || 0).toFixed(2)}%</div>
-                        <p className="text-xs text-muted-foreground">
-                        -0.3% desde o mês passado (simulado)
-                        </p>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Receita Total</CardTitle>
-                        <CreditCard className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">R$ {(selectedFunnelData.totalRevenue || 0).toLocaleString()}</div>
-                        <p className="text-xs text-muted-foreground">
-                        +15% desde o mês passado (simulado)
-                        </p>
-                    </CardContent>
-                </Card>
-              </div>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Visualização do Funil: {selectedFunnelData.name}</CardTitle>
-                  <CardDescription>
-                    Acompanhe o fluxo de usuários através de cada etapa
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {selectedFunnelData.stages && selectedFunnelData.stages.length > 0 ? (
-                      selectedFunnelData.stages.map((stage, index) => (
-                        <div key={stage.id} className="relative">
-                          <div className="flex items-center space-x-4 p-4 bg-muted/30 rounded-lg">
-                            <div className="flex-shrink-0">
-                              {getStageIcon(index)}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between">
-                                <h4 className="text-sm font-medium">{stage.name}</h4>
-                                <div className="flex items-center space-x-2">
-                                  {getTrendIcon(stage.trend)}
-                                  <Badge variant="outline">
-                                    {stage.conversionRate.toFixed(1)}%
-                                  </Badge>
-                                </div>
-                              </div>
-                              <div className="mt-2">
-                                <div className="flex justify-between text-sm text-muted-foreground mb-1">
-                                  <span>{stage.conversions.toLocaleString()} usuários</span>
-                                  <span>{stage.visitors.toLocaleString()} visitantes</span>
-                                </div>
-                                <Progress value={stage.conversionRate} className="h-2" />
-                              </div>
-                              {stage.revenue > 0 && (
-                                <p className="text-sm text-green-600 mt-1">
-                                  Receita: R$ {stage.revenue.toLocaleString()}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                          {index < (selectedFunnelData.stages?.length || 0) - 1 && (
-                            <div className="flex justify-center">
-                              <div className="w-px h-4 bg-border"></div>
-                            </div>
-                          )}
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-muted-foreground text-center py-4">Nenhuma etapa definida para este funil.</p>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </>
-          )}
-        </TabsContent>
-
-        {/* Conteúdo das outras abas (Detailed, Optimization) permanece o mesmo do seu mock por enquanto */}
-        <TabsContent value="detailed" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Análise Detalhada por Etapa</CardTitle>
-              <CardDescription>
-                Identifique gargalos e oportunidades de melhoria
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-            {selectedFunnelData?.stages && selectedFunnelData.stages.length > 0 ? (
-              <div className="space-y-6">
-                {selectedFunnelData.stages.map((stage, index) => (
-                  <div key={stage.id} className="border rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-lg font-semibold">{stage.name}</h3>
-                      <Badge variant={stage.trend === 'up' ? 'default' : stage.trend === 'down' ? 'destructive' : 'secondary'}>
-                        {stage.trend === 'up' ? 'Melhorando' : stage.trend === 'down' ? 'Piorando' : 'Estável'}
-                      </Badge>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <div>
-                        <p className="text-sm text-muted-foreground">Visitantes</p>
-                        <p className="text-2xl font-bold">{stage.visitors.toLocaleString()}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">Conversões</p>
-                        <p className="text-2xl font-bold">{stage.conversions.toLocaleString()}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">Taxa de Conversão</p>
-                        <p className="text-2xl font-bold">{stage.conversionRate.toFixed(1)}%</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">Drop-off</p>
-                        <p className="text-2xl font-bold text-red-500">
-                          {/* Corrigido: Garantir que selectedFunnelData.stages exista antes de acessar length */}
-                          {(selectedFunnelData.stages && index < selectedFunnelData.stages.length - 1 && stage.visitors > 0)
-                            ? `${((stage.visitors - stage.conversions) / stage.visitors * 100).toFixed(1)}%`
-                            : '0%'
-                          }
-                        </p>
-                      </div>
-                    </div>
-                    
-                    {stage.trend === 'down' && (
-                      <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-                        <p className="text-sm text-red-800">
-                          <strong>Alerta:</strong> Esta etapa está apresentando queda na conversão. 
-                          Considere otimizar a experiência do usuário neste ponto.
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : (
-                 <p className="text-muted-foreground text-center py-4">Selecione um funil ou defina etapas para visualizar detalhes.</p>
-            )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="optimization" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Recomendações de Otimização</CardTitle>
-              <CardDescription>
-                Sugestões baseadas em análise de dados para melhorar suas conversões
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="border rounded-lg p-4 bg-blue-50 border-blue-200">
-                  <h4 className="font-semibold text-blue-900">🎯 Otimizar Carrinho de Compras</h4>
-                  <p className="text-sm text-blue-800 mt-1">
-                    30% dos usuários abandonam o carrinho. Considere implementar recuperação de carrinho abandonado e simplificar o processo.
-                  </p>
-                  <Button size="sm" className="mt-2">Implementar</Button>
-                </div>
-                {/* Mais recomendações mockadas */}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-      </Tabs>
-    </div>
-  );
+  getDashboardData(userId: number, timeRange: string): Promise<any>; 
 }
+
+export class DatabaseStorage implements IStorage {
+  async getUser(id: number): Promise<User | undefined> {
+    const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
+    return result[0];
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const result = await db.select().from(users).where(eq(users.username, username)).limit(1);
+    return result[0];
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const result = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    return result[0];
+  }
+
+  async createUser(userData: InsertUser): Promise<User> {
+    const hashedPassword = await bcrypt.hash(userData.password, 10);
+    const [newUser] = await db.insert(users).values({
+      ...userData,
+      password: hashedPassword,
+    }).returning();
+    if (!newUser) throw new Error("Falha ao criar usuário.");
+    return newUser;
+  }
+
+  async validatePassword(password: string, hashedPassword: string): Promise<boolean> {
+    return bcrypt.compare(password, hashedPassword);
+  }
+
+  async getCampaigns(userId: number, limit?: number): Promise<Campaign[]> {
+    let query = db.select().from(campaigns)
+      .where(eq(campaigns.userId, userId))
+      .orderBy(desc(campaigns.createdAt));
+    if (limit) {
+      return query.limit(limit);
+    }
+    return query;
+  }
+
+  async getCampaign(id: number, userId: number): Promise<Campaign | undefined> {
+    const [campaign] = await db.select().from(campaigns)
+      .where(and(eq(campaigns.id, id), eq(campaigns.userId, userId)))
+      .limit(1);
+    return campaign;
+  }
+
+  async createCampaign(campaignData: InsertCampaign): Promise<Campaign> {
+    const [newCampaign] = await db.insert(campaigns).values(campaignData).returning();
+    if (!newCampaign) throw new Error("Falha ao criar campanha.");
+    return newCampaign;
+  }
+
+  async updateCampaign(id: number, campaignData: Partial<Omit<InsertCampaign, 'userId'>>, userId: number): Promise<Campaign | undefined> {
+    const [updatedCampaign] = await db.update(campaigns)
+      .set({ ...campaignData, updatedAt: new Date() })
+      .where(and(eq(campaigns.id, id), eq(campaigns.userId, userId)))
+      .returning();
+    return updatedCampaign;
+  }
+
+  async deleteCampaign(id: number, userId: number): Promise<boolean> {
+    const result = await db.delete(campaigns)
+      .where(and(eq(campaigns.id, id), eq(campaigns.userId, userId)));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async getCreatives(userId: number, campaignId?: number | null): Promise<Creative[]> {
+    const conditions = [eq(creatives.userId, userId)];
+    if (campaignId !== undefined) { // Permite buscar por null explicitamente
+        conditions.push(campaignId === null ? isNull(creatives.campaignId) : eq(creatives.campaignId, campaignId));
+    }
+    return db.select().from(creatives).where(and(...conditions)).orderBy(desc(creatives.createdAt));
+  }
+
+  async getCreative(id: number, userId: number): Promise<Creative | undefined> {
+    const [creative] = await db.select().from(creatives)
+      .where(and(eq(creatives.id, id), eq(creatives.userId, userId)))
+      .limit(1);
+    return creative;
+  }
+
+  async createCreative(creativeData: InsertCreative): Promise<Creative> {
+    const [newCreative] = await db.insert(creatives).values(creativeData).returning();
+    if (!newCreative) throw new Error("Falha ao criar criativo.");
+    return newCreative;
+  }
+
+  async updateCreative(id: number, creativeData: Partial<Omit<InsertCreative, 'userId'>>, userId: number): Promise<Creative | undefined> {
+    const [updatedCreative] = await db.update(creatives)
+      .set({ ...creativeData, updatedAt: new Date() })
+      .where(and(eq(creatives.id, id), eq(creatives.userId, userId)))
+      .returning();
+    return updatedCreative;
+  }
+
+  async deleteCreative(id: number, userId: number): Promise<boolean> {
+    const result = await db.delete(creatives)
+      .where(and(eq(creatives.id, id), eq(creatives.userId, userId)));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async getMetricsForCampaign(campaignId: number, userId: number): Promise<Metric[]> {
+    const campaignExists = await db.select({id: campaigns.id}).from(campaigns)
+      .where(and(eq(campaigns.id, campaignId), eq(campaigns.userId, userId)))
+      .limit(1);
+    if (!campaignExists.length) {
+        throw new Error("Campanha não encontrada ou não pertence ao usuário.");
+    }
+    return db.select().from(metrics)
+      .where(eq(metrics.campaignId, campaignId)) 
+      .orderBy(desc(metrics.date));
+  }
+
+  async createMetric(metricData: InsertMetric): Promise<Metric> {
+    const [newMetric] = await db.insert(metrics).values(metricData).returning();
+    if (!newMetric) throw new Error("Falha ao criar métrica.");
+    return newMetric;
+  }
+
+  async getMessages(userId: number, contactNumber?: string): Promise<WhatsappMessage[]> {
+    const conditions = [eq(whatsappMessages.userId, userId)];
+    if (contactNumber) {
+      conditions.push(eq(whatsappMessages.contactNumber, contactNumber));
+    }
+    return db.select().from(whatsappMessages).where(and(...conditions)).orderBy(desc(whatsappMessages.timestamp));
+  }
+
+  async createMessage(messageData: InsertWhatsappMessage): Promise<WhatsappMessage> {
+    const [newMessage] = await db.insert(whatsappMessages).values(messageData).returning();
+    if (!newMessage) throw new Error("Falha ao criar mensagem.");
+    return newMessage;
+  }
+
+  async markMessageAsRead(id: number, userId: number): Promise<boolean> {
+    const result = await db.update(whatsappMessages)
+      .set({ isRead: true })
+      .where(and(eq(whatsappMessages.id, id), eq(whatsappMessages.userId, userId), eq(whatsappMessages.isRead, false)));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async getContacts(userId: number): Promise<{ contactNumber: string; contactName: string | null; lastMessage: string; timestamp: Date, unreadCount: number }[]> {
+    const allMessages = await db.select().from(whatsappMessages)
+      .where(eq(whatsappMessages.userId, userId))
+      .orderBy(desc(whatsappMessages.timestamp));
+
+    const contactsMap = new Map<string, { contactNumber: string; contactName: string | null; lastMessage: string; timestamp: Date, unreadCount: number }>();
+
+    for (const msg of allMessages) {
+      if (!contactsMap.has(msg.contactNumber)) {
+        contactsMap.set(msg.contactNumber, {
+          contactNumber: msg.contactNumber,
+          contactName: msg.contactName || null,
+          lastMessage: msg.message,
+          timestamp: new Date(msg.timestamp),
+          unreadCount: 0,
+        });
+      }
+      const contact = contactsMap.get(msg.contactNumber)!;
+      if (!msg.isRead && msg.direction === 'incoming') {
+        contact.unreadCount++;
+      }
+    }
+    return Array.from(contactsMap.values()).sort((a,b) => b.timestamp.getTime() - a.timestamp.getTime());
+  }
+
+  async getCopies(userId: number, campaignId?: number | null): Promise<Copy[]> {
+    const conditions = [eq(copies.userId, userId)];
+    if (campaignId !== undefined) { // Permite buscar por null explicitamente
+      conditions.push(campaignId === null ? isNull(copies.campaignId) : eq(copies.campaignId, campaignId));
+    }
+    return db.select().from(copies).where(and(...conditions)).orderBy(desc(copies.createdAt));
+  }
+
+  async createCopy(copyData: InsertCopy): Promise<Copy> {
+    const [newCopy] = await db.insert(copies).values(copyData).returning();
+    if (!newCopy) throw new Error("Falha ao criar copy.");
+    return newCopy;
+  }
+
+  async updateCopy(id: number, copyData: Partial<Omit<InsertCopy, 'userId' | 'campaignId'>>, userId: number): Promise<Copy | undefined> {
+    const existingCopy = await db.select().from(copies).where(and(eq(copies.id, id), eq(copies.userId, userId))).limit(1);
+    if(!existingCopy || existingCopy.length === 0) {
+        return undefined;
+    }
+    const [updatedCopy] = await db.update(copies)
+      .set(copyData) 
+      .where(and(eq(copies.id, id), eq(copies.userId, userId)))
+      .returning();
+    return updatedCopy;
+  }
+
+  async deleteCopy(id: number, userId: number): Promise<boolean> {
+    const result = await db.delete(copies)
+      .where(and(eq(copies.id, id), eq(copies.userId, userId)));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async getAlerts(userId: number, onlyUnread?: boolean): Promise<Alert[]> {
+    const conditions = [eq(alerts.userId, userId)];
+    if (onlyUnread) {
+      conditions.push(eq(alerts.isRead, false));
+    }
+    return db.select().from(alerts).where(and(...conditions)).orderBy(desc(alerts.createdAt));
+  }
+
+  async createAlert(alertData: InsertAlert): Promise<Alert> {
+    const [newAlert] = await db.insert(alerts).values(alertData).returning();
+    if (!newAlert) throw new Error("Falha ao criar alerta.");
+    return newAlert;
+  }
+
+  async markAlertAsRead(id: number, userId: number): Promise<boolean> {
+    const result = await db.update(alerts)
+      .set({ isRead: true })
+      .where(and(eq(alerts.id, id), eq(alerts.userId, userId), eq(alerts.isRead, false)));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async getBudgets(userId: number, campaignId?: number | null): Promise<Budget[]> {
+    const conditions = [eq(budgets.userId, userId)];
+    if (campaignId !== undefined) { // Permite buscar por null explicitamente
+      conditions.push(campaignId === null ? isNull(budgets.campaignId) : eq(budgets.campaignId, campaignId));
+    }
+    return db.select().from(budgets).where(and(...conditions)).orderBy(desc(budgets.createdAt));
+  }
+
+  async createBudget(budgetData: InsertBudget): Promise<Budget> {
+    const [newBudget] = await db.insert(budgets).values(budgetData).returning();
+    if (!newBudget) throw new Error("Falha ao criar orçamento.");
+    return newBudget;
+  }
+
+  async updateBudget(id: number, budgetData: Partial<Omit<InsertBudget, 'userId' | 'campaignId'>>, userId: number): Promise<Budget | undefined> {
+     const existingBudget = await db.select().from(budgets).where(and(eq(budgets.id, id), eq(budgets.userId, userId))).limit(1);
+    if(!existingBudget || existingBudget.length === 0) {
+        return undefined;
+    }
+    const [updatedBudget] = await db.update(budgets)
+      .set(budgetData) 
+      .where(and(eq(budgets.id, id), eq(budgets.userId, userId)))
+      .returning();
+    return updatedBudget;
+  }
+
+  async getLandingPages(userId: number): Promise<LandingPage[]> {
+    return db.select().from(landingPages)
+      .where(eq(landingPages.userId, userId))
+      .orderBy(desc(landingPages.createdAt));
+  }
+
+  async getLandingPage(id: number, userId: number): Promise<LandingPage | undefined> {
+    const [lp] = await db.select().from(landingPages)
+      .where(and(eq(landingPages.id, id), eq(landingPages.userId, userId)))
+      .limit(1);
+    return lp;
+  }
+
+  async getLandingPageBySlug(slug: string): Promise<LandingPage | undefined> {
+    const [lp] = await db.select().from(landingPages)
+      .where(eq(landingPages.slug, slug)) 
+      .limit(1);
+    return lp;
+  }
+
+  async getLandingPageByStudioProjectId(studioProjectId: string, userId: number): Promise<LandingPage | undefined> {
+    const [lp] = await db.select().from(landingPages)
+      .where(and(eq(landingPages.studioProjectId, studioProjectId), eq(landingPages.userId, userId))) 
+      .limit(1);
+    return lp;
+  }
+
+  async createLandingPage(lpData: InsertLandingPage): Promise<LandingPage> {
+    const [newLP] = await db.insert(landingPages).values(lpData).returning();
+    if (!newLP) throw new Error("Falha ao criar landing page.");
+    return newLP;
+  }
+
+  async updateLandingPage(id: number, lpData: Partial<Omit<InsertLandingPage, 'userId'>>, userId: number): Promise<LandingPage | undefined> {
+    const [updatedLP] = await db.update(landingPages)
+      .set({ ...lpData, updatedAt: new Date() })
+      .where(and(eq(landingPages.id, id), eq(landingPages.userId, userId)))
+      .returning();
+    return updatedLP;
+  }
+
+  async deleteLandingPage(id: number, userId: number): Promise<boolean> {
+    const result = await db.delete(landingPages)
+      .where(and(eq(landingPages.id, id), eq(landingPages.userId, userId)));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async createChatSession(userId: number, title: string = 'Nova Conversa'): Promise<ChatSession> {
+    const [newSession] = await db.insert(chatSessions).values({ userId, title, createdAt: new Date(), updatedAt: new Date() }).returning();
+    if (!newSession) throw new Error("Falha ao criar nova sessão de chat.");
+    return newSession;
+  }
+
+  async getChatSession(sessionId: number, userId: number): Promise<ChatSession | undefined> {
+    const [session] = await db.select().from(chatSessions).where(and(eq(chatSessions.id, sessionId), eq(chatSessions.userId, userId))).limit(1);
+    return session;
+  }
+
+  async getChatSessions(userId: number): Promise<ChatSession[]> {
+    return db.select().from(chatSessions).where(eq(chatSessions.userId, userId)).orderBy(desc(chatSessions.updatedAt));
+  }
+
+  async updateChatSessionTitle(sessionId: number, userId: number, newTitle: string): Promise<ChatSession | undefined> {
+    const [updatedSession] = await db.update(chatSessions).set({ title: newTitle, updatedAt: new Date() }).where(and(eq(chatSessions.id, sessionId), eq(chatSessions.userId, userId))).returning();
+    return updatedSession;
+  }
+
+  async deleteChatSession(sessionId: number, userId: number): Promise<boolean> {
+    const result = await db.delete(chatSessions).where(and(eq(chatSessions.id, sessionId), eq(chatSessions.userId, userId)));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async addChatMessage(messageData: InsertChatMessage): Promise<ChatMessage> {
+    const [newMessage] = await db.insert(chatMessages).values({ ...messageData, timestamp: new Date() }).returning();
+    if (!newMessage) throw new Error("Falha ao adicionar mensagem ao chat.");
+    await db.update(chatSessions).set({ updatedAt: new Date() }).where(eq(chatSessions.id, messageData.sessionId));
+    return newMessage;
+  }
+
+  async getChatMessages(sessionId: number, userId: number): Promise<ChatMessage[]> {
+    const sessionExists = await db.select({ id: chatSessions.id }).from(chatSessions).where(and(eq(chatSessions.id, sessionId), eq(chatSessions.userId, userId))).limit(1);
+    if (!sessionExists.length) {
+      console.warn(`Tentativa de acesso a mensagens da sessão ${sessionId} pelo usuário ${userId} falhou a verificação de propriedade.`);
+      return []; 
+    }
+    return db.select().from(chatMessages).where(eq(chatMessages.sessionId, sessionId)).orderBy(chatMessages.timestamp);
+  }
+
+  // Funis
+  async getFunnels(userId: number, campaignId?: number | null): Promise<FunnelWithStages[]> {
+    const conditions = [eq(funnels.userId, userId)];
+    if (campaignId !== undefined) {
+      conditions.push(campaignId === null ? isNull(funnels.campaignId) : eq(funnels.campaignId, campaignId));
+    }
+    // CORRIGIDO: Usar db.query para buscar funis com suas etapas
+    const result = await db.query.funnels.findMany({
+      where: and(...conditions),
+      orderBy: [desc(funnels.createdAt)],
+      with: {
+        stages: { // Este 'stages' deve corresponder ao nome da relação em funnelRelations
+          orderBy: [asc(funnelStages.order), desc(funnelStages.createdAt)]
+        }
+      }
+    });
+    return result as FunnelWithStages[]; // Fazendo um cast para o tipo esperado
+  }
+
+  async getFunnel(id: number, userId: number): Promise<FunnelWithStages | undefined> {
+    // CORRIGIDO: Usar db.query para buscar um funil com suas etapas
+    const funnel = await db.query.funnels.findFirst({
+      where: and(eq(funnels.id, id), eq(funnels.userId, userId)),
+      with: {
+        stages: {
+          orderBy: [asc(funnelStages.order), desc(funnelStages.createdAt)]
+        }
+      }
+    });
+    return funnel as FunnelWithStages | undefined;
+  }
+
+  async createFunnel(funnelData: InsertFunnel): Promise<FunnelTypeFromSchema> {
+    const [newFunnel] = await db.insert(funnels).values(funnelData).returning();
+    if (!newFunnel) throw new Error("Falha ao criar funil.");
+    return newFunnel;
+  }
+
+  async updateFunnel(id: number, funnelData: Partial<Omit<InsertFunnel, 'userId'>>, userId: number): Promise<FunnelTypeFromSchema | undefined> {
+    const [updatedFunnel] = await db.update(funnels)
+      .set({ ...funnelData, updatedAt: new Date() })
+      .where(and(eq(funnels.id, id), eq(funnels.userId, userId)))
+      .returning();
+    return updatedFunnel;
+  }
+
+  async deleteFunnel(id: number, userId: number): Promise<boolean> {
+    // Considerar deletar stages associados ou usar onDelete: 'cascade' no schema
+    const result = await db.delete(funnels)
+      .where(and(eq(funnels.id, id), eq(funnels.userId, userId)));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async getFunnelStages(funnelId: number, userId: number): Promise<FunnelStageTypeFromSchema[]> {
+    const funnelOwner = await db.select({ id: funnels.id }).from(funnels)
+      .where(and(eq(funnels.id, funnelId), eq(funnels.userId, userId)))
+      .limit(1);
+    if (!funnelOwner.length) {
+      // Lançar erro ou retornar array vazio dependendo da política de erro
+      throw new Error("Funil não encontrado ou não pertence ao usuário.");
+    }
+    return db.select().from(funnelStages)
+      .where(eq(funnelStages.funnelId, funnelId))
+      .orderBy(asc(funnelStages.order), desc(funnelStages.createdAt)); 
+  }
+
+  async createFunnelStage(stageData: InsertFunnelStage): Promise<FunnelStageTypeFromSchema> {
+    const [newStage] = await db.insert(funnelStages).values(stageData).returning();
+    if (!newStage) throw new Error("Falha ao criar etapa do funil.");
+    return newStage;
+  }
+
+  async updateFunnelStage(id: number, stageData: Partial<Omit<InsertFunnelStage, 'funnelId'>>, userId: number): Promise<FunnelStageTypeFromSchema | undefined> {
+    // Verificar se a etapa pertence a um funil do usuário (verificação de permissão)
+    const existingStage = await db.query.funnelStages.findFirst({
+        where: eq(funnelStages.id, id),
+        with: {
+            funnel: {
+                columns: { userId: true }
+            }
+        }
+    });
+
+    if (!existingStage || existingStage.funnel?.userId !== userId) {
+        throw new Error("Etapa do funil não encontrada ou não pertence ao usuário.");
+    }
+
+    const [updatedStage] = await db.update(funnelStages)
+      .set({ ...stageData, updatedAt: new Date() })
+      .where(eq(funnelStages.id, id)) 
+      .returning();
+    return updatedStage;
+  }
+
+  async deleteFunnelStage(id: number, userId: number): Promise<boolean> {
+    const existingStage = await db.query.funnelStages.findFirst({
+        where: eq(funnelStages.id, id),
+        with: {
+            funnel: {
+                columns: { userId: true }
+            }
+        }
+    });
+    
+    if (!existingStage || existingStage.funnel?.userId !== userId) {
+        throw new Error("Etapa do funil não encontrada ou não pertence ao usuário para exclusão.");
+    }
+
+    const result = await db.delete(funnelStages).where(eq(funnelStages.id, id));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+
+  async getDashboardData(userId: number, timeRange: string = '30d') {
+    const now = new Date();
+    let startDate = new Date();
+    if (timeRange === '7d') {
+        startDate.setDate(now.getDate() - 7);
+    } else { 
+        startDate.setDate(now.getDate() - 30);
+    }
+
+    const metricsTimeCondition = and(
+        eq(metrics.userId, userId),
+        gte(metrics.date, startDate) 
+    );
+
+    const budgetsUserCondition = eq(budgets.userId, userId);
+
+    const activeCampaignsResult = await db.select({ count: count() }).from(campaigns)
+      .where(and(eq(campaigns.userId, userId), eq(campaigns.status, 'active')));
+    const activeCampaigns = activeCampaignsResult[0]?.count || 0;
+
+    const totalSpentResult = await db.select({
+        total: sum(budgets.spentAmount) 
+    })
+      .from(budgets)
+      .where(budgetsUserCondition);
+    const totalSpent = parseFloat(String(totalSpentResult[0]?.total || "0")) || 0;
+
+    const totalConversionsResult = await db.select({ total: sum(metrics.conversions) })
+      .from(metrics)
+      .where(metricsTimeCondition); 
+    const conversions = parseFloat(String(totalConversionsResult[0]?.total || '0')) || 0;
+
+    const totalRevenueResult = await db.select({ total: sum(metrics.revenue) })
+      .from(metrics)
+      .where(metricsTimeCondition); 
+    const totalRevenue = parseFloat(String(totalRevenueResult[0]?.total || '0')) || 0;
+
+    const totalCostResult = await db.select({ total: sum(metrics.cost) })
+      .from(metrics)
+      .where(metricsTimeCondition); 
+    const totalCost = parseFloat(String(totalCostResult[0]?.total || '0')) || 0;
+
+    const avgROI = totalCost > 0 ? parseFloat((((totalRevenue - totalCost) / totalCost) * 100).toFixed(2)) : 0;
+
+    const totalImpressionsResult = await db.select({ total: sum(metrics.impressions) })
+      .from(metrics)
+      .where(metricsTimeCondition); 
+    const impressions = parseFloat(String(totalImpressionsResult[0]?.total || '0')) || 0;
+
+    const totalClicksResult = await db.select({ total: sum(metrics.clicks) })
+      .from(metrics)
+      .where(metricsTimeCondition); 
+    const clicks = parseFloat(String(totalClicksResult[0]?.total || '0')) || 0;
+
+    const ctr = clicks > 0 && impressions > 0 ? parseFloat(((clicks / impressions) * 100).toFixed(2)) : 0;
+    const cpc = clicks > 0 && totalCost > 0 ? parseFloat((totalCost / clicks).toFixed(2)) : 0;
+
+    const metricsData = {
+      activeCampaigns: activeCampaigns,
+      totalSpent: totalSpent, 
+      conversions: conversions, 
+      avgROI: avgROI, 
+      impressions: impressions, 
+      clicks: clicks, 
+      ctr: ctr, 
+      cpc: cpc 
+    };
+
+    const campaignsChange = parseFloat((Math.random() * 20 - 10).toFixed(1)); 
+    const spentChange = parseFloat((Math.random() * 20 - 10).toFixed(1)); 
+    const conversionsChange = parseFloat((Math.random() * 30 - 15).toFixed(1)); 
+    const roiChange = parseFloat((Math.random() * 10 - 5).toFixed(1)); 
+
+    const trends = {
+      campaignsChange,
+      spentChange,
+      conversionsChange,
+      roiChange,
+    };
+
+    const recentCampaignsRaw = await db.select().from(campaigns)
+      .where(eq(campaigns.userId, userId))
+      .orderBy(desc(campaigns.createdAt))
+      .limit(3);
+
+    const recentCampaigns = recentCampaignsRaw.map(c => ({
+      id: c.id,
+      name: c.name,
+      description: c.description || 'Nenhuma descrição',
+      status: c.status,
+      platforms: c.platforms || [],
+      budget: parseFloat(String(c.budget ?? '0')) || 0, 
+      spent: parseFloat(String(c.dailyBudget ?? '0')) || 0, 
+      performance: Math.floor(Math.random() * (95 - 60 + 1)) + 60 
+    }));
+
+    const timeSeriesData = generateSimulatedLineChartData('Desempenho Geral', 1000, timeRange === '30d' ? 30 : 7, 50, chartColors.palette[0]);
+    const channelPerformanceData = generateSimulatedDoughnutChartData(['Meta Ads', 'Google Ads', 'LinkedIn', 'TikTok'], 20, 10, chartColors.palette);
+    const conversionData = generateSimulatedLineChartData('Conversões', 200, timeRange === '30d' ? 30 : 7, 30, chartColors.palette[1]);
+    const roiData = generateSimulatedBarChartData('ROI (%)', ['Meta Ads', 'Google Ads', 'LinkedIn', 'TikTok'], 250, 100, chartColors.palette);
+
+    return {
+      metrics: metricsData,
+      recentCampaigns: recentCampaigns,
+      alertCount: (await db.select({ count: count() }).from(alerts).where(and(eq(alerts.userId, userId), eq(alerts.isRead, false))))[0]?.count || 0,
+      trends: trends,
+      timeSeriesData: timeSeriesData,
+      channelPerformanceData: channelPerformanceData,
+      conversionData: conversionData,
+      roiData: roiData,
+    };
+  }
+}
+
+export const storage = new DatabaseStorage();
