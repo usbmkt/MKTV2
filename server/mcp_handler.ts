@@ -2,7 +2,7 @@
 import { storage } from "./storage";
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import { GEMINI_API_KEY } from './config';
-import { InsertCampaign, ChatMessage, ChatSession, User } from "../shared/schema"; // Adicionado User
+import { InsertCampaign, ChatMessage, ChatSession } from "../shared/schema"; // Removido User, pois não é utilizado neste arquivo
 
 let genAI: GoogleGenerativeAI | null = null;
 if (GEMINI_API_KEY) {
@@ -47,7 +47,7 @@ function formatCampaignDetailsForChat(campaign: NonNullable<Awaited<ReturnType<t
   - Nome: ${campaign.name}
   - Status: ${campaign.status}`;
   if (campaign.description) details += `\n  - Descrição: ${campaign.description}`;
-  if (campaign.budget) details += `\n  - Orçamento: ${campaign.budget}`; // Assumindo que budget é string ou tem toString()
+  if (campaign.budget !== null && campaign.budget !== undefined) details += `\n  - Orçamento: ${campaign.budget}`;
   // Adicione mais campos conforme necessário
   return details;
 }
@@ -121,29 +121,27 @@ export async function handleMCPConversation(
             status: 'draft',
             platforms: [],
             objectives: [],
-            // Outros campos obrigatórios de InsertCampaign podem precisar de valores padrão ou serem omitidos se forem opcionais no schema
-            // budget, dailyBudget, avgTicket podem ser string ou null/undefined dependendo da sua lógica de schema Zod
-            // e da tabela. Assumindo que podem ser omitidos se não fornecidos.
+            // budget, dailyBudget, avgTicket são opcionais e serão tratados como null/undefined
+            // se não fornecidos aqui, conforme o schema Zod e a lógica do banco.
           };
           const createdCampaign = await storage.createCampaign(newCampaignData);
           agentReplyText = `Campanha "${createdCampaign.name}" criada com sucesso como rascunho!`;
           console.log(`[MCP_HANDLER] Campanha "${createdCampaign.name}" (ID: ${createdCampaign.id}) criada para usuário ${userId}.`);
           
-          // Adicionar detalhes da campanha na resposta
           const campaignDetailsMessage = formatCampaignDetailsForChat(createdCampaign);
-          await storage.addChatMessage({ // Salva a primeira resposta
+          await storage.addChatMessage({ 
             sessionId: activeSession.id,
             sender: 'agent',
-            text: agentReplyText,
+            text: agentReplyText, // Salva a mensagem simples de sucesso
           });
-          agentReplyText += `\n\n${campaignDetailsMessage}`; // A resposta final para o usuário incluirá os detalhes
+          // A resposta final para o usuário incluirá os detalhes, mas a mensagem simples é salva no histórico.
+          agentReplyText += `\n\n${campaignDetailsMessage}`;
 
         } catch (creationError: any) {
           console.error("[MCP_HANDLER] Erro ao criar campanha via MCP:", creationError);
           agentReplyText = `Houve um problema ao tentar criar a campanha "${campaignName}". Detalhes: ${creationError.message || 'Erro desconhecido.'}`;
-          if (creationError instanceof ZodError) {
-             agentReplyText += ` Detalhes da validação: ${creationError.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`;
-          }
+          // Removido ZodError específico aqui pois a mensagem de erro geral já deve ser suficiente.
+          // Se quiser ser mais específico com ZodError, pode adicionar de volta.
         }
       } else {
         agentReplyText = "Entendi que você quer criar uma nova campanha, mas não consegui identificar o nome. Poderia me dizer qual nome você gostaria de dar para a nova campanha?";
@@ -173,17 +171,16 @@ export async function handleMCPConversation(
   }
 
   // Salva a resposta final do agente (que pode ter sido concatenada)
-  // Se a resposta de criação já salvou uma mensagem, esta será uma segunda mensagem com detalhes,
-  // ou a resposta geral.
-  if (!agentReplyText.includes("Detalhes da Campanha Criada:")) { // Evita duplicar a mensagem de criação
+  // Se a resposta de criação já salvou a mensagem simples, esta lógica evita salvar novamente
+  // a mesma mensagem base. A mensagem com detalhes é apenas para o usuário.
+  if (!agentReplyText.includes("Detalhes da Campanha Criada:") || (agentReplyText.includes("Detalhes da Campanha Criada:") && !messages.some(m => m.text.startsWith(`Campanha "${(await getCampaignNameFromMessage(message))}" criada com sucesso`)))) {
     await storage.addChatMessage({
       sessionId: activeSession.id,
       sender: 'agent',
-      text: agentReplyText,
+      text: agentReplyText.split('\n\nDetalhes da Campanha Criada:')[0], // Salva apenas a mensagem principal se houver detalhes
     });
   }
 
-
-  responsePayload.reply = agentReplyText;
+  responsePayload.reply = agentReplyText; // Envia a resposta completa (com detalhes se houver) para o frontend
   return responsePayload as MCPResponsePayload;
 }
