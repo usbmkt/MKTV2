@@ -5,8 +5,15 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1748526310169, 
+      "when": 1748526310169,
       "tag": "0000_dusty_dexter_bennett",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1748715954137,
+      "tag": "0001_faithful_maestro",
       "breakpoints": true
     }
   ]
