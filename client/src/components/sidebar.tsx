@@ -6,8 +6,9 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useAuthStore } from '@/lib/auth';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { cn } from '@/lib/utils';
-import { useQuery } from '@tanstack/react-query'; // Importar useQuery
-import { apiRequest } from '@/lib/api'; // Importar apiRequest
+import { useQuery } from '@tanstack/react-query';
+import { apiRequest } from '@/lib/api';
+import LogoPng from '@/assets/img/logo.png'; // Importando o logo PNG
 import {
   LayoutDashboard,
   Megaphone,
@@ -20,7 +21,6 @@ import {
   MessageCircle,
   Download,
   LogOut,
-  Rocket,
   Globe,
   ChevronLeft,
   ChevronRight,
@@ -36,9 +36,9 @@ const menuItems = [
   { path: '/funnel', label: 'Funil', icon: Filter },
   { path: '/copy', label: 'Copy & IA', icon: PenTool },
   { path: '/metrics', label: 'Métricas', icon: TrendingUp },
-  { path: '/alerts', label: 'Alertas', icon: Bell },
+  { path: '/alerts', label: 'Alertas', icon: Bell, notificationKey: 'alerts' },
   { path: '/whatsapp', label: 'WhatsApp', icon: MessageCircle },
-  { path: '/integrations', label: 'Integrações', icon: Rocket },
+  { path: '/integrations', label: 'Integrações', icon: Settings },
   { path: '/export', label: 'Exportar', icon: Download },
 ];
 
@@ -50,23 +50,22 @@ interface DashboardData {
 
 export default function Sidebar() {
   const [location] = useLocation();
-  const { user, logout } = useAuthStore();
+  const { user, logout, isAuthenticated } = useAuthStore(); // Adicionado isAuthenticated
   const [isCollapsed, setIsCollapsed] = useState(false);
 
-  // Query para buscar dados do dashboard, incluindo alertCount
   const { data: dashboardData } = useQuery<DashboardData>({
-    queryKey: ['dashboardData'],
+    queryKey: ['dashboardDataSidebar'], 
     queryFn: async () => {
-      if (!user) return { metrics: {}, recentCampaigns: [], alertCount: 0 }; // Não busca se não houver usuário
-      const response = await apiRequest('GET', '/api/dashboard');
+      if (!user) return { metrics: {}, recentCampaigns: [], alertCount: 0 };
+      const response = await apiRequest('GET', '/api/dashboard?timeRange=30d'); 
       if (!response.ok) {
         console.error('Erro ao buscar dados do dashboard para a sidebar');
-        return { metrics: {}, recentCampaigns: [], alertCount: 0 }; // Retorna um valor padrão em caso de erro
+        return { metrics: {}, recentCampaigns: [], alertCount: 0 };
       }
       return response.json();
     },
-    enabled: !!user, // A query só é habilitada se houver um usuário logado
-    staleTime: 5 * 60 * 1000, // Cache por 5 minutos
+    enabled: !!user && isAuthenticated, // Modificado para depender de isAuthenticated também
+    staleTime: 5 * 60 * 1000, 
   });
 
   const alertCount = dashboardData?.alertCount || 0;
@@ -86,25 +85,27 @@ export default function Sidebar() {
   return (
     <aside 
       className={cn(
-        "neu-sidebar flex flex-col h-full",
+        "neu-sidebar flex flex-col h-full transition-all duration-300 ease-in-out",
         isCollapsed ? "w-[72px]" : "w-60"
       )}
     >
       <div className={cn(
-          "p-4 flex items-center border-b border-sidebar-border shrink-0", 
+          "p-3 flex items-center border-b border-sidebar-border shrink-0", 
           isCollapsed ? "justify-center h-[72px]" : "justify-start h-[72px]"
         )}
       >
-        <Link href="/dashboard" className={cn("flex items-center gap-2 group", isCollapsed ? "" : "neu-card p-2")}>
-            <Rocket 
+        <Link href="/dashboard" className={cn("flex items-center gap-2 group outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar-background rounded-md", isCollapsed ? "p-1" : "neu-card p-2")}>
+            <img 
+              src={LogoPng} 
+              alt="USB MKT Logo" 
               className={cn(
-                "text-primary transition-all duration-300 ease-in-out group-hover:icon-neon-glow", // Adicionado group-hover
-                isCollapsed ? "w-7 h-7" : "w-6 h-6 animate-glow" 
+                "transition-all duration-300 ease-in-out",
+                isCollapsed ? "w-8 h-8" : "w-7 h-7" 
               )} 
             />
             {!isCollapsed && (
-              <h1 className="text-base font-bold text-foreground gradient-primary bg-clip-text text-transparent group-hover:text-neon-glow"> {/* Adicionado group-hover */}
-                USB MKT
+              <h1 className="text-sm font-bold text-foreground gradient-primary bg-clip-text text-transparent group-hover:text-neon-glow">
+                USB MKT PRO
               </h1>
             )}
         </Link>
@@ -114,11 +115,13 @@ export default function Sidebar() {
         {menuItems.map((item) => {
           const Icon = item.icon;
           const isActive = location === item.path || (location === '/' && item.path === '/dashboard');
+          const hasNotification = item.notificationKey === 'alerts' && user && alertCount > 0;
+          
           return (
             <Link key={item.path} href={item.path} title={isCollapsed ? item.label : undefined}>
               <div 
                 className={cn(
-                  "sidebar-link group",
+                  "sidebar-link group relative", 
                   isActive && "active",
                   isCollapsed ? "justify-center aspect-square p-0" : "px-3 py-2.5 space-x-2.5"
                 )}
@@ -131,8 +134,11 @@ export default function Sidebar() {
                 {!isCollapsed && (
                   <span className={cn("sidebar-link-text text-xs font-medium truncate", isActive && "text-neon-glow")}>{item.label}</span>
                 )}
-                {!isCollapsed && item.path === '/alerts' && user && alertCount > 0 && (
-                  <span className="alert-badge">{alertCount > 9 ? '9+' : alertCount}</span>
+                {!isCollapsed && hasNotification && (
+                  <span className="alert-badge ml-auto">{alertCount > 9 ? '9+' : alertCount}</span>
+                )}
+                 {isCollapsed && hasNotification && (
+                  <span className="absolute top-1 right-1 w-2 h-2 bg-destructive rounded-full border-2 border-sidebar-background"></span>
                 )}
               </div>
             </Link>
@@ -161,7 +167,7 @@ export default function Sidebar() {
         </Button>
       </div>
 
-      {!isCollapsed && user && ( // Mostrar perfil apenas se logado e não colapsado
+      {!isCollapsed && user && (
         <div className="p-2.5 border-t border-sidebar-border shrink-0">
           <div className="neu-card p-2.5">
             <div className="flex items-center space-x-2">
@@ -181,7 +187,9 @@ export default function Sidebar() {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={logout}
+                onClick={() => {
+                  logout();
+                }}
                 className="theme-toggle-button p-1.5 text-muted-foreground hover:text-destructive"
                 title="Sair"
               >
