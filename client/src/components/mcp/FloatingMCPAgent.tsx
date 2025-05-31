@@ -6,7 +6,7 @@ import { ChatPanel } from './ChatPanel';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/lib/auth';
 import { useLocation } from 'wouter';
-// import { BotMessageSquare } from 'lucide-react'; // Alternativa se não tiver imagem
+// import { BotMessageSquare } from 'lucide-react'; 
 
 export const FloatingMCPAgent: React.FC = () => {
   const { isPanelOpen, togglePanel, setNavigateFunction } = useMCPStore();
@@ -34,14 +34,13 @@ export const FloatingMCPAgent: React.FC = () => {
         )}
         aria-label="Abrir Agente MCP"
       >
-        {/* Envolver a imagem em um span para garantir que o Button tenha um único filho direto */}
-        <span className="flex items-center justify-center w-full h-full">
+        <span className="flex items-center justify-center w-full h-full"> {/* MODIFICAÇÃO: Wrapper span */}
           <img 
-              src="/ubie-logo.svg" // Coloque seu logo para "Ubie" em client/public/ubie-logo.svg (ou .png)
+              src="/ubie-logo.svg" 
               alt="Ubie Agente MCP" 
               className="h-8 w-8 object-contain" 
           />
-          {/* Alternativa com Lucide Icon: <BotMessageSquare className="h-7 w-7" /> */}
+          {/* Alternativa: <BotMessageSquare className="h-7 w-7" /> */}
         </span>
       </Button>
       <ChatPanel />
