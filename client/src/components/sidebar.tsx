@@ -11,7 +11,7 @@ import { apiRequest } from '@/lib/api';
 import {
   LayoutDashboard,
   Megaphone,
-  Image as ImageIconLucide, // Renomeado para evitar conflito com tag <img>
+  Image as ImageIconLucide,
   DollarSign,
   Filter as FilterIcon,
   PenTool,
@@ -20,12 +20,18 @@ import {
   MessageCircle,
   Download,
   LogOut,
-  // Rocket, // Removido se o logo substituir completamente
+  Rocket, // <--- ROCKET RESTAURADO AQUI
   Globe,
   ChevronLeft,
   ChevronRight,
   Settings,
 } from 'lucide-react';
+
+interface DashboardData {
+  metrics: any;
+  recentCampaigns: any[];
+  alertCount: number;
+}
 
 const menuItems = [
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -38,15 +44,9 @@ const menuItems = [
   { path: '/metrics', label: 'Métricas', icon: TrendingUp },
   { path: '/alerts', label: 'Alertas', icon: Bell },
   { path: '/whatsapp', label: 'WhatsApp', icon: MessageCircle },
-  { path: '/integrations', label: 'Integrações', icon: Rocket }, // Mantive Rocket aqui por exemplo
+  { path: '/integrations', label: 'Integrações', icon: Rocket }, // Rocket é usado aqui
   { path: '/export', label: 'Exportar', icon: Download },
 ];
-
-interface DashboardData {
-  metrics: any;
-  recentCampaigns: any[];
-  alertCount: number;
-}
 
 export default function Sidebar() {
   const [location] = useLocation();
@@ -56,11 +56,11 @@ export default function Sidebar() {
   const { data: dashboardData } = useQuery<DashboardData>({
     queryKey: ['dashboardData'],
     queryFn: async () => {
-      if (!user) return { metrics: {}, recentCampaigns: [], alertCount: 0 };
+      if (!user) return { metrics: {}, recentCampaigns: [], alertCount: 0 }; 
       const response = await apiRequest('GET', '/api/dashboard');
       if (!response.ok) {
         console.error('Erro ao buscar dados do dashboard para a sidebar');
-        return { metrics: {}, recentCampaigns: [], alertCount: 0 };
+        return { metrics: {}, recentCampaigns: [], alertCount: 0 }; 
       }
       return response.json();
     },
@@ -70,7 +70,16 @@ export default function Sidebar() {
 
   const alertCount = dashboardData?.alertCount || 0;
   const toggleSidebar = () => setIsCollapsed(!isCollapsed);
-  const getUserInitials = (username: string | undefined) => { /* ... (como antes) ... */ };
+  
+  const getUserInitials = (username: string | undefined) => {
+    if (!username) return 'U';
+    return username
+      .split(' ')
+      .map(name => name[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+  };
 
   return (
     <aside 
@@ -85,11 +94,10 @@ export default function Sidebar() {
         )}
       >
         <Link href="/dashboard" className={cn("flex items-center gap-2 group", isCollapsed ? "" : "p-1")}>
-            {/* LOGO ADICIONADO AQUI */}
             <img 
-              src="/logo-usbmkt.svg" // Coloque seu logo em client/public/logo-usbmkt.svg (ou .png)
+              src="/logo-usbmkt.svg" 
               alt="USB MKT PRO Logo" 
-              className={cn(isCollapsed ? "w-8 h-8" : "w-10 h-10", "object-contain")} // Ajuste tamanho conforme necessário
+              className={cn(isCollapsed ? "w-8 h-8" : "w-10 h-10", "object-contain")}
             />
             {!isCollapsed && (
               <h1 className="text-lg font-bold text-foreground gradient-primary bg-clip-text text-transparent group-hover:text-neon-glow ml-1">
@@ -128,8 +136,6 @@ export default function Sidebar() {
           );
         })}
       </nav>
-
-      {/* ... (Restante do código da Sidebar como antes, com ThemeToggle e Perfil do Usuário) ... */}
       <div className={cn( "px-2.5 py-3 border-t border-sidebar-border mt-auto shrink-0", isCollapsed ? "space-y-2" : "flex items-center justify-between gap-2" )} > <div className={cn(isCollapsed ? "w-full flex justify-center" : "")}> <ThemeToggle /> </div> <Button variant="ghost" onClick={toggleSidebar} className={cn( "theme-toggle-button text-muted-foreground hover:text-foreground", isCollapsed ? "w-full" : "p-2" )} title={isCollapsed ? "Expandir sidebar" : "Recolher sidebar"} > {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />} </Button> </div>
       {!isCollapsed && user && ( <div className="p-2.5 border-t border-sidebar-border shrink-0"> <div className="neu-card p-2.5"> <div className="flex items-center space-x-2"> <Avatar className="w-9 h-9 neu-card-inset p-0.5"> <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold"> {getUserInitials(user?.username)} </AvatarFallback> </Avatar> <div className="flex-1 min-w-0"> <p className="text-xs font-semibold text-foreground truncate"> {user?.username} </p> <p className="text-[0.7rem] text-muted-foreground truncate"> {user?.email} </p> </div> <Button variant="ghost" size="icon" onClick={logout} className="theme-toggle-button p-1.5 text-muted-foreground hover:text-destructive" title="Sair" > <LogOut className="w-3.5 h-3.5" /> </Button> </div> </div> </div> )}
     </aside>
