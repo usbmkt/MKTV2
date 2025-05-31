@@ -1,5 +1,8 @@
 // client/src/config/copyConfigurations.ts
-import type { BaseGeneratorFormState } from '@/pages/CopyPage'; // Ajuste o caminho se BaseGeneratorFormState for exportado de CopyPage
+// Importe BaseGeneratorFormState de onde ele será definido, ex: diretamente em CopyPage.tsx ou um arquivo de tipos compartilhado
+// Por agora, vamos assumir que CopyPage.tsx exportará ou o definirá localmente e passará quando necessário.
+// Se BaseGeneratorFormState for usado aqui, precisaria ser importado ou definido aqui.
+// Para este exemplo, vou assumir que CopyPage.tsx lida com BaseGeneratorFormState e passa para promptEnhancer.
 
 export type LaunchPhase = 'pre_launch' | 'launch' | 'post_launch';
 
@@ -13,7 +16,7 @@ export interface FieldDefinition {
   options?: Array<{ value: string; label: string }>;
   defaultValue?: string | number | boolean;
   dependsOn?: string;
-  showIf?: (formData: Record<string, any>, baseData?: BaseGeneratorFormState) => boolean;
+  showIf?: (formData: Record<string, any>, baseData?: any /* BaseGeneratorFormState */) => boolean;
 }
 
 export interface CopyPurposeConfig {
@@ -22,17 +25,14 @@ export interface CopyPurposeConfig {
   phase: LaunchPhase;
   fields: FieldDefinition[];
   category: string;
-  // promptEnhancer pode ser usado no backend se você quiser customizar prompts lá
-  promptEnhancer?: (basePrompt: string, details: Record<string, any>, baseForm: BaseGeneratorFormState) => string;
+  // promptEnhancer?: (basePrompt: string, details: Record<string, any>, baseForm: BaseGeneratorFormState) => string; // Ajustar tipo de baseForm se necessário
 }
 
-// Definição da configuração (use a lista completa que você forneceu em seu prompt anterior)
-// Incluí os exemplos que você detalhou e placeholders para os demais.
-// VOCÊ DEVE COMPLETAR OS CAMPOS 'fields' PARA CADA 'placeholderFields'.
+// Definição da configuração (conforme seu prompt detalhado)
 const placeholderFields: FieldDefinition[] = [
   { name: 'mainPoint', label: 'Ponto Principal*', type: 'textarea', placeholder: 'Qual a mensagem chave para esta copy?', tooltip: 'Descreva o cerne da copy.', required: true },
   { name: 'secondaryDetail', label: 'Detalhe Secundário', type: 'text', placeholder: 'Alguma informação complementar importante?', tooltip: 'Adicione um detalhe que enriqueça a copy.' },
-  { name: 'specificCTA', label: 'Chamada para Ação Específica', type: 'text', placeholder: 'Ex: "Clique e descubra!"', tooltip: 'Qual ação o usuário deve tomar ao final desta copy?', defaultValue: 'Saiba Mais' }
+  { name: 'specificCTA', label: 'Chamada para Ação Específica', type: 'text', placeholder: 'Ex: "Saiba Mais Agora Mesmo!"', tooltip: 'Qual ação o usuário deve tomar ao final desta copy?', defaultValue: 'Veja Mais' }
 ];
 
 export const allCopyPurposesConfig: CopyPurposeConfig[] = [
@@ -71,7 +71,7 @@ export const allCopyPurposesConfig: CopyPurposeConfig[] = [
   },
   {
     key: 'prelaunch_email_welcome_confirmation',
-    label: 'E-mail: Boas-vindas e Confirmação de Inscrição',
+    label: 'E-mail: Boas-vindas e Confirmação',
     phase: 'pre_launch',
     category: 'E-mails (Pré-Lançamento)',
     fields: [
@@ -85,16 +85,16 @@ export const allCopyPurposesConfig: CopyPurposeConfig[] = [
   },
   {
     key: 'prelaunch_social_post_value_engagement',
-    label: 'Post Social: Conteúdo de Valor (Educação/Engajamento)',
+    label: 'Post Social: Conteúdo de Valor',
     phase: 'pre_launch',
     category: 'Posts Redes Sociais (Pré-Lançamento)',
     fields: [
       { name: 'postTopic', label: 'Tópico Central do Post *', type: 'text', placeholder: 'Ex: 3 Mitos sobre Investimentos', tooltip: 'Sobre qual assunto específico será o post?', required: true },
       { name: 'postFormatSuggestion', label: 'Formato Sugerido', type: 'select', options: [{value: 'carrossel', label: 'Carrossel'}, {value: 'reels_script', label: 'Roteiro Reels/TikTok'}, {value: 'imagem_unica_texto', label: 'Imagem Única com Texto Longo'}, {value: 'enquete_story', label: 'Enquete para Story'}], tooltip: 'Qual formato visual/de conteúdo é mais adequado?', defaultValue: 'carrossel'},
       { name: 'mainTeachingPoint', label: 'Principal Ensinamento/Dica *', type: 'textarea', placeholder: 'Ex: A importância de começar pequeno.', tooltip: 'Qual a mensagem chave ou lição que o público deve tirar?', required: true},
-      { name: 'supportingPoints', label: 'Pontos de Suporte/Detalhes (1 por linha)', type: 'textarea', placeholder: 'Ex:\n- Dica prática 1...\n- Exemplo real...', tooltip: 'Detalhes, exemplos ou passos que sustentam o ensinamento principal.'},
+      { name: 'supportingPoints', label: 'Pontos de Suporte (1 por linha)', type: 'textarea', placeholder: 'Ex:\n- Dica prática 1...\n- Exemplo real...', tooltip: 'Detalhes, exemplos ou passos que sustentam o ensinamento principal.'},
       { name: 'engagementPrompt', label: 'Chamada para Engajamento *', type: 'text', placeholder: 'Ex: "Qual sua maior dificuldade sobre X? Comenta aqui!"', tooltip: 'Como incentivar comentários, salvamentos, compartilhamentos?', required: true},
-      { name: 'relevantHashtags', label: 'Hashtags Relevantes (separadas por vírgula)', type: 'text', placeholder: 'Ex: #dicasfinanceiras, #produtividade', tooltip: 'Sugestões de hashtags.'}
+      { name: 'relevantHashtags', label: 'Hashtags Relevantes (,)', type: 'text', placeholder: '#dicasfinanceiras, #produtividade', tooltip: 'Sugestões de hashtags.'}
     ]
   },
   // --- LANÇAMENTO ---
@@ -154,7 +154,6 @@ export const allCopyPurposesConfig: CopyPurposeConfig[] = [
       { name: 'feedbackRequestLink', label: 'Link para Pesquisa de Feedback (Opcional)', type: 'text', placeholder: 'Ex: https://forms.gle/suapesquisa', tooltip: 'Se for pedir feedback, coloque o link aqui.'},
     ],
   },
-  // Exemplos de placeholders - VOCÊ PRECISA COMPLETAR OS 'fields'
   { key: 'prelaunch_ad_waitlist_vip', label: 'Anúncio: Lista de Espera/VIP', phase: 'pre_launch', category: 'Anúncios (Pré-Lançamento)', fields: placeholderFields },
   { key: 'prelaunch_social_post_anticipation', label: 'Post Social: Curiosidade/Antecipação', phase: 'pre_launch', category: 'Posts Redes Sociais (Pré-Lançamento)', fields: placeholderFields },
   { key: 'prelaunch_landing_page_title', label: 'Página de Captura: Título Principal', phase: 'pre_launch', category: 'Página de Captura', fields: placeholderFields },
@@ -169,9 +168,3 @@ export const allCopyPurposesConfig: CopyPurposeConfig[] = [
   { key: 'postlaunch_email_upsell_cross_sell', label: 'E-mail: Upsell/Cross-sell para Compradores', phase: 'post_launch', category: 'E-mails (Pós-Lançamento)', fields: placeholderFields },
   { key: 'postlaunch_social_post_student_results', label: 'Post Social: Resultados de Alunos/Clientes', phase: 'post_launch', category: 'Posts Redes Sociais (Pós-Lançamento)', fields: placeholderFields }
 ];
-
-// É importante exportar tipos que CopyPage.tsx usará se eles não estiverem em shared/schema.ts
-// ou se forem específicos para esta configuração.
-// No caso de BaseGeneratorFormState, ele é usado em CopyPage.tsx.
-// Para simplificar, CopyPage.tsx pode definir seus próprios tipos locais ou importá-los daqui.
-// Vou assumir que CopyPage.tsx definirá ou importará BaseGeneratorFormState etc.
