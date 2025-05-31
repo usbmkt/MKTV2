@@ -30,7 +30,7 @@ export const userRelations = relations(users, ({ many }) => ({
   budgets: many(budgets),
   landingPages: many(landingPages),
   chatSessions: many(chatSessions),
-  funnels: many(funnels), // Adicionado relacionamento com funis
+  funnels: many(funnels),
 }));
 
 export const campaigns = pgTable("campaigns", {
@@ -62,7 +62,7 @@ export const campaignRelations = relations(campaigns, ({ one, many }) => ({
   copies: many(copies),
   alerts: many(alerts),
   budgets: many(budgets),
-  funnels: many(funnels), // Adicionado relacionamento com funis
+  funnels: many(funnels),
 }));
 
 export const creatives = pgTable("creatives", {
@@ -216,7 +216,6 @@ export const chatMessageRelations = relations(chatMessages, ({ one }) => ({
   session: one(chatSessions, { fields: [chatMessages.sessionId], references: [chatSessions.id] }),
 }));
 
-// Definição da tabela 'funnels'
 export const funnels = pgTable("funnels", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
@@ -233,14 +232,13 @@ export const funnelRelations = relations(funnels, ({ one, many }) => ({
   stages: many(funnelStages),
 }));
 
-// Definição da tabela 'funnel_stages'
 export const funnelStages = pgTable("funnel_stages", {
   id: serial("id").primaryKey(),
   funnelId: integer("funnel_id").notNull().references(() => funnels.id, { onDelete: 'cascade' }),
   name: text("name").notNull(),
   description: text("description"),
   order: integer("order").notNull().default(0),
-  config: jsonb("config").$type<Record<string, any>>(), // Para configurações flexíveis da etapa
+  config: jsonb("config").$type<Record<string, any>>(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
@@ -248,11 +246,6 @@ export const funnelStages = pgTable("funnel_stages", {
 export const funnelStageRelations = relations(funnelStages, ({ one }) => ({
   funnel: one(funnels, { fields: [funnelStages.funnelId], references: [funnels.id] }),
 }));
-
-
-// ========================================================================
-// Schemas de Inserção e Tipos
-// ========================================================================
 
 export const insertUserSchema = createInsertSchema(users, {
   email: z.string().email("Email inválido."),
@@ -316,7 +309,7 @@ export const insertCreativeSchema = createInsertSchema(creatives, {
   fileUrl: z.string().nullable().optional(),
   campaignId: z.preprocess(
     (val) => {
-      if (val === "null" || val === "") {
+      if (val === "null" || val === "" || val === "NONE" || val === undefined) { // Adicionado "NONE"
         return null;
       }
       if (typeof val === 'number' || val === null) {
@@ -324,9 +317,9 @@ export const insertCreativeSchema = createInsertSchema(creatives, {
       }
       if (typeof val === 'string') {
         const parsed = parseInt(val);
-        return isNaN(parsed) ? undefined : parsed;
+        return isNaN(parsed) ? null : parsed; // Retorna null se não puder parsear
       }
-      return undefined;
+      return null; // Default to null
     },
     z.number().nullable().optional()
   ),
@@ -416,18 +409,17 @@ export const insertChatMessageSchema = createInsertSchema(chatMessages).omit({
   timestamp: true,
 });
 
-// Schemas de inserção para Funis
 export const insertFunnelSchema = createInsertSchema(funnels, {
   name: z.string().min(1, "Nome do funil é obrigatório."),
-  campaignId: z.preprocess( // Mesmo pré-processamento do campaignId em creatives
+  campaignId: z.preprocess(
     (val) => {
-      if (val === "null" || val === "") return null;
+      if (val === "null" || val === "" || val === "NONE" || val === undefined) return null;
       if (typeof val === 'number' || val === null) return val;
       if (typeof val === 'string') {
         const parsed = parseInt(val);
-        return isNaN(parsed) ? undefined : parsed;
+        return isNaN(parsed) ? null : parsed;
       }
-      return undefined;
+      return null;
     },
     z.number().nullable().optional()
   ),
@@ -439,7 +431,7 @@ export const insertFunnelSchema = createInsertSchema(funnels, {
 
 export const insertFunnelStageSchema = createInsertSchema(funnelStages, {
   name: z.string().min(1, "Nome da etapa é obrigatório."),
-  order: z.number().int().min(0, "Ordem deve ser um inteiro não negativo."),
+  order: z.number().int().min(0, "Ordem deve ser um inteiro não negativo.").default(0),
   config: z.record(z.any()).optional().nullable(),
 }).omit({
   id: true,
@@ -447,8 +439,6 @@ export const insertFunnelStageSchema = createInsertSchema(funnelStages, {
   updatedAt: true,
 });
 
-
-// Tipos para as tabelas (mantendo seu padrão)
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type InsertCampaign = z.infer<typeof insertCampaignSchema>;
@@ -471,8 +461,6 @@ export type InsertChatSession = z.infer<typeof insertChatSessionSchema>;
 export type ChatSession = typeof chatSessions.$inferSelect;
 export type InsertChatMessage = z.infer<typeof insertChatMessageSchema>;
 export type ChatMessage = typeof chatMessages.$inferSelect;
-
-// Novos tipos para Funis
 export type InsertFunnel = z.infer<typeof insertFunnelSchema>;
 export type Funnel = typeof funnels.$inferSelect;
 export type InsertFunnelStage = z.infer<typeof insertFunnelStageSchema>;
