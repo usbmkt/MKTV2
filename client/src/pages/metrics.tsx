@@ -1,418 +1,541 @@
-import { useQuery } from '@tanstack/react-query';
-import { apiRequest } from '@/lib/api';
+import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ResponsiveContainer, LineChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Line, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
-import type { SelectMetric } from '../../shared/schema'; // Corrigido para usar 'type' para importação de tipos
-import { AlertTriangle, TrendingUp, TrendingDown, DollarSign, ShoppingCart, Target, Users, Activity, Filter } from 'lucide-react';
-import { useMemo, useState } from 'react';
-import { format, parseISO } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select";
-import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { LineChart, BarChart, PieChart } from '@/components/charts';
+import { 
+  TrendingUp, 
+  TrendingDown, 
+  Eye, 
+  MousePointer, 
+  CreditCard, 
+  Users,
+  Calendar,
+  Download,
+  Filter
+} from 'lucide-react';
 
-// Interface para dados de métricas, incluindo nome da campanha opcional
-interface MetricWithCampaignName extends SelectMetric {
-    campaign?: {
-        name?: string | null;
-        id?: number | null;
-    } | null;
-}
+export default function Metrics() {
+  const [selectedPeriod, setSelectedPeriod] = useState('30d');
+  const [selectedCampaign, setSelectedCampaign] = useState('all');
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82Ca9D', '#FF7F50', '#DC143C'];
-const RADIAN = Math.PI / 180;
-
-// Função para renderizar rótulos customizados no gráfico de pizza
-const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, name }: any) => {
-    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-    const x = cx + radius * Math.cos(-midAngle * RADIAN);
-    const y = cy + radius * Math.sin(-midAngle * RADIAN);
-
-    if (percent * 100 < 5) return null; // Não renderiza labels muito pequenas para evitar sobreposição
-
-    return (
-        <text x={x} y={y} fill="white" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central">
-            {`${name} (${(percent * 100).toFixed(0)}%)`}
-        </text>
-    );
-};
-
-
-const MetricsPage = () => {
-    const [selectedCampaignId, setSelectedCampaignId] = useState<string>("all");
-
-    // Busca os dados de métricas da API
-    const { data: metricsData, isLoading, error } = useQuery<MetricWithCampaignName[]>({
-        queryKey: ['allUserMetrics'], // Chave da query para caching
-        queryFn: async () => apiRequest<MetricWithCampaignName[]>('/api/metrics', 'GET'), // Função que busca os dados
-    });
-
-    // Memoiza a lista de campanhas para o filtro dropdown
-    const campaignsList = useMemo(() => {
-        if (!metricsData) return [];
-        const campaignsMap = new Map<number, string>();
-        metricsData.forEach(metric => {
-            if (metric.campaign?.id && metric.campaign?.name) {
-                campaignsMap.set(metric.campaign.id, metric.campaign.name);
-            }
-        });
-        return Array.from(campaignsMap.entries()).map(([id, name]) => ({ id, name }));
-    }, [metricsData]);
-
-    // Memoiza as métricas filtradas com base na campanha selecionada
-    const filteredMetrics = useMemo(() => {
-        if (!metricsData) return [];
-        if (selectedCampaignId === "all") {
-            return metricsData; // Retorna todas as métricas se "Todas as Campanhas" estiver selecionado
-        }
-        return metricsData.filter(metric => metric.campaign?.id === parseInt(selectedCampaignId));
-    }, [metricsData, selectedCampaignId]);
-
-
-    // Memoiza as métricas agregadas (KPIs)
-    const aggregatedMetrics = useMemo(() => {
-        if (!filteredMetrics || filteredMetrics.length === 0) {
-            return { // Valores padrão se não houver métricas
-                totalImpressions: 0, totalClicks: 0, totalConversions: 0,
-                totalCost: 0, totalRevenue: 0, totalLeads: 0,
-                ctr: 0, cpc: 0, cpa: 0, roi: 0,
-            };
-        }
-        // Calcula os totais
-        const totals = filteredMetrics.reduce((acc, metric) => {
-            acc.totalImpressions += metric.impressions || 0;
-            acc.totalClicks += metric.clicks || 0;
-            acc.totalConversions += metric.conversions || 0;
-            acc.totalCost += parseFloat(metric.cost?.toString() || '0'); // Garante que é string antes do parseFloat
-            acc.totalRevenue += parseFloat(metric.revenue?.toString() || '0');
-            acc.totalLeads += metric.leads || 0;
-            return acc;
-        }, {
-            totalImpressions: 0, totalClicks: 0, totalConversions: 0,
-            totalCost: 0, totalRevenue: 0, totalLeads: 0,
-        });
-
-        // Calcula métricas derivadas (CTR, CPC, CPA, ROI)
-        const ctr = totals.totalImpressions > 0 ? (totals.totalClicks / totals.totalImpressions) * 100 : 0;
-        const cpc = totals.totalClicks > 0 ? totals.totalCost / totals.totalClicks : 0;
-        const cpa = totals.totalConversions > 0 ? totals.totalCost / totals.totalConversions : 0;
-        const roi = totals.totalCost > 0 ? ((totals.totalRevenue - totals.totalCost) / totals.totalCost) * 100 : (totals.totalRevenue > 0 ? Infinity : 0);
-
-        return { ...totals, ctr, cpc, cpa, roi };
-    }, [filteredMetrics]);
-
-    // Memoiza os dados para o gráfico de série temporal
-    const timeSeriesData = useMemo(() => {
-        if (!filteredMetrics) return [];
-        const series: { [date: string]: { date: string, impressions: number, clicks: number, cost: number, conversions: number } } = {};
-        filteredMetrics.forEach(m => {
-            const dateStr = m.date ? format(parseISO(m.date), 'dd/MM/yy', { locale: ptBR }) : 'N/A';
-            if (!series[dateStr]) {
-                series[dateStr] = { date: dateStr, impressions: 0, clicks: 0, cost: 0, conversions: 0 };
-            }
-            series[dateStr].impressions += m.impressions || 0;
-            series[dateStr].clicks += m.clicks || 0;
-            series[dateStr].cost += parseFloat(m.cost?.toString() || '0');
-            series[dateStr].conversions += m.conversions || 0;
-        });
-        // Ordena os dados por data para o gráfico
-        return Object.values(series).sort((a, b) => parseISO(a.date.split('/').reverse().join('-')).getTime() - parseISO(b.date.split('/').reverse().join('-')).getTime());
-    }, [filteredMetrics]);
-
-    // Memoiza os dados para os gráficos de pizza e barras (agrupados por campanha)
-    const metricsByCampaign = useMemo(() => {
-        if (!filteredMetrics) return [];
-        const byCampaign: { [campaignName: string]: { name: string, cost: number, revenue: number, conversions: number } } = {};
-        filteredMetrics.forEach(m => {
-            const campaignName = m.campaign?.name || 'Campanha Desconhecida';
-            if (!byCampaign[campaignName]) {
-                byCampaign[campaignName] = { name: campaignName, cost: 0, revenue: 0, conversions: 0 };
-            }
-            byCampaign[campaignName].cost += parseFloat(m.cost?.toString() || '0');
-            byCampaign[campaignName].revenue += parseFloat(m.revenue?.toString() || '0');
-            byCampaign[campaignName].conversions += m.conversions || 0;
-        });
-        return Object.values(byCampaign);
-    }, [filteredMetrics]);
-
-    // Renderiza Skeletons enquanto os dados estão carregando
-    if (isLoading) {
-        return (
-            <div className="p-6 space-y-6">
-                <div className="flex justify-between items-center">
-                    <Skeleton className="h-8 w-48" />
-                    <Skeleton className="h-10 w-64" />
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                    {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-32 w-full" />)}
-                </div>
-                <Skeleton className="h-96 w-full" />
-                <Skeleton className="h-64 w-full" />
-            </div>
-        );
+  // Dados de performance das campanhas
+  const campaignMetrics = [
+    {
+      id: 1,
+      name: 'Campanha E-commerce Q1',
+      platform: 'Facebook',
+      impressions: 125000,
+      clicks: 3750,
+      ctr: 3.0,
+      conversions: 189,
+      conversionRate: 5.04,
+      cost: 2350,
+      revenue: 9450,
+      roi: 302,
+      trend: 'up'
+    },
+    {
+      id: 2,
+      name: 'Google Ads - Produtos',
+      platform: 'Google',
+      impressions: 89000,
+      clicks: 2670,
+      ctr: 3.0,
+      conversions: 160,
+      conversionRate: 5.99,
+      cost: 1890,
+      revenue: 8000,
+      roi: 323,
+      trend: 'up'
+    },
+    {
+      id: 3,
+      name: 'Instagram Stories',
+      platform: 'Instagram',
+      impressions: 67000,
+      clicks: 2010,
+      ctr: 3.0,
+      conversions: 95,
+      conversionRate: 4.73,
+      cost: 1200,
+      revenue: 4750,
+      roi: 296,
+      trend: 'stable'
     }
+  ];
 
-    // Renderiza mensagem de erro se a busca falhar
-    if (error) {
-        return (
-            <div className="flex flex-col items-center justify-center h-full p-6">
-                <AlertTriangle className="w-16 h-16 text-red-500 mb-4" />
-                <h2 className="text-2xl font-semibold mb-2">Erro ao carregar métricas</h2>
-                <p className="text-muted-foreground">{(error as any)?.message || 'Não foi possível buscar os dados. Tente novamente mais tarde.'}</p>
-            </div>
-        );
-    }
+  // Dados do gráfico de performance temporal
+  const performanceData = {
+    labels: ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'],
+    datasets: [
+      {
+        label: 'Impressões',
+        data: [45000, 52000, 48000, 61000, 55000, 67000, 73000, 69000, 78000, 85000, 82000, 95000],
+        borderColor: 'rgb(59, 130, 246)',
+        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+        tension: 0.4
+      },
+      {
+        label: 'Cliques',
+        data: [1350, 1560, 1440, 1830, 1650, 2010, 2190, 2070, 2340, 2550, 2460, 2850],
+        borderColor: 'rgb(16, 185, 129)',
+        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+        tension: 0.4
+      }
+    ]
+  };
 
-    // Renderiza mensagem se não houver nenhuma métrica para o usuário (quando nenhum filtro é aplicado)
-    if (!metricsData || metricsData.length === 0 && selectedCampaignId === "all") {
-         return (
-            <div className="flex flex-col items-center justify-center h-full p-6">
-                <Activity className="w-16 h-16 text-gray-400 dark:text-gray-500 mb-4" />
-                <h2 className="text-2xl font-semibold mb-2">Nenhuma métrica encontrada</h2>
-                <p className="text-muted-foreground">Ainda não há dados de métricas para exibir.</p>
-                 <p className="text-muted-foreground mt-1">Experimente criar algumas campanhas e registrar métricas.</p>
-            </div>
-        );
-    }
+  // Dados do gráfico de conversões por plataforma
+  const platformData = {
+    labels: ['Facebook', 'Google Ads', 'Instagram', 'LinkedIn', 'TikTok'],
+    datasets: [{
+      data: [35, 28, 18, 12, 7],
+      backgroundColor: [
+        'rgba(59, 130, 246, 0.8)',
+        'rgba(16, 185, 129, 0.8)',
+        'rgba(245, 101, 101, 0.8)',
+        'rgba(251, 191, 36, 0.8)',
+        'rgba(139, 92, 246, 0.8)'
+      ]
+    }]
+  };
 
-    // Renderização principal da página de métricas
-    return (
-        <div className="p-4 md:p-6 space-y-6">
-            <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-                <h1 className="text-3xl font-bold tracking-tight">Análise de Métricas</h1>
-                <div className="flex items-center gap-2">
-                    <Filter className="h-5 w-5 text-muted-foreground" />
-                    <Select value={selectedCampaignId} onValueChange={setSelectedCampaignId}>
-                        <SelectTrigger className="w-full sm:w-[250px]">
-                            <SelectValue placeholder="Filtrar por campanha" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">Todas as Campanhas</SelectItem>
-                            {campaignsList.map(campaign => (
-                                <SelectItem key={campaign.id} value={String(campaign.id)}>
-                                    {campaign.name}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                </div>
-            </div>
-            {/* Mensagem se nenhuma métrica for encontrada para uma campanha específica filtrada */}
-             {filteredMetrics.length === 0 && selectedCampaignId !== "all" ? (
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Nenhuma Métrica para "{campaignsList.find(c => c.id === parseInt(selectedCampaignId))?.name}"</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <p>Não há dados de métricas registrados para a campanha selecionada.</p>
-                    </CardContent>
-                </Card>
-            ) : (
-            <> {/* Fragmento para agrupar os cards e gráficos quando há dados */}
-            {/* Cards de KPI */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Impressões Totais</CardTitle>
-                        <Users className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{aggregatedMetrics.totalImpressions.toLocaleString()}</div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Cliques Totais</CardTitle>
-                        <Target className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{aggregatedMetrics.totalClicks.toLocaleString()}</div>
-                        <p className="text-xs text-muted-foreground">CTR: {aggregatedMetrics.ctr.toFixed(2)}%</p>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Conversões Totais</CardTitle>
-                        <ShoppingCart className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{aggregatedMetrics.totalConversions.toLocaleString()}</div>
-                        <p className="text-xs text-muted-foreground">Leads: {aggregatedMetrics.totalLeads.toLocaleString()}</p>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Custo Total</CardTitle>
-                        <DollarSign className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">R$ {aggregatedMetrics.totalCost.toFixed(2)}</div>
-                        <p className="text-xs text-muted-foreground">CPC: R$ {aggregatedMetrics.cpc.toFixed(2)} | CPA: R$ {aggregatedMetrics.cpa.toFixed(2)}</p>
-                    </CardContent>
-                </Card>
-                 <Card className="lg:col-span-2">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Receita Total</CardTitle>
-                        <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">R$ {aggregatedMetrics.totalRevenue.toFixed(2)}</div>
-                    </CardContent>
-                </Card>
-                <Card className="lg:col-span-2">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">ROI (Retorno Sobre Investimento)</CardTitle>
-                        {aggregatedMetrics.roi >= 0 ? <TrendingUp className="h-4 w-4 text-green-500" /> : <TrendingDown className="h-4 w-4 text-red-500" />}
-                    </CardHeader>
-                    <CardContent>
-                        <div className={`text-2xl font-bold ${aggregatedMetrics.roi >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                            {isFinite(aggregatedMetrics.roi) ? `${aggregatedMetrics.roi.toFixed(2)}%` : "N/A"}
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
+  // Dados do gráfico de ROI por mês
+  const roiData = {
+    labels: ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun'],
+    datasets: [{
+      label: 'ROI (%)',
+      data: [280, 310, 295, 320, 315, 340],
+      backgroundColor: 'rgba(16, 185, 129, 0.8)',
+      borderColor: 'rgb(16, 185, 129)',
+      borderWidth: 2
+    }]
+  };
 
-            {/* Gráfico de Desempenho ao Longo do Tempo */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>Desempenho ao Longo do Tempo</CardTitle>
-                    <CardDescription>Impressões, cliques e custo registrados por data.</CardDescription>
-                </CardHeader>
-                <CardContent className="h-[350px] w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={timeSeriesData} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="date" />
-                            <YAxis yAxisId="left" />
-                            <YAxis yAxisId="right" orientation="right" />
-                            <Tooltip
-                                contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))' }}
-                                labelFormatter={(label) => `Data: ${label}`}
-                                formatter={(value, name) => [ name === 'cost' ? `R$ ${Number(value).toFixed(2)}` : Number(value).toLocaleString(), name === 'impressions' ? 'Impressões' : name === 'clicks' ? 'Cliques' : 'Custo' ]}
-                            />
-                            <Legend />
-                            <Line yAxisId="left" type="monotone" dataKey="impressions" stroke="#8884d8" activeDot={{ r: 6 }} name="Impressões"/>
-                            <Line yAxisId="left" type="monotone" dataKey="clicks" stroke="#82ca9d" activeDot={{ r: 6 }} name="Cliques"/>
-                            <Line yAxisId="right" type="monotone" dataKey="cost" stroke="#ffc658" activeDot={{ r: 6 }} name="Custo (R$)"/>
-                        </LineChart>
-                    </ResponsiveContainer>
-                </CardContent>
-            </Card>
+  const getTrendIcon = (trend: string) => {
+    if (trend === 'up') return <TrendingUp className="w-4 h-4 text-green-500" />;
+    if (trend === 'down') return <TrendingDown className="w-4 h-4 text-red-500" />;
+    return null;
+  };
 
-            {/* Gráficos de Pizza e Barras */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Distribuição de Custos por Campanha</CardTitle>
-                        <CardDescription>Visualização dos custos por campanha em gráfico de pizza.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="h-[350px] w-full flex items-center justify-center">
-                         {metricsByCampaign.filter(c => c.cost > 0).length > 0 ? (
-                            <ResponsiveContainer width="100%" height="100%">
-                                <PieChart>
-                                    <Pie
-                                        data={metricsByCampaign.filter(c => c.cost > 0)}
-                                        cx="50%"
-                                        cy="50%"
-                                        labelLine={false}
-                                        label={renderCustomizedLabel}
-                                        outerRadius={120}
-                                        fill="#8884d8"
-                                        dataKey="cost"
-                                        nameKey="name"
-                                    >
-                                        {metricsByCampaign.filter(c => c.cost > 0).map((_entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                        ))}
-                                    </Pie>
-                                    <Tooltip
-                                        formatter={(value, name) => [`R$ ${Number(value).toFixed(2)}`, name]}
-                                        contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))' }}
-                                    />
-                                    <Legend />
-                                </PieChart>
-                            </ResponsiveContainer>
-                        ) : <p className="text-center text-muted-foreground">Nenhum custo registrado para exibir no gráfico.</p>}
-                    </CardContent>
-                </Card>
-                 <Card>
-                    <CardHeader>
-                        <CardTitle>Receita por Campanha</CardTitle>
-                        <CardDescription>Comparativo de receita entre campanhas.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="h-[350px] w-full flex items-center justify-center">
-                        {metricsByCampaign.filter(c => c.revenue > 0).length > 0 ? (
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={metricsByCampaign.filter(c => c.revenue > 0)} layout="vertical" margin={{ top: 5, right: 30, left: 100, bottom: 5 }}>
-                                <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis type="number" tickFormatter={(value) => `R$${value}`}/>
-                                <YAxis dataKey="name" type="category" width={120} interval={0} />
-                                <Tooltip
-                                    formatter={(value, name) => [`R$ ${Number(value).toFixed(2)}`, name === 'revenue' ? 'Receita' : name]}
-                                    contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))' }}
-                                />
-                                <Legend />
-                                <Bar dataKey="revenue" fill="#82ca9d" name="Receita"/>
-                            </BarChart>
-                        </ResponsiveContainer>
-                        ) : <p className="text-center text-muted-foreground">Nenhuma receita registrada para exibir no gráfico.</p>}
-                    </CardContent>
-                </Card>
-            </div>
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL'
+    }).format(value);
+  };
 
-            {/* Tabela Detalhada de Métricas */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>Tabela Detalhada de Métricas</CardTitle>
-                    <CardDescription>Visão tabular de todas as métricas registradas.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Data</TableHead>
-                                <TableHead>Campanha</TableHead>
-                                <TableHead className="text-right">Impressões</TableHead>
-                                <TableHead className="text-right">Cliques</TableHead>
-                                <TableHead className="text-right">Conversões</TableHead>
-                                <TableHead className="text-right">Leads</TableHead>
-                                <TableHead className="text-right">Custo (R$)</TableHead>
-                                <TableHead className="text-right">Receita (R$)</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {filteredMetrics.length > 0 ? filteredMetrics.map((metric) => (
-                                <TableRow key={metric.id}>
-                                    <TableCell>{metric.date ? format(parseISO(metric.date), 'dd/MM/yyyy', { locale: ptBR }) : 'N/A'}</TableCell>
-                                    <TableCell>{metric.campaign?.name || 'N/A'}</TableCell>
-                                    <TableCell className="text-right">{(metric.impressions || 0).toLocaleString()}</TableCell>
-                                    <TableCell className="text-right">{(metric.clicks || 0).toLocaleString()}</TableCell>
-                                    <TableCell className="text-right">{(metric.conversions || 0).toLocaleString()}</TableCell>
-                                    <TableCell className="text-right">{(metric.leads || 0).toLocaleString()}</TableCell>
-                                    <TableCell className="text-right">{parseFloat(metric.cost?.toString() || '0').toFixed(2)}</TableCell>
-                                    <TableCell className="text-right">{parseFloat(metric.revenue?.toString() || '0').toFixed(2)}</TableCell>
-                                </TableRow>
-                            )) : (
-                                <TableRow>
-                                    <TableCell colSpan={8} className="text-center">
-                                        Nenhuma métrica encontrada para os filtros selecionados.
-                                    </TableCell>
-                                </TableRow>
-                            )}
-                        </TableBody>
-                    </Table>
-                </CardContent>
-            </Card>
-            </> // Fim do fragmento
-            )}
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Métricas e Analytics</h1>
+          <p className="text-muted-foreground">
+            Análise detalhada de performance das suas campanhas
+          </p>
         </div>
-    );
-};
+        <div className="flex space-x-2">
+          <Button variant="outline">
+            <Filter className="w-4 h-4 mr-2" />
+            Filtros
+          </Button>
+          <Button>
+            <Download className="w-4 h-4 mr-2" />
+            Exportar
+          </Button>
+        </div>
+      </div>
 
-export default MetricsPage;
+      {/* Filtros */}
+      <div className="flex space-x-4">
+        <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+          <SelectTrigger className="w-48">
+            <SelectValue placeholder="Período" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="7d">Últimos 7 dias</SelectItem>
+            <SelectItem value="30d">Últimos 30 dias</SelectItem>
+            <SelectItem value="90d">Últimos 90 dias</SelectItem>
+            <SelectItem value="365d">Último ano</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select value={selectedCampaign} onValueChange={setSelectedCampaign}>
+          <SelectTrigger className="w-48">
+            <SelectValue placeholder="Campanha" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todas as campanhas</SelectItem>
+            <SelectItem value="1">Campanha E-commerce Q1</SelectItem>
+            <SelectItem value="2">Google Ads - Produtos</SelectItem>
+            <SelectItem value="3">Instagram Stories</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <Tabs defaultValue="overview" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="overview">Visão Geral</TabsTrigger>
+          <TabsTrigger value="campaigns">Por Campanha</TabsTrigger>
+          <TabsTrigger value="platforms">Por Plataforma</TabsTrigger>
+          <TabsTrigger value="audience">Audiência</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="space-y-4">
+          {/* KPIs Principais */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Impressões Totais</CardTitle>
+                <Eye className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">281K</div>
+                <p className="text-xs text-muted-foreground flex items-center">
+                  <TrendingUp className="w-3 h-3 mr-1 text-green-500" />
+                  +15% desde o mês passado
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Cliques Totais</CardTitle>
+                <MousePointer className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">8.4K</div>
+                <p className="text-xs text-muted-foreground flex items-center">
+                  <TrendingUp className="w-3 h-3 mr-1 text-green-500" />
+                  +12% desde o mês passado
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Conversões</CardTitle>
+                <CreditCard className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">444</div>
+                <p className="text-xs text-muted-foreground flex items-center">
+                  <TrendingUp className="w-3 h-3 mr-1 text-green-500" />
+                  +8% desde o mês passado
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">ROI Médio</CardTitle>
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">312%</div>
+                <p className="text-xs text-muted-foreground flex items-center">
+                  <TrendingUp className="w-3 h-3 mr-1 text-green-500" />
+                  +18% desde o mês passado
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Gráficos Principais */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Performance ao Longo do Tempo</CardTitle>
+                <CardDescription>Impressões e cliques dos últimos 12 meses</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <LineChart 
+                  data={performanceData} 
+                  className="h-80"
+                />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Distribuição por Plataforma</CardTitle>
+                <CardDescription>Conversões por canal de marketing</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <PieChart 
+                  data={platformData} 
+                  className="h-80"
+                />
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* ROI por Mês */}
+          <Card>
+            <CardHeader>
+              <CardTitle>ROI por Mês</CardTitle>
+              <CardDescription>Retorno sobre investimento mensal</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <BarChart 
+                data={roiData} 
+                className="h-80"
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="campaigns" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Performance por Campanha</CardTitle>
+              <CardDescription>
+                Métricas detalhadas de cada campanha ativa
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {campaignMetrics.map((campaign) => (
+                  <div key={campaign.id} className="border rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h3 className="font-semibold">{campaign.name}</h3>
+                        <Badge variant="outline">{campaign.platform}</Badge>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        {getTrendIcon(campaign.trend)}
+                        <Badge variant={campaign.roi > 300 ? 'default' : 'secondary'}>
+                          ROI: {campaign.roi}%
+                        </Badge>
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 text-sm">
+                      <div>
+                        <p className="text-muted-foreground">Impressões</p>
+                        <p className="font-semibold">{campaign.impressions.toLocaleString()}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Cliques</p>
+                        <p className="font-semibold">{campaign.clicks.toLocaleString()}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">CTR</p>
+                        <p className="font-semibold">{campaign.ctr.toFixed(2)}%</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Conversões</p>
+                        <p className="font-semibold">{campaign.conversions}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Taxa Conv.</p>
+                        <p className="font-semibold">{campaign.conversionRate.toFixed(2)}%</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Investimento</p>
+                        <p className="font-semibold">{formatCurrency(campaign.cost)}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Receita</p>
+                        <p className="font-semibold text-green-600">{formatCurrency(campaign.revenue)}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="platforms" className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <div className="w-3 h-3 bg-blue-500 rounded-full mr-2"></div>
+                  Facebook
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-sm text-muted-foreground">Impressões</span>
+                    <span className="font-semibold">125K</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-muted-foreground">Conversões</span>
+                    <span className="font-semibold">189</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-muted-foreground">ROI</span>
+                    <span className="font-semibold text-green-600">302%</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
+                  Google Ads
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-sm text-muted-foreground">Impressões</span>
+                    <span className="font-semibold">89K</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-muted-foreground">Conversões</span>
+                    <span className="font-semibold">160</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-muted-foreground">ROI</span>
+                    <span className="font-semibold text-green-600">323%</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <div className="w-3 h-3 bg-pink-500 rounded-full mr-2"></div>
+                  Instagram
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-sm text-muted-foreground">Impressões</span>
+                    <span className="font-semibold">67K</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-muted-foreground">Conversões</span>
+                    <span className="font-semibold">95</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-muted-foreground">ROI</span>
+                    <span className="font-semibold text-green-600">296%</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="audience" className="space-y-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Demografia da Audiência</CardTitle>
+                <CardDescription>Distribuição por idade e gênero</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div>
+                    <div className="flex justify-between mb-1">
+                      <span className="text-sm">18-24 anos</span>
+                      <span className="text-sm">15%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div className="bg-blue-600 h-2 rounded-full" style={{width: '15%'}}></div>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between mb-1">
+                      <span className="text-sm">25-34 anos</span>
+                      <span className="text-sm">35%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div className="bg-blue-600 h-2 rounded-full" style={{width: '35%'}}></div>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between mb-1">
+                      <span className="text-sm">35-44 anos</span>
+                      <span className="text-sm">28%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div className="bg-blue-600 h-2 rounded-full" style={{width: '28%'}}></div>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between mb-1">
+                      <span className="text-sm">45+ anos</span>
+                      <span className="text-sm">22%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div className="bg-blue-600 h-2 rounded-full" style={{width: '22%'}}></div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Localização Geográfica</CardTitle>
+                <CardDescription>Top 5 cidades com mais conversões</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm">São Paulo, SP</span>
+                    <div className="flex items-center space-x-2">
+                      <div className="w-24 bg-gray-200 rounded-full h-2">
+                        <div className="bg-green-600 h-2 rounded-full" style={{width: '45%'}}></div>
+                      </div>
+                      <span className="text-sm font-semibold">45%</span>
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm">Rio de Janeiro, RJ</span>
+                    <div className="flex items-center space-x-2">
+                      <div className="w-24 bg-gray-200 rounded-full h-2">
+                        <div className="bg-green-600 h-2 rounded-full" style={{width: '23%'}}></div>
+                      </div>
+                      <span className="text-sm font-semibold">23%</span>
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm">Belo Horizonte, MG</span>
+                    <div className="flex items-center space-x-2">
+                      <div className="w-24 bg-gray-200 rounded-full h-2">
+                        <div className="bg-green-600 h-2 rounded-full" style={{width: '12%'}}></div>
+                      </div>
+                      <span className="text-sm font-semibold">12%</span>
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm">Brasília, DF</span>
+                    <div className="flex items-center space-x-2">
+                      <div className="w-24 bg-gray-200 rounded-full h-2">
+                        <div className="bg-green-600 h-2 rounded-full" style={{width: '10%'}}></div>
+                      </div>
+                      <span className="text-sm font-semibold">10%</span>
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm">Curitiba, PR</span>
+                    <div className="flex items-center space-x-2">
+                      <div className="w-24 bg-gray-200 rounded-full h-2">
+                        <div className="bg-green-600 h-2 rounded-full" style={{width: '10%'}}></div>
+                      </div>
+                      <span className="text-sm font-semibold">10%</span>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
