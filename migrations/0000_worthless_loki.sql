@@ -1,8 +1,23 @@
-CREATE TYPE "public"."campaign_status" IF NOT EXISTS AS ENUM('active', 'paused', 'completed', 'draft');
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'campaign_status') THEN
+        CREATE TYPE "public"."campaign_status" AS ENUM('active', 'paused', 'completed', 'draft');
+    END IF;
+END$$;
 --> statement-breakpoint
-CREATE TYPE "public"."chat_sender" IF NOT EXISTS AS ENUM('user', 'agent');
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'chat_sender') THEN
+        CREATE TYPE "public"."chat_sender" AS ENUM('user', 'agent');
+    END IF;
+END$$;
 --> statement-breakpoint
-CREATE TYPE "public"."launch_phase" IF NOT EXISTS AS ENUM('pre_launch', 'launch', 'post_launch');
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'launch_phase') THEN
+        CREATE TYPE "public"."launch_phase" AS ENUM('pre_launch', 'launch', 'post_launch');
+    END IF;
+END$$;
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "alerts" (
 	"id" serial PRIMARY KEY NOT NULL,
