@@ -8,7 +8,7 @@ import { ThemeToggle } from '@/components/theme-toggle';
 import { cn } from '@/lib/utils';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/api';
-import LogoPng from '@/img/logo.png'; // ATUALIZADO O CAMINHO DO LOGO
+import LogoPng from '@/img/logo.png'; 
 import {
   LayoutDashboard,
   Megaphone,
@@ -86,25 +86,33 @@ export default function Sidebar() {
     <aside 
       className={cn(
         "neu-sidebar flex flex-col h-full transition-all duration-300 ease-in-out",
-        isCollapsed ? "w-[72px]" : "w-60"
+        isCollapsed ? "w-[72px]" : "w-60" // Largura da sidebar recolhida e expandida
       )}
     >
       <div className={cn(
           "p-3 flex items-center border-b border-sidebar-border shrink-0", 
-          isCollapsed ? "justify-center h-[72px]" : "justify-start h-[72px]" // Altura mantida
+          isCollapsed ? "justify-center h-[72px]" : "justify-start h-[72px]"
         )}
       >
-        <Link href="/dashboard" className={cn("flex items-center gap-2 group outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar-background rounded-md", isCollapsed ? "p-1" : "p-2")}> {/* Ajuste no padding quando não colapsado se necessário */}
+        {/* Link envolvendo apenas o logo */}
+        <Link 
+          href="/dashboard" 
+          className={cn(
+            "flex items-center justify-center group outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar-background rounded-md",
+            isCollapsed ? "w-full h-full p-1" : "p-2" // Padding ajustado para ocupar espaço
+          )}
+          title={isCollapsed ? "Dashboard" : undefined}
+        >
             <img 
               src={LogoPng} 
               alt="USB MKT Logo" 
               className={cn(
-                "transition-all duration-300 ease-in-out",
-                isCollapsed ? "w-9 h-9" : "w-8 h-8" // Ajuste de tamanho para sidebar
+                "transition-all duration-300 ease-in-out object-contain", // object-contain para manter proporções
+                isCollapsed ? "w-10 h-10" : "w-12 h-12" // Tamanhos ajustados
               )}
               style={{ filter: 'drop-shadow(0 0 6px hsl(var(--primary)/0.6)) drop-shadow(0 0 12px hsl(var(--primary)/0.4))' }}
             />
-            {/* O texto "USB MKT PRO" foi removido conforme solicitado */}
+            {/* O texto "USB MKT PRO" foi removido conforme sua solicitação anterior */}
         </Link>
       </div>
 
