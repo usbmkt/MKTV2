@@ -44,7 +44,7 @@ interface MCPState {
 
   togglePanel: () => void;
   addMessage: (message: Message) => void;
-  setCurrentInput: (input: string) => void;
+  setCurrentInput: (input: string) => void; // Modificado para logar
   clearCurrentInput: () => void;
   setLoading: (loading: boolean) => void;
   setChatSessions: (sessions: ChatSession[]) => void;
@@ -82,14 +82,17 @@ export const useMCPStore = create<MCPState>((set, get) => ({
   addMessage: (message) => {
     set((state) => ({ messages: [...state.messages, message] }));
   },
-  setCurrentInput: (input) => set({ currentInput: input }),
+  // COORDENADA 1 (mcpStore.ts): Adicionar log em setCurrentInput
+  setCurrentInput: (input) => {
+    console.log('[mcpStore] setCurrentInput chamado com:', input);
+    set({ currentInput: input });
+  },
   clearCurrentInput: () => set({ currentInput: '' }),
   setLoading: (loading) => set({ isLoading: loading }),
   setChatSessions: (sessions) => set({ chatSessions: sessions }),
   setMCPContext: (context) => set({ currentMcpContext: context }),
 
   loadChatSessions: async () => {
-    // ... (código inalterado)
     set({ isSessionsLoading: true });
     const token = useAuthStore.getState().token;
     if (!token) { set({ isSessionsLoading: false }); return; }
@@ -103,11 +106,10 @@ export const useMCPStore = create<MCPState>((set, get) => ({
   },
 
   startNewChat: async (title?: string): Promise<number | null> => {
-    set({ isLoading: true, currentMcpContext: null }); // Limpa contexto, mensagens serão resetadas no sucesso ou erro
+    set({ isLoading: true, currentMcpContext: null });
     const token = useAuthStore.getState().token;
     if (!token) {
       set({ isLoading: false });
-      // Adiciona mensagem de erro ao array existente ou ao inicial
       const currentMessages = get().messages;
       const errorMsg = {...initialAgentMessageDefault, id: `error-auth-new-chat-${Date.now()}`, text: 'Autenticação necessária para iniciar novo chat.', sender: 'system' as 'system'};
       set({messages: currentMessages.length > 0 ? [...currentMessages, errorMsg] : [errorMsg]});
@@ -126,7 +128,7 @@ export const useMCPStore = create<MCPState>((set, get) => ({
       const newSession: ChatSession = await response.json();
       const agentWelcomeMessage = { ...initialAgentMessageDefault, id: `agent-welcome-${newSession.id}`, sessionId: newSession.id, text: "Nova conversa iniciada. Como posso lhe ajudar?" };
       set({
-        messages: [agentWelcomeMessage], // Define as mensagens PARA A NOVA SESSÃO
+        messages: [agentWelcomeMessage],
         currentSessionId: newSession.id,
         chatSessions: [newSession, ...get().chatSessions.filter(s => s.id !== newSession.id)],
         currentMcpContext: null,
@@ -135,7 +137,7 @@ export const useMCPStore = create<MCPState>((set, get) => ({
     } catch (error: any) {
       console.error('Erro ao iniciar novo chat:', error);
       const errorMsg = {...initialAgentMessageDefault, id: `error-start-chat-${Date.now()}`, text: `Erro ao iniciar nova conversa: ${error.message}`, sender: 'system' as 'system'};
-      set({ messages: [errorMsg] }); // Define mensagem de erro como a única mensagem
+      set({ messages: [errorMsg] });
       return null;
     } finally {
       set({ isLoading: false });
@@ -162,8 +164,41 @@ export const useMCPStore = create<MCPState>((set, get) => ({
     finally { set({ isLoading: false }); }
   },
   
-  updateCurrentSessionTitle: async (newTitle: string) => { /* ... (inalterado) ... */ },
-  deleteChatSession: async (sessionId: number) => { /* ... (inalterado) ... */ },
+  updateCurrentSessionTitle: async (newTitle: string) => {
+    const { currentSessionId } = get();
+    const token = useAuthStore.getState().token;
+    if (!currentSessionId || !newTitle.trim() || !token) return;
+    try {
+      const response = await fetch(`/api/chat/sessions/${currentSessionId}/title`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
+        body: JSON.stringify({ title: newTitle }),
+      });
+      if (!response.ok) throw new Error('Falha ao atualizar título.');
+      const updatedSession: ChatSession = await response.json();
+      set((state) => ({ chatSessions: state.chatSessions.map(s => s.id === updatedSession.id ? updatedSession : s) }));
+    } catch (error) { console.error('Erro ao atualizar título:', error); }
+  },
+
+  deleteChatSession: async (sessionId: number) => {
+    const token = useAuthStore.getState().token;
+    if (!token) return;
+    try {
+      const response = await fetch(`/api/chat/sessions/${sessionId}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` }});
+      if (!response.ok) throw new Error('Falha ao deletar sessão.');
+      set((state) => {
+        const isDeletingCurrent = state.currentSessionId === sessionId;
+        return {
+          chatSessions: state.chatSessions.filter((session) => session.id !== sessionId),
+          currentSessionId: isDeletingCurrent ? null : state.currentSessionId,
+          currentMcpContext: isDeletingCurrent ? null : state.currentMcpContext,
+          messages: isDeletingCurrent ? [initialAgentMessageDefault] : state.messages,
+        };
+      });
+       if (get().currentSessionId === null && get().chatSessions.length === 0) {
+         get().startNewChat();
+       }
+    } catch (error) { console.error('Erro ao deletar sessão:', error); }
+  },
 }));
 
 export const sendMessageToMCP = async (text: string): Promise<void> => {
@@ -171,6 +206,9 @@ export const sendMessageToMCP = async (text: string): Promise<void> => {
   const { addMessage, setLoading, navigate, currentMcpContext, setMCPContext } = store;
   let { currentSessionId, startNewChat } = store;
   const token = useAuthStore.getState().token;
+
+  // Logs que eu tinha adicionado na versão anterior para sendMessageToMCP (removidos para este teste focado)
+  // Manterei apenas os logs relevantes para o problema atual.
 
   if (!text.trim()) return;
   if (!token) {
@@ -181,15 +219,12 @@ export const sendMessageToMCP = async (text: string): Promise<void> => {
   let sessionToUseId = currentSessionId;
 
   if (sessionToUseId === null) {
-    setLoading(true); // Mostrar loading enquanto tenta criar a sessão
+    setLoading(true);
     sessionToUseId = await startNewChat(); 
-    // setLoading(false) é chamado dentro de startNewChat
     if (sessionToUseId === null) {
-      // startNewChat já deve ter setado uma mensagem de erro no chat e isLoading false
+      // startNewChat já lida com isLoading e mensagem de erro no chat
       return; 
     }
-    // Se startNewChat foi bem-sucedido, isLoading já foi setado para false.
-    // A mensagem inicial do agente para a nova sessão já foi adicionada por startNewChat.
   }
   
   const userMessage: Message = { 
@@ -200,8 +235,8 @@ export const sendMessageToMCP = async (text: string): Promise<void> => {
     sessionId: sessionToUseId 
   };
   
-  addMessage(userMessage); // Adiciona a mensagem do usuário
-  setLoading(true); // Ativa o loading para a resposta do MCP
+  addMessage(userMessage);
+  setLoading(true); 
 
   try {
     const response = await fetch('/api/mcp/converse', {
