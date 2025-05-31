@@ -7,22 +7,24 @@ import { ZodError } from "zod";
 
 
 let genAI: GoogleGenerativeAI | null = null;
-if (GEMINI_API_KEY) {
-  try {
+// COORDENADA 1: Inicialização do Gemini SDK com try-catch
+try {
+  if (GEMINI_API_KEY && GEMINI_API_KEY !== "SUA_CHAVE_API_GEMINI_AQUI" && GEMINI_API_KEY.length > 10) { // Checagem básica da chave
     genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
     console.log("[MCP_HANDLER_GEMINI] SDK do Gemini inicializado com sucesso.");
-  } catch (error) {
-    console.error("[MCP_HANDLER_GEMINI] Falha ao inicializar o SDK do Gemini:", error);
+  } else {
+    console.warn("[MCP_HANDLER_GEMINI] Chave da API do Gemini (GEMINI_API_KEY) não configurada ou é placeholder. MCP terá funcionalidade de IA limitada.");
     genAI = null;
   }
-} else {
-  console.warn("[MCP_HANDLER_GEMINI] Chave da API do Gemini (GEMINI_API_KEY) não configurada.");
+} catch (error) {
+  console.error("[MCP_HANDLER_GEMINI] Falha CRÍTICA ao inicializar o SDK do Gemini:", error);
+  genAI = null; // Garante que genAI é null e o restante do módulo pode carregar
 }
+
 
 interface MCPContext {
   lastCreatedCampaignId?: number | null;
-  lastMentionedCampaignId?: number | null; // Para quando o usuário consulta detalhes
-  // Outros estados de conversa podem ser adicionados aqui
+  lastMentionedCampaignId?: number | null;
 }
 
 interface MCPResponsePayload {
@@ -30,17 +32,22 @@ interface MCPResponsePayload {
   sessionId: number;
   action?: string;
   payload?: any;
-  mcpContextForNextTurn?: MCPContext | null; // Contexto para ser armazenado no cliente
+  mcpContextForNextTurn?: MCPContext | null;
 }
 
 async function getCampaignNameFromMessage(message: string): Promise<string | null> {
-  if (!genAI) return null;
+  if (!genAI) {
+    console.warn("[MCP_HANDLER_GEMINI] Tentativa de extrair nome da campanha sem SDK do Gemini inicializado.");
+    // Fallback simples se Gemini não estiver disponível
+    const match = message.match(/(?:campanha|campaign)\s+(?:chamada\s+|intitulada\s+)?(?:de\s+|como\s+)?['"]?([^'"\n\r]+?)['"]?(?:\s+com|$)/i);
+    return match && match[1] ? match[1].trim() : null;
+  }
   try {
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
     const promptForName = `O usuário disse: "${message}". Qual é o NOME da campanha que ele quer criar? Responda APENAS com o nome da campanha. Se não conseguir identificar um nome claro, responda "NOME_NAO_IDENTIFICADO".`;
     const result = await model.generateContent(promptForName);
     const campaignName = result.response.text().trim();
-    if (campaignName && campaignName !== "NOME_NAO_IDENTIFICADO" && campaignName.length > 0 && campaignName.length < 256) { // Limitar tamanho do nome
+    if (campaignName && campaignName !== "NOME_NAO_IDENTIFICADO" && campaignName.length > 0 && campaignName.length < 256) {
       return campaignName;
     }
     return null;
@@ -51,12 +58,14 @@ async function getCampaignNameFromMessage(message: string): Promise<string | nul
 }
 
 async function getCampaignIdFromMessage(message: string): Promise<string | null> {
-  if (!genAI) return null;
-  // Tentativa de Regex simples primeiro para IDs numéricos diretos
   const idRegex = /(?:id|ID|número|numero)\s*[:=\s]*#?(\d+)/i;
-  const match = message.match(idRegex);
-  if (match && match[1]) {
-    return match[1];
+  const regexMatch = message.match(idRegex);
+  if (regexMatch && regexMatch[1]) {
+    return regexMatch[1];
+  }
+  if (!genAI) {
+    console.warn("[MCP_HANDLER_GEMINI] Tentativa de extrair ID da campanha sem SDK do Gemini inicializado.");
+    return null;
   }
   try {
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
@@ -89,7 +98,7 @@ export async function handleMCPConversation(
   message: string,
   currentSessionId: number | null | undefined,
   attachmentUrl?: string | null,
-  mcpContextFromClient?: MCPContext | null // Contexto recebido do cliente
+  mcpContextFromClient?: MCPContext | null
 ): Promise<MCPResponsePayload> {
   console.log(`[MCP_HANDLER] User ${userId} disse: "${message || '[Anexo]'}" (Session: ${currentSessionId || 'Nova'}, Contexto Cliente: ${JSON.stringify(mcpContextFromClient)})`);
 
@@ -112,7 +121,7 @@ export async function handleMCPConversation(
 
   let agentReplyText: string;
   const responsePayload: Partial<MCPResponsePayload> = { sessionId: activeSession.id };
-  let nextTurnContext: MCPContext | null = null; // Contexto a ser enviado de volta para o cliente
+  let nextTurnContext: MCPContext | null = null;
 
   if (genAI && message) {
     const intentModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
@@ -154,7 +163,7 @@ export async function handleMCPConversation(
       agentReplyText = `Claro! Navegando para ${intentResponse.replace('/', '') || 'o Dashboard'}...`;
       responsePayload.action = "navigate";
       responsePayload.payload = intentResponse;
-      nextTurnContext = null; // Limpa contexto após navegação geral
+      nextTurnContext = null; 
     } else if (intentResponse === 'create_campaign') {
       const campaignName = await getCampaignNameFromMessage(message);
       if (campaignName) {
@@ -163,8 +172,8 @@ export async function handleMCPConversation(
           const createdCampaign = await storage.createCampaign(newCampaignData);
           agentReplyText = `Campanha "${createdCampaign.name}" (ID: ${createdCampaign.id}) criada com sucesso como rascunho!`;
           const campaignDetailsMessage = formatCampaignDetailsForChat(createdCampaign);
-          await storage.addChatMessage({ sessionId: activeSession.id, sender: 'agent', text: agentReplyText });
-          agentReplyText += `\n\n${campaignDetailsMessage}`;
+          await storage.addChatMessage({ sessionId: activeSession.id, sender: 'agent', text: agentReplyText }); // Salva a confirmação
+          agentReplyText += `\n\n${campaignDetailsMessage}`; // Adiciona detalhes para a resposta final ao usuário
           nextTurnContext = { lastCreatedCampaignId: createdCampaign.id, lastMentionedCampaignId: createdCampaign.id };
         } catch (creationError: any) {
           agentReplyText = `Houve um problema ao tentar criar a campanha "${campaignName}". Detalhes: ${creationError.message || 'Erro desconhecido.'}`;
@@ -175,8 +184,7 @@ export async function handleMCPConversation(
         }
       } else {
         agentReplyText = "Entendi que você quer criar uma nova campanha, mas não consegui identificar o nome. Poderia me dizer qual nome você gostaria de dar para a nova campanha?";
-        // Poderia setar um contexto para esperar o nome: nextTurnContext = { awaiting: 'campaign_name_for_creation' };
-        nextTurnContext = null; // Por ora, simplificamos.
+        nextTurnContext = null;
       }
     } else if (intentResponse === 'navigate_to_campaign_detail_by_identifier') {
       const campaignIdStr = await getCampaignIdFromMessage(message);
@@ -184,12 +192,15 @@ export async function handleMCPConversation(
         const campaignIdNum = parseInt(campaignIdStr);
         const campaign = await storage.getCampaign(campaignIdNum, userId);
         if (campaign) {
-          agentReplyText = `Ok, mostrando detalhes da campanha "${campaign.name}" (ID: ${campaign.id})...`;
-          responsePayload.action = "navigate";
-          responsePayload.payload = `/campaigns/${campaign.id}`;
+          agentReplyText = `Ok, aqui estão os detalhes da campanha "${campaign.name}" (ID: ${campaign.id}):`;
           const campaignDetailsMessage = formatCampaignDetailsForChat(campaign);
-          await storage.addChatMessage({ sessionId: activeSession.id, sender: 'agent', text: agentReplyText });
-          agentReplyText += `\n\n${campaignDetailsMessage}`;
+          // Não salvar a primeira parte "Ok, mostrando..." no histórico, apenas os detalhes
+          // A resposta final ao usuário terá ambas.
+          await storage.addChatMessage({ sessionId: activeSession.id, sender: 'agent', text: campaignDetailsMessage }); // Salva só os detalhes
+          agentReplyText = `Ok, mostrando detalhes da campanha "${campaign.name}" (ID: ${campaign.id})...\n\n${campaignDetailsMessage}`;
+
+          responsePayload.action = "navigate"; // A navegação ainda é desejada
+          responsePayload.payload = `/campaigns/${campaign.id}`;
           nextTurnContext = { lastMentionedCampaignId: campaign.id };
         } else {
           agentReplyText = `Não encontrei uma campanha com o ID "${campaignIdStr}" associada a você.`;
@@ -207,18 +218,22 @@ export async function handleMCPConversation(
             agentReplyText = `Entendido! Navegando para a campanha "${campaign.name}" (ID: ${campaignIdToNavigate})...`;
             responsePayload.action = "navigate";
             responsePayload.payload = `/campaigns/${campaignIdToNavigate}`;
-            nextTurnContext = { lastMentionedCampaignId: campaignIdToNavigate }; // Mantém como lastMentioned
+            // Opcional: mostrar detalhes no chat também
+            const campaignDetailsMessage = formatCampaignDetailsForChat(campaign);
+            await storage.addChatMessage({ sessionId: activeSession.id, sender: 'agent', text: agentReplyText });
+            agentReplyText += `\n\n${campaignDetailsMessage}`;
+            nextTurnContext = { lastMentionedCampaignId: campaignIdToNavigate };
         } else {
             agentReplyText = `Hmm, eu tinha um ID de campanha (${campaignIdToNavigate}) em mente, mas não consigo encontrá-la agora. Poderia especificar novamente?`;
-            nextTurnContext = null; // Limpa contexto se não encontrar
+            nextTurnContext = null; 
         }
       } else {
         agentReplyText = "Desculpe, não entendi a qual campanha 'lá' você se refere. Poderia especificar o nome ou ID?";
         nextTurnContext = null;
       }
-    } else { // NÃO ou outra resposta não tratada -> Resposta geral da IA
+    } else { 
       console.log(`[MCP_HANDLER] Intenção não reconhecida ou "NÃO" ("${intentResponse}"). Usando IA geral.`);
-      nextTurnContext = null; // Limpa contexto para respostas gerais
+      nextTurnContext = null; 
       const model = genAI!.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
       const messagesFromDb: ChatMessage[] = await storage.getChatMessages(activeSession.id, userId);
       const historyForGemini = messagesFromDb.map(msg => ({
@@ -227,22 +242,38 @@ export async function handleMCPConversation(
       }));
       const systemPrompt = { role: "user", parts: [{ text: "Você é o Agente MCP. Responda em Português do Brasil, de forma concisa e amigável, ajudando com marketing digital e a plataforma." }] };
       const chat = model.startChat({
-        history: [systemPrompt, ...historyForGemini.slice(0, -1)],
-         safetySettings: [ /* ... */ ],
+        history: [systemPrompt, ...historyForGemini.slice(0, -1)], // Exclui a última mensagem do usuário
+         safetySettings: [
+            { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+            { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+            { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+            { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+          ],
       });
       const result = await chat.sendMessage(message);
       agentReplyText = result.response.text();
     }
   } else {
-    agentReplyText = `Recebido: "${message || 'Anexo'}". ${!genAI ? 'O serviço de IA não está configurado.' : 'Por favor, envie uma mensagem de texto para interagir.'}`;
+    agentReplyText = `Recebido: "${message || 'Anexo'}". ${!genAI ? 'O serviço de IA não está configurado corretamente.' : 'Por favor, envie uma mensagem de texto para interagir.'}`;
     nextTurnContext = null;
   }
 
-  await storage.addChatMessage({
-    sessionId: activeSession.id,
-    sender: 'agent',
-    text: agentReplyText,
-  });
+  // Salva a resposta final do agente no histórico do chat
+  // A lógica acima já cuida de salvar respostas parciais se necessário (como confirmação de criação + detalhes).
+  // Esta chamada garante que a ÚLTIMA `agentReplyText` (que pode ser a geral ou a composta) seja salva.
+  // Se a mesma mensagem já foi salva por uma etapa anterior (ex: ao mostrar detalhes de campanha),
+  // esta chamada pode ser redundante ou sobrescrever. É preciso cuidado aqui.
+  // Para evitar duplicidade, só salvamos se a mensagem não foi a composta de detalhes.
+  if (!(agentReplyText.includes("Detalhes da Campanha:") && agentReplyText.startsWith("Campanha") && agentReplyText.includes("criada com sucesso"))) {
+      if(!(agentReplyText.includes("Detalhes da Campanha:") && agentReplyText.startsWith("Ok, mostrando detalhes"))) {
+         await storage.addChatMessage({
+            sessionId: activeSession.id,
+            sender: 'agent',
+            text: agentReplyText,
+        });
+      }
+  }
+
 
   responsePayload.reply = agentReplyText;
   responsePayload.mcpContextForNextTurn = nextTurnContext;
