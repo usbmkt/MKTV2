@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthStore } from '@/lib/auth';
 import { Loader2 } from 'lucide-react';
-import LogoPng from '@/assets/img/logo.png'; // Importando o logo PNG
+import LogoPng from '@/img/logo.png'; // ATUALIZADO O CAMINHO DO LOGO
 
 export default function Login() {
   const [, navigate] = useLocation();
