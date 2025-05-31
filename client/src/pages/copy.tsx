@@ -7,7 +7,7 @@ import { useForm, FormProvider } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 
-// Componentes SHADCN/UI REAIS (confirme os caminhos)
+// Componentes SHADCN/UI REAIS
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -25,8 +25,8 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'; // Para o modal de ideias
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"; // Para o rhfBaseForm
 
 // Ícones LUCIDE-REACT REAIS
 import {
@@ -45,8 +45,6 @@ import {
   Plus,
   Edit,
   MessageCircle,
-  ChevronDown,
-  ChevronUp,
   Filter as FilterIconLucide,
   BarChart3,
   Target,
@@ -60,77 +58,26 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/api';
 
-// Configurações e Tipos (MOVA PARA @/config/copyConfigurations.ts)
-export type LaunchPhase = 'pre_launch' | 'launch' | 'post_launch';
+// Configurações e Tipos de @/config/copyConfigurations.ts
+import {
+  allCopyPurposesConfig,
+  type CopyPurposeConfig,
+  type FieldDefinition,
+  type LaunchPhase,
+  type BaseGeneratorFormState,
+  type SpecificPurposeData,
+  type FullGeneratorPayload,
+  type BackendGeneratedCopyItem,
+  type DisplayGeneratedCopy,
+  type SavedCopy,
+} from '@/config/copyConfigurations';
 
-export interface BaseGeneratorFormState {
-  product: string;
-  audience: string;
-  objective: 'sales' | 'leads' | 'engagement' | 'awareness';
-  tone: 'professional' | 'casual' | 'urgent' | 'inspirational' | 'educational' | 'empathetic' | 'divertido' | 'sofisticado';
-}
+// Schemas da IA (definidos localmente ou importados de copyConfigurations.ts)
+const aiResponseSchema = { type: "OBJECT", properties: { mainCopy: { type: "STRING" }, alternativeVariation1: { type: "STRING" }, alternativeVariation2: { type: "STRING" }, platformSuggestion: { type: "STRING" }, notes: { type: "STRING" } }, required: ["mainCopy", "platformSuggestion"] };
+const contentIdeasResponseSchema = { type: "OBJECT", properties: { contentIdeas: { type: "ARRAY", items: { "type": "STRING" } } }, required: ["contentIdeas"] };
+const optimizeCopyResponseSchema = { type: "OBJECT", properties: { optimizedCopy: { type: "STRING" }, optimizationNotes: { type: "STRING" } }, required: ["optimizedCopy"] };
 
-export interface FieldDefinition {
-  name: string;
-  label: string;
-  type: 'text' | 'textarea' | 'select' | 'number' | 'date';
-  placeholder?: string;
-  tooltip: string;
-  required?: boolean;
-  options?: Array<{ value: string; label: string }>;
-  defaultValue?: string | number | boolean;
-  dependsOn?: string;
-  showIf?: (formData: Record<string, any>, baseData?: BaseGeneratorFormState) => boolean;
-}
-
-export interface CopyPurposeConfig {
-  key: string;
-  label: string;
-  phase: LaunchPhase;
-  fields: FieldDefinition[];
-  category: string;
-  description?: string;
-  promptEnhancer?: (basePrompt: string, details: Record<string, any>, baseForm: BaseGeneratorFormState) => string;
-}
-
-export type SpecificPurposeData = Record<string, any>;
-
-export interface FullGeneratorPayload extends BaseGeneratorFormState {
-  launchPhase: LaunchPhase;
-  copyPurposeKey: string;
-  details: SpecificPurposeData;
-}
-
-export interface BackendGeneratedCopyItem {
-  mainCopy: string;
-  alternativeVariation1?: string;
-  alternativeVariation2?: string;
-  platformSuggestion?: string;
-  notes?: string;
-}
-
-export interface DisplayGeneratedCopy extends BackendGeneratedCopyItem {
-  timestamp: Date;
-  purposeKey: string;
-}
-
-export interface SavedCopy {
-  id: string | number;
-  title: string;
-  content: string; 
-  purposeKey: string;
-  launchPhase: LaunchPhase;
-  details: SpecificPurposeData;
-  baseInfo: BaseGeneratorFormState;
-  platform?: string;
-  campaignId?: number | null;
-  createdAt: string;
-  lastUpdatedAt?: string;
-  isFavorite?: boolean;
-  tags?: string[];
-  fullGeneratedResponse?: BackendGeneratedCopyItem;
-}
-
+// Schema para o formulário base (definido localmente ou importado de copyConfigurations.ts)
 const baseGeneratorFormSchema = z.object({
   product: z.string().min(3, "Produto/Serviço deve ter pelo menos 3 caracteres."),
   audience: z.string().min(3, "Público-Alvo deve ter pelo menos 3 caracteres."),
@@ -138,6 +85,7 @@ const baseGeneratorFormSchema = z.object({
   tone: z.enum(['professional', 'casual', 'urgent', 'inspirational', 'educational', 'empathetic', 'divertido', 'sofisticado']),
 });
 
+// Opções para Selects (definidas localmente ou importadas de copyConfigurations.ts)
 const objectiveOptions: Array<{ value: BaseGeneratorFormState['objective']; label: string }> = [
     { value: 'sales', label: 'Gerar Vendas' }, { value: 'leads', label: 'Gerar Leads' },
     { value: 'engagement', label: 'Aumentar Engajamento' }, { value: 'awareness', label: 'Criar Reconhecimento' }
@@ -148,33 +96,6 @@ const toneOptions: Array<{ value: BaseGeneratorFormState['tone']; label: string 
     { value: 'educational', label: 'Educativo' }, { value: 'empathetic', label: 'Empático' },
     { value: 'divertido', label: 'Divertido' }, { value: 'sofisticado', label: 'Sofisticado' }
 ];
-
-// **IMPORTANTE**: Cole sua configuração COMPLETA de `allCopyPurposesConfig` aqui ou importe-a de @/config/copyConfigurations.ts
-const allCopyPurposesConfig: CopyPurposeConfig[] = [
-  { key: 'prelaunch_ad_event_invitation', label: 'Anúncio: Convite para Evento Online Gratuito', phase: 'pre_launch', category: 'Anúncios (Pré-Lançamento)', description: 'Crie anúncios chamativos para convidar pessoas para seu webinar, masterclass ou live.', fields: [ { name: 'eventName', label: 'Nome do Evento *', type: 'text', placeholder: 'Ex: Masterclass "Decole Seu Negócio Online"', tooltip: 'O título principal do seu evento.', required: true }, { name: 'eventSubtitle', label: 'Subtítulo do Evento (Opcional)', type: 'text', placeholder: 'Ex: O guia definitivo para...', tooltip: 'Uma frase curta para complementar o nome.'}, { name: 'eventFormat', label: 'Formato do Evento', type: 'text', placeholder: 'Ex: Workshop online de 3 dias via Zoom', tooltip: 'Descreva como será o evento.', defaultValue: 'Webinar Ao Vivo' }, { name: 'eventDateTime', label: 'Data e Hora Principal *', type: 'text', placeholder: 'Ex: Terça, 25 de Junho, às 20h', tooltip: 'Quando o evento principal acontecerá?', required: true }, { name: 'eventDuration', label: 'Duração Estimada', type: 'text', placeholder: 'Ex: Aproximadamente 1h30', tooltip: 'Quanto tempo o público deve reservar?' }, { name: 'eventPromise', label: 'Principal Promessa *', type: 'textarea', placeholder: 'Ex: Descubra o método para criar anúncios que vendem.', tooltip: 'O que a pessoa vai ganhar/aprender?', required: true }, { name: 'eventTopics', label: 'Principais Tópicos (1 por linha) *', type: 'textarea', placeholder: 'Ex:\n- Como definir seu público\n- Erros comuns em anúncios', tooltip: 'Liste os pontos chave.', required: true }, { name: 'eventTargetAudience', label: 'Público Específico do Evento', type: 'text', placeholder: 'Ex: Empreendedores iniciantes', tooltip: 'Para quem este evento é desenhado?' }, { name: 'eventCTA', label: 'Chamada para Ação *', type: 'text', placeholder: 'Ex: "Garanta sua vaga gratuita!"', tooltip: 'O que você quer que a pessoa faça?', required: true, defaultValue: 'Inscreva-se Gratuitamente!' }, { name: 'urgencyScarcityElement', label: 'Urgência/Escassez (Opcional)', type: 'text', placeholder: 'Ex: Vagas limitadas', tooltip: 'Algum motivo para agir rápido?' }, ] },
-  { key: 'prelaunch_email_welcome_confirmation', label: 'E-mail: Boas-vindas e Confirmação', phase: 'pre_launch', category: 'E-mails (Pré-Lançamento)', description: 'Envie um e-mail de boas-vindas caloroso e confirme a inscrição do lead.', fields: [ { name: 'signupReason', label: 'Motivo da Inscrição *', type: 'text', placeholder: 'Ex: Inscrição na Masterclass XPTO', tooltip: 'O que o lead fez para entrar na sua lista?', required: true }, { name: 'deliveredItemName', label: 'Nome do Item Entregue', type: 'text', placeholder: 'Ex: Acesso à Masterclass', tooltip: 'Nome do evento/material entregue.'}, { name: 'deliveredItemLink', label: 'Link de Acesso/Download', type: 'text', placeholder: 'Ex: https://...', tooltip: 'Link direto para o item.'}, { name: 'senderName', label: 'Nome do Remetente *', type: 'text', placeholder: 'Ex: João Silva da Empresa XPTO', tooltip: 'Como você/sua empresa se identificam?', required: true }, { name: 'nextStepsForLead', label: 'Próximos Passos (1 por linha)', type: 'textarea', placeholder: 'Ex:\n- Adicione este e-mail aos contatos.\n- Siga-nos no Instagram', tooltip: 'O que o lead deve fazer em seguida?'}, { name: 'valueTeaser', label: 'Teaser de Conteúdo Futuro (Opcional)', type: 'textarea', placeholder: 'Ex: Nos próximos dias, vou compartilhar dicas sobre X...', tooltip: 'Amostra do que esperar.'}, ] },
-  // ... (COLE AQUI O RESTANTE DA SUA CONFIGURAÇÃO `allCopyPurposesConfig` COMPLETA)
-];
-
-const aiResponseSchema = { type: "OBJECT", properties: { mainCopy: { type: "STRING" }, alternativeVariation1: { type: "STRING" }, alternativeVariation2: { type: "STRING" }, platformSuggestion: { type: "STRING" }, notes: { type: "STRING" } }, required: ["mainCopy", "platformSuggestion"] };
-const contentIdeasResponseSchema = { type: "OBJECT", properties: { contentIdeas: { type: "ARRAY", items: { "type": "STRING" } } }, required: ["contentIdeas"] };
-const optimizeCopyResponseSchema = { type: "OBJECT", properties: { optimizedCopy: { type: "STRING" }, optimizationNotes: { type: "STRING" } }, required: ["optimizedCopy"] };
-
-// --- Estilos Dark Neomórficos (Classes Tailwind) ---
-// As variáveis CSS (--neu-shadow-outset, etc.) devem estar no seu index.css
-const neoBgMainClass = 'bg-background';
-const neoTextPrimaryClass = 'text-foreground';
-const neoTextSecondaryClass = 'text-muted-foreground';
-
-// Classes para elementos específicos (usadas no JSX)
-const inputStyleNeo = `neo-input`; // .neo-input definido no seu index.css
-const labelStyleNeo = `text-sm font-medium ${neoTextSecondaryClass} mb-1.5`; // Usando cor do tema
-const cardHeaderStyleNeo = `p-4 sm:p-6 border-b border-border`; // Usando cor do tema
-const cardContentStyleNeo = `p-4 sm:p-6 space-y-4`;
-const buttonPrimaryNeo = `neo-button-primary`; // .neo-button-primary definido no seu index.css
-const buttonSecondaryNeo = `neo-button`; // .neo-button definido no seu index.css
-const badgeStyleNeo = (bgColor = 'bg-card', textColor = 'text-card-foreground') => 
-  `neo-badge ${bgColor} ${textColor}`; // .neo-badge definido no seu index.css
 
 // --- Início do Componente ---
 export default function CopyPage() {
@@ -325,7 +246,7 @@ Observações importantes para sua geração:
     },
     onSuccess: (data, variables) => {
       setGeneratedCopies(prevCopies => prevCopies.map((copy, index) => index === variables.copyIndex ? { ...copy, mainCopy: data.optimizedCopy, notes: `${copy.notes || ''}\nNota Otim.: ${data.optimizationNotes || 'Otimizada.'}`.trim() } : copy ));
-      toast({ title: 'Copy Otimizada!', description: 'A copy foi aprimorada.' });
+      toast({ title: 'Copy Otimizada!', description: 'A copy selecionada foi aprimorada.' });
       setOptimizingCopy(null);
     },
     onError: (error: Error) => { toast({ title: 'Erro ao Otimizar', description: error.message, variant: 'destructive' }); setOptimizingCopy(null); },
@@ -396,106 +317,106 @@ Observações importantes para sua geração:
   const handleCopyPurposeKeyChange = (value: string) => { setSelectedCopyPurposeKey(value); };
 
   return (
-    <div className={`p-4 md:p-6 lg:p-8 space-y-6 sm:space-y-8 font-sans ${neoBgMainClass} ${neoTextSecondaryClass} min-h-screen`}>
+    <div className="p-4 md:p-6 lg:p-8 space-y-6 sm:space-y-8 bg-background text-foreground min-h-screen">
+      {/* Estilo global para scrollbar, se necessário, pode ser movido para index.css */}
       <style jsx global>{`
         .custom-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: hsl(var(--muted) / 0.2); border-radius: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: hsl(var(--muted-foreground) / 0.4); border-radius: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground) / 0.6); }
-        .dark .custom-scrollbar { scrollbar-color: hsl(var(--muted-foreground) / 0.4) hsl(var(--muted) / 0.2); }
       `}</style>
-      <header className="pb-4 sm:pb-6 border-b border-slate-700">
-        <h1 className={`text-2xl sm:text-3xl font-bold ${neoTextPrimaryClass}`}>Gerador de Copy IA Avançado</h1>
-        <p className="mt-1 sm:mt-2">Crie textos altamente específicos para cada etapa do seu lançamento.</p>
+      <header className="pb-4 sm:pb-6 border-b">
+        <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Gerador de Copy IA Avançado</h1>
+        <p className="text-muted-foreground mt-1 sm:mt-2">Crie textos altamente específicos para cada etapa do seu lançamento.</p>
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8 items-start">
-        <Card className="lg:col-span-2 neo-card"> {/* Usando .neo-card */}
-          <CardHeader className={cardHeaderStyleNeo}>
-            <CardTitle className={cardTitleStyleNeo}><Bot className={`mr-2 ${neoTextPrimaryClass}`} />Configurar Geração</CardTitle>
-            <CardDescription className={neoTextSecondaryClass}>Preencha os campos para que a IA crie a copy ideal.</CardDescription>
+        <Card className="lg:col-span-2 shadow-lg rounded-xl"> {/* Estilo padrão shadcn/ui */}
+          <CardHeader className="border-b">
+            <CardTitle className="flex items-center text-xl"><Bot className="mr-2 text-primary" />Configurar Geração</CardTitle>
+            <CardDescription>Preencha os campos para que a IA crie a copy ideal para sua necessidade.</CardDescription>
           </CardHeader>
-          <CardContent className={cardContentStyleNeo}>
+          <CardContent className="p-6 space-y-6">
             <FormProvider {...rhfBaseForm}>
               <form onSubmit={rhfBaseForm.handleSubmit(handleSubmitBaseFormAndGenerate)} className="space-y-6">
                 <Accordion type="single" collapsible defaultValue="item-base" className="w-full">
-                  <AccordionItem value="item-base" className="border border-slate-700 rounded-lg shadow-[var(--neu-shadow-inset)] bg-slate-800/30">
-                    <AccordionTrigger className={`text-lg font-semibold hover:no-underline p-4 ${neoTextPrimaryClass} rounded-t-lg`}>
+                  <AccordionItem value="item-base" className="border rounded-md shadow-sm">
+                    <AccordionTrigger className="text-lg font-semibold hover:no-underline p-4 bg-muted/50 dark:bg-muted/20 rounded-t-md">
                         Informações Base (Obrigatórias)
                     </AccordionTrigger>
                     <AccordionContent className="p-4 pt-3">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <FormField control={rhfBaseForm.control} name="product" render={({ field }) => (<FormItem><FormLabel className={labelStyleNeo}>Produto/Serviço Geral*</FormLabel><FormControl><Input placeholder="Ex: Consultoria de Marketing Avançada" {...field} className={inputStyleNeo} /></FormControl><FormMessage /></FormItem>)} />
-                        <FormField control={rhfBaseForm.control} name="audience" render={({ field }) => (<FormItem><FormLabel className={labelStyleNeo}>Público-Alvo Geral*</FormLabel><FormControl><Input placeholder="Ex: Empresas SaaS B2B" {...field} className={inputStyleNeo} /></FormControl><FormMessage /></FormItem>)} />
-                        <FormField control={rhfBaseForm.control} name="objective" render={({ field }) => (<FormItem><FormLabel className={labelStyleNeo}>Objetivo Geral da Marca</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger className={inputStyleNeo}><SelectValue /></SelectTrigger></FormControl><SelectContent className="bg-slate-800 text-slate-200 border-slate-700">{objectiveOptions.map(opt => <SelectItem key={opt.value} value={opt.value} className="hover:bg-slate-700 focus:bg-slate-700">{opt.label}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)} />
-                        <FormField control={rhfBaseForm.control} name="tone" render={({ field }) => (<FormItem><FormLabel className={labelStyleNeo}>Tom de Voz Geral</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger className={inputStyleNeo}><SelectValue /></SelectTrigger></FormControl><SelectContent className="bg-slate-800 text-slate-200 border-slate-700">{toneOptions.map(opt => <SelectItem key={opt.value} value={opt.value} className="hover:bg-slate-700 focus:bg-slate-700">{opt.label}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)} />
+                        <FormField control={rhfBaseForm.control} name="product" render={({ field }) => (<FormItem><FormLabel>Produto/Serviço Geral*</FormLabel><FormControl><Input placeholder="Ex: Consultoria de Marketing Avançada" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                        <FormField control={rhfBaseForm.control} name="audience" render={({ field }) => (<FormItem><FormLabel>Público-Alvo Geral*</FormLabel><FormControl><Input placeholder="Ex: Empresas SaaS B2B" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                        <FormField control={rhfBaseForm.control} name="objective" render={({ field }) => (<FormItem><FormLabel>Objetivo Geral da Marca</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{objectiveOptions.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)} />
+                        <FormField control={rhfBaseForm.control} name="tone" render={({ field }) => (<FormItem><FormLabel>Tom de Voz Geral</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{toneOptions.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)} />
                       </div>
                     </AccordionContent>
                   </AccordionItem>
                 </Accordion>
                 
-                <Button type="button" variant="outline" size="sm" className={`${buttonSecondaryNeo} w-full mt-2`} onClick={handleGenerateContentIdeas} disabled={generateContentIdeasMutation.isPending}>
+                <Button type="button" variant="outline" size="sm" className="w-full mt-2" onClick={handleGenerateContentIdeas} disabled={generateContentIdeasMutation.isPending}>
                     {generateContentIdeasMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Lightbulb className="mr-2 h-4 w-4"/>}
                     Gerar Ideias de Conteúdo (Produto/Público Base)
                 </Button>
             
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-slate-700 mt-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t mt-4">
                     <FormItem>
-                        <FormLabel htmlFor="launch-phase" className={`${labelStyleNeo} text-base`}>1. Fase do Lançamento*</FormLabel>
+                        <FormLabel htmlFor="launch-phase" className="text-md font-semibold">1. Fase do Lançamento*</FormLabel>
                         <Select value={selectedLaunchPhase} onValueChange={(value: LaunchPhase | '') => setSelectedLaunchPhase(value)}>
-                            <SelectTrigger id="launch-phase" className={inputStyleNeo}><SelectValue placeholder="Selecione uma fase..." /></SelectTrigger>
-                            <SelectContent className="bg-slate-800 text-slate-200 border-slate-700">
-                                <SelectItem value="pre_launch" className="hover:bg-slate-700 focus:bg-slate-700">Pré-Lançamento</SelectItem>
-                                <SelectItem value="launch" className="hover:bg-slate-700 focus:bg-slate-700">Lançamento</SelectItem>
-                                <SelectItem value="post_launch" className="hover:bg-slate-700 focus:bg-slate-700">Pós-Lançamento</SelectItem>
+                            <SelectTrigger id="launch-phase"><SelectValue placeholder="Selecione uma fase..." /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="pre_launch">Pré-Lançamento</SelectItem>
+                                <SelectItem value="launch">Lançamento</SelectItem>
+                                <SelectItem value="post_launch">Pós-Lançamento</SelectItem>
                             </SelectContent>
                         </Select>
                     </FormItem>
 
                     <FormItem>
-                        <FormLabel htmlFor="copy-purpose-key" className={`${labelStyleNeo} text-base`}>2. Finalidade da Copy*</FormLabel>
+                        <FormLabel htmlFor="copy-purpose-key" className="text-md font-semibold">2. Finalidade da Copy Específica*</FormLabel>
                         <Select value={selectedCopyPurposeKey} onValueChange={handleCopyPurposeKeyChange} disabled={!selectedLaunchPhase || groupedPurposeOptions.length === 0}>
-                            <SelectTrigger id="copy-purpose-key" className={inputStyleNeo} disabled={!selectedLaunchPhase || groupedPurposeOptions.length === 0}>
+                            <SelectTrigger id="copy-purpose-key" disabled={!selectedLaunchPhase || groupedPurposeOptions.length === 0}>
                                 <SelectValue placeholder={selectedLaunchPhase && groupedPurposeOptions.length > 0 ? "Selecione a finalidade..." : (selectedLaunchPhase ? "Nenhuma finalidade para esta fase" : "Selecione uma fase primeiro")}/>
                             </SelectTrigger>
-                            <SelectContent className="max-h-[300px] bg-slate-800 text-slate-200 border-slate-700">
+                            <SelectContent className="max-h-[300px]">
                             {groupedPurposeOptions.map(([category, options]) => (
                                 <SelectGroup key={category}>
-                                    <ShadcnSelectLabel className="text-slate-400 px-2 py-1.5">{category}</ShadcnSelectLabel>
-                                    {options.map(opt => <SelectItem key={opt.value} value={opt.value} className="hover:bg-slate-700 focus:bg-slate-700">{opt.label}</SelectItem>)}
+                                    <ShadcnSelectLabel>{category}</ShadcnSelectLabel>
+                                    {options.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
                                 </SelectGroup>
                             ))}
                             </SelectContent>
                         </Select>
                     </FormItem>
                 </div>
-                {currentPurposeDetails?.description && <CardDescription className={`text-xs mt-1 px-1 ${neoTextSecondaryClass}`}>{currentPurposeDetails.description}</CardDescription>}
+                {currentPurposeDetails?.description && <CardDescription className="text-xs mt-1 px-1">{currentPurposeDetails.description}</CardDescription>}
                 
                 {selectedCopyPurposeKey && currentSpecificFields.length > 0 && (
-                  <Card className={`p-4 pt-2 mt-4 bg-card shadow-[var(--neu-shadow-inset)]`}> {/* Usando bg-card para consistência com tema */}
-                    <CardHeader className="p-0 pb-3 mb-3 border-b border-slate-700">
-                        <CardTitle className={`${labelStyleNeo} text-base ${neoTextPrimaryClass}`}>3. Detalhes para: <span className="text-purple-400">{currentPurposeDetails?.label}</span></CardTitle>
+                  <Card className="p-4 pt-2 bg-muted/30 dark:bg-muted/10 border-border/70 shadow-inner mt-4">
+                    <CardHeader className="p-0 pb-3 mb-3 border-b">
+                        <CardTitle className="text-base">3. Detalhes para: <span className="text-primary">{currentPurposeDetails?.label}</span></CardTitle>
                     </CardHeader>
                     <CardContent className="p-0 space-y-4 max-h-[300px] overflow-y-auto pr-3 custom-scrollbar">
                         {currentSpecificFields.map(field => (
                         <FormItem key={field.name} className="space-y-1.5">
                             <div className="flex items-center">
-                            <FormLabel htmlFor={`specific-${field.name}`} className={`${labelStyleNeo} mb-0.5`}>
-                                {field.label} {field.required && <span className="text-red-400">*</span>}
+                            <FormLabel htmlFor={`specific-${field.name}`} className="text-sm font-medium">
+                                {field.label} {field.required && <span className="text-destructive">*</span>}
                             </FormLabel>
                             {field.tooltip && (
-                                <TooltipProvider delayDuration={100}><Tooltip><TooltipTrigger asChild><Button type="button" variant="ghost" size="icon" className="h-6 w-6 ml-1.5 p-0"><InfoIconLucide className="w-3.5 h-3.5 text-slate-400 hover:text-slate-200" /></Button></TooltipTrigger><TooltipContent side="top" className="max-w-xs z-[100] bg-slate-900 text-slate-200 border-slate-700"><p className="text-xs">{field.tooltip}</p></TooltipContent></Tooltip></TooltipProvider>
+                                <TooltipProvider delayDuration={100}><Tooltip><TooltipTrigger asChild><Button type="button" variant="ghost" size="icon" className="h-5 w-5 ml-1.5"><InfoIcon className="w-3.5 h-3.5 text-muted-foreground" /></Button></TooltipTrigger><TooltipContent side="top" className="max-w-xs z-[100]"><p className="text-xs">{field.tooltip}</p></TooltipContent></Tooltip></TooltipProvider>
                             )}
                             </div>
                             {field.type === 'textarea' ? (
-                            <FormControl><Textarea id={`specific-${field.name}`} placeholder={field.placeholder} value={specificPurposeData[field.name] || ''} onChange={(e) => handleSpecificDataChange(field.name, e.target.value)} rows={field.label.toLowerCase().includes('tópicos') || field.label.toLowerCase().includes('passos') || field.label.toLowerCase().includes('conteúdo') ? 4 : 2} required={field.required} className={inputStyleNeo}/></FormControl>
+                            <FormControl><Textarea id={`specific-${field.name}`} placeholder={field.placeholder} value={specificPurposeData[field.name] || ''} onChange={(e) => handleSpecificDataChange(field.name, e.target.value)} rows={field.label.toLowerCase().includes('tópicos') || field.label.toLowerCase().includes('passos') || field.label.toLowerCase().includes('conteúdo') ? 4 : 2} required={field.required} /></FormControl>
                             ) : field.type === 'select' ? (
                             <Select value={specificPurposeData[field.name] || field.defaultValue || ''} onValueChange={(value) => handleSpecificDataChange(field.name, value)} required={field.required}>
-                                <FormControl><SelectTrigger id={`specific-${field.name}`} className={inputStyleNeo}><SelectValue placeholder={field.placeholder || 'Selecione...'} /></SelectTrigger></FormControl>
-                                <SelectContent className="bg-slate-800 text-slate-200 border-slate-700">{field.options?.map(opt => (<SelectItem key={opt.value} value={opt.value} className="hover:bg-slate-700 focus:bg-slate-700">{opt.label}</SelectItem>))}</SelectContent>
+                                <FormControl><SelectTrigger id={`specific-${field.name}`}><SelectValue placeholder={field.placeholder || 'Selecione...'} /></SelectTrigger></FormControl>
+                                <SelectContent>{field.options?.map(opt => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}</SelectContent>
                             </Select>
                             ) : (
-                            <FormControl><Input id={`specific-${field.name}`} type={field.type as React.HTMLInputTypeAttribute} placeholder={field.placeholder} value={specificPurposeData[field.name] || ''} onChange={(e) => handleSpecificDataChange(field.name, field.type === 'number' ? parseFloat(e.target.value) || '' : e.target.value)} required={field.required} className={inputStyleNeo}/></FormControl>
+                            <FormControl><Input id={`specific-${field.name}`} type={field.type as React.HTMLInputTypeAttribute} placeholder={field.placeholder} value={specificPurposeData[field.name] || ''} onChange={(e) => handleSpecificDataChange(field.name, field.type === 'number' ? parseFloat(e.target.value) || '' : e.target.value)} required={field.required} /></FormControl>
                             )}
                             <FormMessage />
                         </FormItem>
@@ -503,9 +424,9 @@ Observações importantes para sua geração:
                     </CardContent>
                   </Card>
                 )}
-                 {!selectedCopyPurposeKey && selectedLaunchPhase && ( <div className={`text-center py-6 ${neoTextSecondaryClass} border border-slate-700 rounded-md bg-slate-800/50 shadow-[var(--neu-shadow-inset)]`}><InfoIconLucide className="w-8 h-8 mx-auto mb-2 opacity-70"/><p>Selecione uma "Finalidade da Copy" para detalhar.</p></div> )}
+                 {!selectedCopyPurposeKey && selectedLaunchPhase && ( <div className="text-center py-6 text-muted-foreground border rounded-md bg-muted/20"><InfoIcon className="w-8 h-8 mx-auto mb-2 opacity-70"/><p>Selecione uma "Finalidade da Copy" para fornecer os detalhes.</p></div> )}
 
-                <Button type="submit" disabled={generateSpecificCopyMutation.isPending || !selectedCopyPurposeKey} className={`${buttonPrimaryNeo} w-full mt-6 text-base py-3`}>
+                <Button type="submit" disabled={generateSpecificCopyMutation.isPending || !selectedCopyPurposeKey} className="w-full bg-gradient-to-r from-primary to-purple-600 hover:from-primary/90 hover:to-purple-600/90 text-primary-foreground text-base py-3 shadow-lg mt-6">
                   {generateSpecificCopyMutation.isPending ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Sparkles className="mr-2 h-5 w-5" />}
                   Gerar Copy Avançada
                 </Button>
@@ -514,38 +435,37 @@ Observações importantes para sua geração:
           </CardContent>
         </Card>
 
-        {/* Coluna de Resultados */}
-        <Card className={`lg:col-span-1 sticky top-6 neo-card`}> {/* Usando .neo-card */}
-            <CardHeader className={cardHeaderStyleNeo}>
-                <CardTitle className={cardTitleStyleNeo}><Sparkles className={`mr-2 ${neoTextPrimaryClass}`}/>Copies Geradas</CardTitle>
-                <CardDescription className={neoTextSecondaryClass}>Resultados da IA para sua finalidade.</CardDescription>
+        <Card className="lg:col-span-1 sticky top-6 shadow-lg rounded-xl"> {/* Estilo padrão */}
+            <CardHeader className="border-b">
+                <CardTitle className="flex items-center text-xl"><Sparkles className="mr-2 text-primary"/>Copies Geradas</CardTitle>
+                <CardDescription>Resultados da IA para sua finalidade.</CardDescription>
             </CardHeader>
-            <CardContent className={`${cardContentStyleNeo} max-h-[calc(100vh-200px)] overflow-y-auto custom-scrollbar`}>
-                <div className="space-y-4">
-                {generateSpecificCopyMutation.isPending && ( <div className="text-center py-10"><Loader2 className={`w-10 h-10 ${neoTextPrimaryClass} mx-auto mb-3 animate-spin`} /> Gerando...</div> )}
-                {!generateSpecificCopyMutation.isPending && generatedCopies.length === 0 && ( <div className="text-center py-10"> <Bot className={`w-16 h-16 mx-auto mb-4 ${neoTextSecondaryClass} opacity-50`} /> <p>Suas copies personalizadas aparecerão aqui.</p> </div> )}
+            <CardContent className="p-4">
+                <div className="space-y-3 max-h-[calc(100vh-280px)] overflow-y-auto pr-2 custom-scrollbar">
+                {generateSpecificCopyMutation.isPending && ( <div className="text-center py-10 text-primary"><Loader2 className="w-10 h-10 mx-auto mb-3 animate-spin" /> Gerando...</div> )}
+                {!generateSpecificCopyMutation.isPending && generatedCopies.length === 0 && ( <div className="text-center py-10 text-muted-foreground"><Bot className="w-12 h-12 mx-auto mb-3 opacity-60" /><p>Suas copies personalizadas aparecerão aqui.</p></div> )}
                 {generatedCopies.map((copy, index) => {
                     const purposeConfig = allCopyPurposesConfig.find(p => p.key === copy.purposeKey);
                     return (
-                    <Card key={index} className={`bg-card rounded-lg shadow-[var(--neu-shadow-outset)] p-0.5`}> {/* Usando bg-card */}
-                        <CardContent className={`p-3 bg-slate-800 rounded-md`}> {/* Ajuste o bg aqui se necessário para contraste interno */}
-                            <div className="flex justify-between items-center mb-2">
-                            <Badge className={badgeStyleNeo('bg-purple-600/30', 'text-purple-300')}>{purposeConfig?.label || copy.purposeKey}</Badge>
+                    <Card key={index} className="bg-card hover:shadow-md transition-shadow relative">
+                        <CardContent className="p-3">
+                            <div className="flex justify-between items-center mb-1.5">
+                            <Badge variant="outline" className="text-xs font-medium">{purposeConfig?.label || copy.purposeKey}</Badge>
                             <div className="flex space-x-0.5">
-                                <TooltipProvider><Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className={`${buttonSecondaryNeo} !p-1.5 !h-7 !w-7`} onClick={() => copyToClipboard(copy.mainCopy)}><CopyIcon className="w-3.5 h-3.5" /></Button></TooltipTrigger><TooltipContent side="top" className="bg-slate-900 text-slate-200 border-slate-700"><p>Copiar Principal</p></TooltipContent></Tooltip></TooltipProvider>
-                                <TooltipProvider><Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className={`${buttonSecondaryNeo} !p-1.5 !h-7 !w-7`} onClick={() => handleOptimizeCopy(copy, index)} disabled={optimizingCopy?.index === index || optimizeCopyMutation.isPending}><Wand2 className="w-3.5 h-3.5" /></Button></TooltipTrigger><TooltipContent side="top" className="bg-slate-900 text-slate-200 border-slate-700"><p>Otimizar com IA</p></TooltipContent></Tooltip></TooltipProvider>
-                                <TooltipProvider><Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className={`${buttonSecondaryNeo} !p-1.5 !h-7 !w-7`} onClick={() => handleSaveGeneratedCopy(copy)} disabled={saveCopyMutation.isPending}><Save className="w-3.5 h-3.5" /></Button></TooltipTrigger><TooltipContent side="top" className="bg-slate-900 text-slate-200 border-slate-700"><p>Salvar</p></TooltipContent></Tooltip></TooltipProvider>
+                                <TooltipProvider><Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => copyToClipboard(copy.mainCopy)}><CopyIcon className="w-3.5 h-3.5" /></Button></TooltipTrigger><TooltipContent><p>Copiar Principal</p></TooltipContent></Tooltip></TooltipProvider>
+                                <TooltipProvider><Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleOptimizeCopy(copy, index)} disabled={optimizingCopy?.index === index || optimizeCopyMutation.isPending}><Wand2 className="w-3.5 h-3.5" /></Button></TooltipTrigger><TooltipContent><p>Otimizar com IA</p></TooltipContent></Tooltip></TooltipProvider>
+                                <TooltipProvider><Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleSaveGeneratedCopy(copy)} disabled={saveCopyMutation.isPending}><Save className="w-3.5 h-3.5" /></Button></TooltipTrigger><TooltipContent><p>Salvar na Biblioteca</p></TooltipContent></Tooltip></TooltipProvider>
                             </div>
                             </div>
-                            <Label className={`font-semibold text-sm ${neoTextPrimaryClass} mt-1 block`}>Texto Principal:</Label>
-                            <Textarea value={copy.mainCopy || "---"} readOnly rows={Math.min(8, (copy.mainCopy?.split('\n').length || 1) +1 )} className={`text-sm ${neoTextSecondaryClass} whitespace-pre-line p-2.5 bg-slate-900/70 rounded-md mt-1 shadow-[var(--neu-shadow-inset)] h-auto`}/>
+                            <Label className="font-semibold text-sm text-foreground mt-1 block">Texto Principal:</Label>
+                            <Textarea value={copy.mainCopy || "---"} readOnly rows={Math.min(10, (copy.mainCopy?.split('\n').length || 1) +1 )} className="text-sm text-muted-foreground whitespace-pre-line p-2 bg-muted/50 rounded h-auto mt-1"/>
                             
-                            {copy.alternativeVariation1 && (<details className="text-xs my-2"><summary className={`cursor-pointer ${neoTextSecondaryClass} hover:text-purple-400 font-medium py-1`}>Ver Variação 1</summary><Textarea value={copy.alternativeVariation1} readOnly rows={3} className={`mt-1 p-2.5 bg-slate-900/70 rounded-md whitespace-pre-line ${neoTextSecondaryClass} h-auto text-xs shadow-[var(--neu-shadow-inset)]`}/></details>)}
-                            {copy.alternativeVariation2 && (<details className="text-xs my-2"><summary className={`cursor-pointer ${neoTextSecondaryClass} hover:text-purple-400 font-medium py-1`}>Ver Variação 2</summary><Textarea value={copy.alternativeVariation2} readOnly rows={3} className={`mt-1 p-2.5 bg-slate-900/70 rounded-md whitespace-pre-line ${neoTextSecondaryClass} h-auto text-xs shadow-[var(--neu-shadow-inset)]`}/></details>)}
+                            {copy.alternativeVariation1 && (<details className="text-xs my-2"><summary className="cursor-pointer text-muted-foreground hover:text-primary font-medium py-1">Ver Variação 1</summary><Textarea value={copy.alternativeVariation1} readOnly rows={3} className="mt-1 p-2 bg-muted/50 rounded whitespace-pre-line text-muted-foreground h-auto text-xs"/></details>)}
+                            {copy.alternativeVariation2 && (<details className="text-xs my-2"><summary className="cursor-pointer text-muted-foreground hover:text-primary font-medium py-1">Ver Variação 2</summary><Textarea value={copy.alternativeVariation2} readOnly rows={3} className="mt-1 p-2 bg-muted/50 rounded whitespace-pre-line text-muted-foreground h-auto text-xs"/></details>)}
                             
-                            {copy.platformSuggestion && <p className="text-xs text-slate-400 mt-2">Plataforma Sugerida: <Badge className={badgeStyleNeo('bg-slate-700', 'text-slate-200')}>{copy.platformSuggestion}</Badge></p>}
-                            {copy.notes && <p className="text-xs text-amber-500 mt-1 italic">Nota da IA: {copy.notes}</p>}
-                            <p className="text-xs text-slate-500 text-right mt-1.5">Gerado: {copy.timestamp.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}</p>
+                            {copy.platformSuggestion && <p className="text-xs text-muted-foreground mt-2">Plataforma Sugerida: <Badge variant="secondary" className="text-xs">{copy.platformSuggestion}</Badge></p>}
+                            {copy.notes && <p className="text-xs text-amber-600 dark:text-amber-500 mt-1 italic">Nota da IA: {copy.notes}</p>}
+                            <p className="text-xs text-muted-foreground/70 text-right mt-1.5">Gerado: {copy.timestamp.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}</p>
                         </CardContent>
                     </Card>
                     );
@@ -555,49 +475,49 @@ Observações importantes para sua geração:
         </Card>
       </div>
 
-      <Card className="neo-card"> {/* Usando .neo-card */}
-        <CardHeader className={`${cardHeaderStyleNeo} flex-wrap gap-3 md:flex-nowrap md:items-center md:justify-between`}> 
-            <CardTitle className={cardTitleStyleNeo}><FileText className={`mr-2 ${neoTextPrimaryClass}`}/> Biblioteca de Copies Salvas</CardTitle> 
+      <Card className="shadow-lg rounded-xl"> {/* Estilo padrão */}
+        <CardHeader className="border-b flex-wrap gap-3 md:flex-nowrap md:items-center md:justify-between"> 
+            <CardTitle className="flex items-center text-xl"><FileText className="mr-2 text-primary"/> Biblioteca de Copies Salvas</CardTitle> 
             <div className="flex flex-col sm:flex-row items-stretch gap-3 w-full md:w-auto"> 
                 <div className="relative flex-grow">
-                    <SearchIcon className={`absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4`} />
-                    <Input placeholder="Buscar na biblioteca..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className={`${inputStyleNeo} pl-10 text-sm`} />
+                    <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+                    <Input placeholder="Buscar na biblioteca..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10 text-sm" />
                 </div> 
                 <Select value={filterLaunchPhase} onValueChange={(v) => setFilterLaunchPhase(v as LaunchPhase | 'all')}>
-                    <SelectTrigger className={`${inputStyleNeo} text-sm w-full sm:w-auto`}><SelectValue placeholder="Filtrar Fase..." /></SelectTrigger>
-                    <SelectContent className="bg-slate-800 text-slate-200 border-slate-700"><SelectItem value="all" className="hover:bg-slate-700 focus:bg-slate-700">Todas as Fases</SelectItem> <SelectItem value="pre_launch" className="hover:bg-slate-700 focus:bg-slate-700">Pré-Lançamento</SelectItem> <SelectItem value="launch" className="hover:bg-slate-700 focus:bg-slate-700">Lançamento</SelectItem> <SelectItem value="post_launch" className="hover:bg-slate-700 focus:bg-slate-700">Pós-Lançamento</SelectItem></SelectContent>
+                    <SelectTrigger className="text-sm w-full sm:w-auto"><SelectValue placeholder="Filtrar Fase..." /></SelectTrigger>
+                    <SelectContent><SelectItem value="all">Todas as Fases</SelectItem> <SelectItem value="pre_launch">Pré-Lançamento</SelectItem> <SelectItem value="launch">Lançamento</SelectItem> <SelectItem value="post_launch">Pós-Lançamento</SelectItem></SelectContent>
                 </Select> 
                 <Select value={filterCopyPurpose} onValueChange={(v) => setFilterCopyPurpose(v as string | 'all')}>
-                    <SelectTrigger className={`${inputStyleNeo} text-sm w-full sm:w-auto`}><SelectValue placeholder="Filtrar Finalidade..." /></SelectTrigger>
-                    <SelectContent className="max-h-60 bg-slate-800 text-slate-200 border-slate-700">
-                        <SelectItem value="all" className="hover:bg-slate-700 focus:bg-slate-700">Todas Finalidades</SelectItem> 
-                        {allCopyPurposesConfig.map(p => <SelectItem key={p.key} value={p.key} className="hover:bg-slate-700 focus:bg-slate-700">{p.label}</SelectItem>)} 
+                    <SelectTrigger className="text-sm w-full sm:w-auto"><SelectValue placeholder="Filtrar Finalidade..." /></SelectTrigger>
+                    <SelectContent className="max-h-60">
+                        <SelectItem value="all">Todas Finalidades</SelectItem> 
+                        {allCopyPurposesConfig.map(p => <SelectItem key={p.key} value={p.key}>{p.label}</SelectItem>)} 
                     </SelectContent>
                 </Select> 
             </div> 
         </CardHeader>
-        <CardContent className={cardContentStyleNeo}>
-          {isSavedCopiesLoading && <div className="text-center py-8"><Loader2 className={`w-8 h-8 ${neoTextPrimaryClass} mx-auto animate-spin`}/> Carregando biblioteca...</div>}
+        <CardContent className="p-6">
+          {isSavedCopiesLoading && <div className="text-center py-8"><Loader2 className="w-8 h-8 text-primary mx-auto animate-spin"/> Carregando biblioteca...</div>}
           {!isSavedCopiesLoading && filteredSavedCopies.length === 0 && (
-             <div className="text-center py-12"> <FileText className={`w-16 h-16 mx-auto mb-4 ${neoTextSecondaryClass} opacity-50`} /> <h3 className={`text-lg font-semibold ${neoTextPrimaryClass}`}>Nenhuma copy encontrada.</h3> <p>{(savedCopiesList || []).length === 0 ? 'Suas copies salvas aparecerão aqui.' : 'Ajuste os filtros.'}</p> </div>
+             <div className="text-center py-12 text-muted-foreground"><FileText className="w-16 h-16 mx-auto mb-4 opacity-50" /><h3 className="text-lg font-semibold mb-2">Nenhuma copy encontrada.</h3><p>{(savedCopiesList || []).length === 0 ? 'Suas copies salvas aparecerão aqui.' : 'Ajuste os filtros.'}</p></div>
            )}
            {!isSavedCopiesLoading && filteredSavedCopies.length > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
               {filteredSavedCopies.map((copy) => (
-                <Card key={copy.id} className="neo-card flex flex-col"> {/* Usando .neo-card */}
-                  <CardContent className={`p-4 flex flex-col flex-grow bg-card rounded-lg`}> {/* Usando bg-card */}
-                    <h4 className={`font-semibold ${neoTextPrimaryClass} line-clamp-2 mb-1 text-base leading-tight`}>{copy.title}</h4> 
+                <Card key={copy.id} className="flex flex-col hover:shadow-md transition-shadow duration-200">
+                  <CardContent className="p-4 flex flex-col flex-grow">
+                    <h4 className="font-semibold text-foreground line-clamp-2 mb-1 text-base leading-tight">{copy.title}</h4> 
                     <div className="flex flex-wrap gap-1.5 mb-2"> 
-                        <Badge className={badgeStyleNeo('bg-blue-600/30', 'text-blue-300')}>{allCopyPurposesConfig.find(p => p.key === copy.purposeKey)?.label || copy.purposeKey}</Badge> 
-                        <Badge className={badgeStyleNeo('bg-indigo-600/30', 'text-indigo-300')}>{copy.launchPhase === 'pre_launch' ? 'Pré-Lançamento' : copy.launchPhase === 'launch' ? 'Lançamento' : 'Pós-Lançamento'}</Badge> 
+                        <Badge variant="outline" className="text-xs">{allCopyPurposesConfig.find(p => p.key === copy.purposeKey)?.label || copy.purposeKey}</Badge> 
+                        <Badge variant="secondary" className="text-xs">{copy.launchPhase === 'pre_launch' ? 'Pré-Lançamento' : copy.launchPhase === 'launch' ? 'Lançamento' : 'Pós-Lançamento'}</Badge> 
                     </div>
-                    <p className={`text-sm ${neoTextSecondaryClass} mb-3 line-clamp-3 flex-grow`}>{copy.content}</p>
-                    <div className="flex justify-between items-center mt-auto pt-2 border-t border-slate-700"> 
-                        <span className="text-xs text-slate-400">{new Date(copy.createdAt).toLocaleDateString('pt-BR')}</span> 
+                    <p className="text-sm text-muted-foreground line-clamp-3 flex-grow mb-2">{copy.content}</p>
+                    <div className="flex justify-between items-center mt-auto pt-2 border-t"> 
+                        <span className="text-xs text-muted-foreground">{new Date(copy.createdAt).toLocaleDateString('pt-BR')}</span> 
                         <div className="flex space-x-0.5"> 
-                            <TooltipProvider><Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className={`${buttonSecondaryNeo} !p-1.5 !h-7 !w-7`} onClick={() => handleReuseSavedCopy(copy)}><RotateCcw className="w-3.5 h-3.5" /></Button></TooltipTrigger><TooltipContent side="top" className="bg-slate-900 text-slate-200 border-slate-700"><p>Reutilizar Dados</p></TooltipContent></Tooltip></TooltipProvider>
-                            <TooltipProvider><Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className={`${buttonSecondaryNeo} !p-1.5 !h-7 !w-7`} onClick={() => copyToClipboard(copy.content)}><CopyIcon className="w-3.5 h-3.5" /></Button></TooltipTrigger><TooltipContent side="top" className="bg-slate-900 text-slate-200 border-slate-700"><p>Copiar Texto</p></TooltipContent></Tooltip></TooltipProvider>
-                            <TooltipProvider><Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className={`${buttonSecondaryNeo} !p-1.5 !h-7 !w-7 !text-red-400 hover:!bg-red-500/20`} onClick={() => deleteMutation.mutate(copy.id)} disabled={deleteMutation.isPending && deleteMutation.variables === copy.id}><Trash2 className="w-3.5 h-3.5" /></Button></TooltipTrigger><TooltipContent side="top" className="bg-slate-900 text-slate-200 border-slate-700"><p>Excluir Copy</p></TooltipContent></Tooltip></TooltipProvider>
+                            <TooltipProvider><Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleReuseSavedCopy(copy)}><RotateCcw className="w-3.5 h-3.5" /></Button></TooltipTrigger><TooltipContent><p>Reutilizar Dados</p></TooltipContent></Tooltip></TooltipProvider>
+                            <TooltipProvider><Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => copyToClipboard(copy.content)}><CopyIcon className="w-3.5 h-3.5" /></Button></TooltipTrigger><TooltipContent><p>Copiar Texto</p></TooltipContent></Tooltip></TooltipProvider>
+                            <TooltipProvider><Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => deleteMutation.mutate(copy.id)} disabled={deleteMutation.isPending && deleteMutation.variables === copy.id}><Trash2 className="w-3.5 h-3.5" /></Button></TooltipTrigger><TooltipContent><p>Excluir Copy</p></TooltipContent></Tooltip></TooltipProvider>
                         </div> 
                     </div>
                   </CardContent>
@@ -609,25 +529,25 @@ Observações importantes para sua geração:
       </Card>
 
       <Dialog open={isContentIdeasModalOpen} onOpenChange={setIsContentIdeasModalOpen}>
-        <DialogContent className={`sm:max-w-md neo-card p-0`}> {/* Usando .neo-card */}
-          <DialogHeader className="p-4 border-b border-slate-700">
-            <DialogTitle className={`flex items-center text-lg ${neoTextPrimaryClass}`}><Lightbulb className="mr-2 text-yellow-400"/>Ideias de Conteúdo Geradas</DialogTitle>
-            <DialogDescription className={`text-xs ${neoTextSecondaryClass}`}>Use como inspiração para seus próximos posts ou copies.</DialogDescription>
+        <DialogContent className="sm:max-w-md"> {/* Estilo padrão shadcn/ui */}
+          <DialogHeader>
+            <DialogTitle className="flex items-center text-lg"><Lightbulb className="mr-2 text-yellow-400"/>Ideias de Conteúdo Geradas</DialogTitle>
+            <DialogDescription className="text-xs">Use como inspiração para seus próximos posts ou copies.</DialogDescription>
           </DialogHeader>
           <div className="p-4 max-h-[400px] overflow-y-auto custom-scrollbar">
-            {generateContentIdeasMutation.isPending && <div className="text-center py-4"><Loader2 className={`w-6 h-6 ${neoTextPrimaryClass} mx-auto animate-spin`} /> Gerando ideias...</div>}
-            {generateContentIdeasMutation.isError && <div className="text-red-400">Ocorreu um erro ao gerar as ideias. Tente novamente.</div>}
+            {generateContentIdeasMutation.isPending && <div className="text-center py-4"><Loader2 className="w-6 h-6 text-primary mx-auto animate-spin" /> Gerando ideias...</div>}
+            {generateContentIdeasMutation.isError && <div className="text-destructive">Ocorreu um erro ao gerar as ideias. Tente novamente.</div>}
             {contentIdeas.length > 0 && !generateContentIdeasMutation.isPending && (
-              <ul className={`list-disc pl-5 space-y-2 mt-2 text-sm ${neoTextSecondaryClass}`}>
+              <ul className="list-disc pl-5 space-y-2 mt-2 text-sm text-muted-foreground">
                 {contentIdeas.map((idea, index) => ( <li key={index}>{idea}</li> ))}
               </ul>
             )}
             {contentIdeas.length === 0 && !generateContentIdeasMutation.isPending && !generateContentIdeasMutation.isError && (
-              <p className="text-slate-400">Nenhuma ideia foi gerada. Tente refinar as informações do produto/público.</p>
+              <p className="text-muted-foreground">Nenhuma ideia foi gerada. Tente refinar as informações do produto/público.</p>
             )}
           </div>
-          <DialogFooter className="p-4 border-t border-slate-700">
-            <Button type="button" variant="outline" onClick={() => setIsContentIdeasModalOpen(false)} className={buttonSecondaryNeo}>Fechar</Button>
+          <DialogFooter className="p-4 border-t">
+            <Button type="button" variant="outline" onClick={() => setIsContentIdeasModalOpen(false)}>Fechar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
