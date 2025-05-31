@@ -1,10 +1,13 @@
 // client/src/components/mcp/ChatPanel.tsx
 import React, { useState, useRef, useEffect } from 'react';
-import { useMCPStore, sendMessageToMCP, ChatSession, Message } from '@/lib/mcpStore'; // Adicionado Message
+import { useMCPStore, sendMessageToMCP, ChatSession, Message } from '@/lib/mcpStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Send, X, RotateCcw, MoreVertical, Plus, History, Trash, Edit, Mic, StopCircle, Paperclip } from 'lucide-react';
+// COORDENADA 1: Adicionar Loader2 à importação de lucide-react
+import { 
+  Send, X, RotateCcw, MoreVertical, Plus, History, Trash, Edit, Mic, StopCircle, Paperclip, Loader2 
+} from 'lucide-react'; 
 import { cn } from '@/lib/utils';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -49,7 +52,7 @@ export const ChatPanel: React.FC = () => {
   const recognitionRef = useRef<any>(null);
   const speechRecognitionAvailable = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition);
 
-  console.log("[ChatPanel] Renderizando mensagens:", messages);
+  // console.log("[ChatPanel] Renderizando mensagens:", messages); // Mantido para depuração
 
   useEffect(() => {
     if (isPanelOpen) {
@@ -66,12 +69,12 @@ export const ChatPanel: React.FC = () => {
 
   const handleSendMessage = async (e?: React.FormEvent<HTMLFormElement>) => {
     e?.preventDefault();
-    console.log('[ChatPanel] handleSendMessage: currentInput =', currentInput, '| isLoading =', isLoading);
+    // console.log('[ChatPanel] handleSendMessage: currentInput =', currentInput, '| isLoading =', isLoading); // Mantido para depuração
     const messageText = currentInput.trim();
-    console.log('[ChatPanel] handleSendMessage: messageText (trimmed) =', messageText);
+    // console.log('[ChatPanel] handleSendMessage: messageText (trimmed) =', messageText); // Mantido para depuração
 
     if (!messageText || isLoading) {
-      console.log('[ChatPanel] handleSendMessage: Retornando (messageText vazio ou isLoading true)');
+      // console.log('[ChatPanel] handleSendMessage: Retornando (messageText vazio ou isLoading true)'); // Mantido para depuração
       return;
     }
     
@@ -79,9 +82,8 @@ export const ChatPanel: React.FC = () => {
         recognitionRef.current.stop();
         setIsListening(false);
     }
-    console.log('[ChatPanel] handleSendMessage: Chamando sendMessageToMCP com texto:', messageText);
+    // console.log('[ChatPanel] handleSendMessage: Chamando sendMessageToMCP com texto:', messageText); // Mantido para depuração
     await sendMessageToMCP(messageText);
-    // Limpa o input aqui APÓS a chamada para sendMessageToMCP ter sido feita.
     useMCPStore.getState().clearCurrentInput(); 
   };
 
@@ -141,7 +143,7 @@ export const ChatPanel: React.FC = () => {
   };
 
   const handleVoiceInput = () => {
-    if (!speechRecognitionAvailable) {
+    if (!speechRecognitionAvailable) { 
       addMessage({ id: `speech-error-${Date.now()}`, text: 'Seu navegador não suporta reconhecimento de voz.', sender: 'system', timestamp: new Date() });
       return;
     }
@@ -212,11 +214,11 @@ export const ChatPanel: React.FC = () => {
               <DropdownMenuItem onClick={() => setIsHistoryModalOpen(true)}><History className="mr-2 h-4 w-4" /> Histórico</DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => {
-                 const csId = useMCPStore.getState().currentSessionId; // Pega o ID atual
-                 if (csId) useMCPStore.setState({ messages: [{ id: 'reset-agent-message', text: 'Conversa reiniciada. Como posso ajudar?', sender: 'agent', timestamp: new Date(), sessionId: csId }]});
-                 else handleStartNewChat(); // Se não há sessão, inicia uma nova
+                 const csId = useMCPStore.getState().currentSessionId;
+                 if (csId) useMCPStore.setState({ messages: [{ ...initialAgentMessageDefault, text: 'Conversa reiniciada. Como posso ajudar?', sessionId: csId }]});
+                 else handleStartNewChat();
               }}><RotateCcw className="mr-2 h-4 w-4" /> Reiniciar Atual</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => { if(currentSessionId) handleDeleteSession(currentSessionId); }} disabled={!currentSessionId}><Trash className="mr-2 h-4 w-4 text-destructive" /> Excluir Atual</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => { if(currentSessionId) handleDeleteSession(currentSessionId); }} disabled={!currentSessionId} className="text-destructive focus:text-destructive"><Trash className="mr-2 h-4 w-4" /> Excluir Atual</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
           <Button variant="ghost" size="icon" onClick={togglePanel} title="Fechar Painel" aria-label="Fechar painel do Agente MCP"><X className="h-5 w-5" /></Button>
@@ -243,7 +245,6 @@ export const ChatPanel: React.FC = () => {
               )}
             </div>
           ))}
-          {/* COORDENADA 1: Bloco JSX completo para "Digitando..." */}
           {isLoading && (
             <div className="flex items-center justify-start p-3">
               <div className="bg-muted text-muted-foreground rounded-lg p-3 inline-flex items-center space-x-2 rounded-bl-none">
@@ -272,14 +273,13 @@ export const ChatPanel: React.FC = () => {
         </div>
       </form>
 
-      {/* COORDENADA 2: Modal de Histórico completo */}
       <Dialog open={isHistoryModalOpen} onOpenChange={setIsHistoryModalOpen}>
         <DialogContent className="sm:max-w-md md:max-w-lg">
           <DialogHeader>
             <DialogTitle>Conversas Antigas</DialogTitle>
             <DialogDescription>Selecione uma conversa para carregar o histórico ou inicie uma nova.</DialogDescription>
           </DialogHeader>
-          <ScrollArea className="max-h-[calc(70vh-150px)] py-4 pr-3"> {/* Ajuste de altura e padding */}
+          <ScrollArea className="max-h-[calc(70vh-200px)] py-4 pr-3"> {/* Ajuste de altura e padding */}
             <div className="grid gap-3">
                 {isSessionsLoading ? (
                   <div className="text-center text-muted-foreground py-4">Carregando conversas... <Loader2 className="inline w-4 h-4 animate-spin"/></div>
@@ -311,7 +311,6 @@ export const ChatPanel: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {/* COORDENADA 3: Modal de Editar Título completo */}
       <Dialog open={isEditTitleModalOpen} onOpenChange={setIsEditTitleModalOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
