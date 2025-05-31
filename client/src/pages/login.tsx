@@ -4,12 +4,12 @@ import { useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'; // Card ainda pode ser usado para o formulário
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthStore } from '@/lib/auth';
 import { Loader2 } from 'lucide-react';
-import LogoPng from '@/img/logo.png'; // ATUALIZADO O CAMINHO DO LOGO
+import LogoPng from '@/img/logo.png'; 
 
 export default function Login() {
   const [, navigate] = useLocation();
@@ -30,9 +30,7 @@ export default function Login() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     clearError(); 
-
     const success = await login(loginForm.email, loginForm.password); 
-
     if (success) {
       toast({
         title: 'Login realizado com sucesso!',
@@ -51,9 +49,7 @@ export default function Login() {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     clearError(); 
-
     const success = await register(registerForm.username, registerForm.email, registerForm.password); 
-
     if (success) {
       toast({
         title: 'Conta criada com sucesso!',
@@ -70,21 +66,23 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/5 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/5 flex flex-col items-center justify-center p-4 space-y-8">
+      {/* Logo aumentado e com brilho */}
+      <div className="mx-auto w-32 h-32 md:w-40 md:h-40"> 
+        <img 
+          src={LogoPng} 
+          alt="USB MKT PRO V2 Logo" 
+          className="w-full h-full object-contain"
+          style={{ filter: 'drop-shadow(0 0 10px hsl(var(--primary)/0.7)) drop-shadow(0 0 20px hsl(var(--primary)/0.5))' }}
+        />
+      </div>
+      
+      {/* Formulário dentro de um Card para manter a organização visual */}
       <Card className="w-full max-w-md neu-card">
-        <CardHeader className="text-center space-y-4 pt-8">
-          <div className="mx-auto w-20 h-20 mb-3"> 
-            <img src={LogoPng} alt="USB MKT PRO V2 Logo" className="w-full h-full object-contain" />
-          </div>
-          <div>
-            <CardTitle className="text-2xl font-bold">USB MKT PRO V2</CardTitle> 
-            <CardDescription className="text-muted-foreground">
-              Plataforma completa de marketing digital
-            </CardDescription>
-          </div>
+        <CardHeader className="text-center pt-6 pb-4"> {/* Removido CardTitle e CardDescription daqui */}
+            <CardTitle className="text-xl">Acesse sua conta</CardTitle>
         </CardHeader>
-        
-        <CardContent className="px-6 pb-8">
+        <CardContent className="px-6 pb-6">
           <Tabs defaultValue="login" className="space-y-6">
             <TabsList className="grid w-full grid-cols-2 neu-card-inset p-1">
               <TabsTrigger value="login" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md rounded-md">Login</TabsTrigger>
