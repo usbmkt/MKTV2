@@ -108,7 +108,7 @@ export default function Sidebar() {
               alt="USB MKT Logo" 
               className={cn(
                 "transition-all duration-300 ease-in-out object-contain", // object-contain para manter proporções
-                isCollapsed ? "w-10 h-10" : "w-12 h-12" // Tamanhos ajustados
+                isCollapsed ? "w-20 h-10" : "w-22 h-12" // Tamanhos ajustados
               )}
               style={{ filter: 'drop-shadow(0 0 6px hsl(var(--primary)/0.6)) drop-shadow(0 0 12px hsl(var(--primary)/0.4))' }}
             />
