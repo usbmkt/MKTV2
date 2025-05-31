@@ -7,9 +7,10 @@ import { relations } from 'drizzle-orm';
 // Enums do Banco de Dados
 export const campaignStatusEnum = pgEnum('campaign_status', ['active', 'paused', 'completed', 'draft']);
 export const chatSenderEnum = pgEnum('chat_sender', ['user', 'agent']);
-export const launchPhaseEnum = pgEnum('launch_phase', ['pre_launch', 'launch', 'post_launch']);
+export const launchPhaseEnum = pgEnum('launch_phase', ['pre_launch', 'launch', 'post_launch']); // Este enum será usado por 'copies.launchPhase'
 
 // --- Definições de Tipos para Copy Configurations ---
+// Estas interfaces são para a lógica de configuração da sua aplicação, não diretamente para o schema do DB
 export interface BaseGeneratorFormState {
   product: string;
   audience: string;
@@ -17,7 +18,7 @@ export interface BaseGeneratorFormState {
   tone: 'professional' | 'casual' | 'urgent' | 'inspirational' | 'educational' | 'empathetic' | 'divertido' | 'sofisticado';
 }
 
-export type LaunchPhase = z.infer<typeof launchPhaseEnum>;
+export type LaunchPhase = z.infer<typeof launchPhaseEnum>; // Tipo inferido do enum do Drizzle
 
 export interface FieldDefinition {
   name: string;
@@ -35,7 +36,7 @@ export interface FieldDefinition {
 export interface CopyPurposeConfig {
   key: string;
   label: string;
-  phase: LaunchPhase;
+  phase: LaunchPhase; // Usa o tipo LaunchPhase inferido
   fields: FieldDefinition[];
   category: string;
   description?: string;
@@ -71,20 +72,21 @@ export const campaigns = pgTable("campaigns", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+// Definição da tabela 'copies' ATUALIZADA (sem a coluna 'type' antiga)
 export const copies = pgTable("copies", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   campaignId: integer("campaign_id").references(() => campaigns.id, { onDelete: 'set null' }),
   title: text("title").notNull(),
   content: text("content").notNull(),
-  purposeKey: text("purpose_key").notNull(),
-  launchPhase: launchPhaseEnum("launch_phase").notNull(),
-  details: jsonb("details").$type<Record<string, any>>().default({}).notNull(),
-  baseInfo: jsonb("base_info").$type<any>().default({}).notNull(),
-  fullGeneratedResponse: jsonb("full_generated_response").$type<any>().default({}).notNull(),
-  platform: text("platform"),
+  purposeKey: text("purpose_key").notNull(), // Nova coluna para identificar a finalidade
+  launchPhase: launchPhaseEnum("launch_phase").notNull(), // Nova coluna para a fase
+  details: jsonb("details").$type<Record<string, any>>().default({}).notNull(), // Detalhes específicos da copy
+  baseInfo: jsonb("base_info").$type<BaseGeneratorFormState | any>().default({}).notNull(), // Informações base usadas para gerar
+  fullGeneratedResponse: jsonb("full_generated_response").$type<any>().default({}).notNull(), // Resposta completa da IA
+  platform: text("platform"), // Plataforma sugerida ou alvo
   isFavorite: boolean("is_favorite").default(false).notNull(),
-  tags: jsonb("tags").$type<string[]>().default([]).notNull(),
+  tags: jsonb("tags").$type<string[]>().default([]).notNull(), // Tags como array de strings
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   lastUpdatedAt: timestamp("last_updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
@@ -159,7 +161,7 @@ export const landingPages = pgTable("landing_pages", {
     studioProjectId: varchar("studio_project_id", { length: 255 }).unique(),
     slug: varchar("slug", { length: 255 }).notNull().unique(),
     description: text("description"),
-    grapesJsData: jsonb("grapes_js_data"),
+    grapesJsData: jsonb("grapes_js_data"), // $type<any> é implícito para jsonb sem tipo específico
     status: text("status", { enum: ["draft", "published", "archived"] }).default("draft").notNull(),
     publicUrl: text("public_url"),
     publishedAt: timestamp("published_at", { withTimezone: true }),
@@ -200,7 +202,7 @@ export const funnelStages = pgTable("funnel_stages", {
   name: text("name").notNull(),
   description: text("description"),
   order: integer("order").notNull().default(0),
-  config: jsonb("config").$type<Record<string, any>>(), // Mantido como any para flexibilidade
+  config: jsonb("config").$type<Record<string, any>>().default({}), // Adicionado default
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
@@ -259,7 +261,7 @@ export const insertCampaignSchema = createInsertSchema(campaigns, {
     (val) => { if (Array.isArray(val)) return val; if (typeof val === 'string') return val.split(',').map(s => s.trim()).filter(s => s); return []; },
     z.array(z.string()).default([])
   ),
-}).omit({ id: true, createdAt: true, updatedAt: true, userId: true }); // userId é omitido pois será adicionado pelo backend
+}).omit({ id: true, createdAt: true, updatedAt: true, userId: true });
 
 export const insertCreativeSchema = createInsertSchema(creatives, {
   name: z.string().min(1, "Nome do criativo é obrigatório."),
@@ -279,31 +281,36 @@ export const insertCreativeSchema = createInsertSchema(creatives, {
     },
     z.number().int().positive().nullable().optional()
   ),
-}).omit({ id: true, createdAt: true, updatedAt: true, userId: true }); // userId é omitido
+}).omit({ id: true, createdAt: true, updatedAt: true, userId: true });
 
+// Schema de inserção para 'copies' ATUALIZADO
 export const insertCopySchema = createInsertSchema(copies, {
-  // userId será adicionado pelo backend e validado aqui explicitamente
+  // userId é obrigatório e será adicionado na rota. Validamos sua presença e tipo aqui.
   userId: z.number().int().positive({ message: "ID do usuário é obrigatório e deve ser um número positivo." }),
   title: z.string().min(1, "Título da copy é obrigatório."),
   content: z.string().min(1, "Conteúdo (mainCopy) é obrigatório."),
-  purposeKey: z.string().min(1, "Chave da finalidade é obrigatória."),
-  launchPhase: z.enum(launchPhaseEnum.enumValues, { errorMap: () => ({ message: "Fase de lançamento inválida."}) }),
-  details: z.record(z.any()).optional().nullable().default({}), // JSONB, default é objeto vazio
-  baseInfo: z.record(z.any()).optional().nullable().default({}), // JSONB, default é objeto vazio
-  fullGeneratedResponse: z.record(z.any()).optional().nullable().default({}), // JSONB, default é objeto vazio
+  purposeKey: z.string().min(1, "Chave da finalidade (purposeKey) é obrigatória."),
+  launchPhase: z.enum(launchPhaseEnum.enumValues, {
+    required_error: "Fase de lançamento é obrigatória.",
+    invalid_type_error: "Fase de lançamento inválida."
+  }),
+  details: z.record(z.any()).optional().nullable().default({}),
+  baseInfo: z.record(z.any()).optional().nullable().default({}),
+  fullGeneratedResponse: z.record(z.any()).optional().nullable().default({}),
   platform: z.string().optional().nullable(),
   isFavorite: z.boolean().optional().default(false),
-  tags: z.array(z.string()).optional().nullable().default([]), // JSONB, default é array vazio
+  tags: z.array(z.string()).optional().nullable().default([]),
   campaignId: z.preprocess(
     (val) => (val === undefined || val === null || val === "" || String(val).toUpperCase() === "NONE" ? null : parseInt(String(val))),
-    z.number().int().positive().nullable().optional() // Permite null ou número positivo
+    z.number().int().positive().nullable().optional()
   ),
 }).omit({
   id: true, // Gerado pelo banco
   createdAt: true, // Gerado pelo banco com defaultNow()
   lastUpdatedAt: true, // Gerado pelo banco com defaultNow()
-  // NÃO OMITIR userId AQUI, pois ele vem da autenticação e é validado acima
+  // NÃO OMITIR 'userId' AQUI, pois ele é crucial e vem da autenticação.
 });
+
 
 export const insertFunnelSchema = createInsertSchema(funnels, {
   name: z.string().min(1, "O nome do funil é obrigatório."),
@@ -322,15 +329,15 @@ export const insertFunnelStageSchema = createInsertSchema(funnelStages, {
   name: z.string().min(1, "O nome da etapa é obrigatório."),
   description: z.string().nullable().optional(),
   order: z.number().int().min(0).default(0),
-  config: z.record(z.any()).optional().nullable().default({}), // JSONB, default é objeto vazio
+  config: z.record(z.any()).optional().nullable().default({}),
   funnelId: z.number().int().positive("ID do funil inválido."),
 }).omit({ id: true, createdAt: true, updatedAt: true });
 
 
 export const insertLandingPageSchema = createInsertSchema(landingPages, {
   name: z.string().min(1, "Nome da landing page é obrigatório."),
-  slug: z.string().min(3, "Slug deve ter pelo menos 3 caracteres.").regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Slug inválido (apenas letras minúsculas, números e hífens)."),
-  grapesJsData: z.record(z.any()).optional().nullable(), // JSONB
+  slug: z.string().min(3, "Slug deve ter pelo menos 3 caracteres.").regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Slug inválido."),
+  grapesJsData: z.record(z.any()).optional().nullable(),
   studioProjectId: z.string().optional().nullable(),
 }).omit({ id: true, createdAt: true, updatedAt: true, userId: true, publicUrl: true, publishedAt: true });
 
@@ -377,7 +384,7 @@ export const insertChatSessionSchema = createInsertSchema(chatSessions, {
 export const insertChatMessageSchema = createInsertSchema(chatMessages, {
     text: z.string().min(1, "O texto da mensagem é obrigatório."),
     sender: z.enum(chatSenderEnum.enumValues),
-    sessionId: z.number().int().positive(), // ID da sessão é obrigatório
+    sessionId: z.number().int().positive(),
     attachmentUrl: z.string().url().optional().nullable(),
 }).omit({id: true, timestamp: true});
 
@@ -397,6 +404,7 @@ export const selectChatMessageSchema = createSelectSchema(chatMessages);
 export const selectFunnelSchema = createSelectSchema(funnels);
 export const selectFunnelStageSchema = createSelectSchema(funnelStages);
 
+
 // --- Tipos Inferidos ---
 export type User = z.infer<typeof selectUserSchema>;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -404,10 +412,10 @@ export type Campaign = z.infer<typeof selectCampaignSchema>;
 export type InsertCampaign = z.infer<typeof insertCampaignSchema>;
 export type Creative = z.infer<typeof selectCreativeSchema>;
 export type InsertCreative = z.infer<typeof insertCreativeSchema>;
-export type Copy = z.infer<typeof selectCopySchema>;
-export type InsertCopy = z.infer<typeof insertCopySchema>; // Este é o tipo que `storage.createCopy` espera
+export type Copy = z.infer<typeof selectCopySchema>; // Tipo para SELECT
+export type InsertCopy = z.infer<typeof insertCopySchema>; // Tipo para INSERT
 export type Metric = z.infer<typeof selectMetricSchema>;
-// export type InsertMetric = z.infer<typeof insertMetricSchema>; // Descomente se precisar
+// export type InsertMetric = z.infer<typeof insertMetricSchema>; // Se precisar
 export type WhatsappMessage = z.infer<typeof selectWhatsappMessageSchema>;
 export type InsertWhatsappMessage = z.infer<typeof insertWhatsappMessageSchema>;
 export type Alert = z.infer<typeof selectAlertSchema>;
@@ -427,11 +435,12 @@ export type InsertFunnelStage = z.infer<typeof insertFunnelStageSchema>;
 
 
 // --- CONFIGURAÇÕES DE COPY ---
+// (Mantido como no seu original)
 export const allCopyPurposesConfig: CopyPurposeConfig[] = [
   {
     key: 'prelaunch_ad_event_invitation',
     label: 'Anúncio: Convite para Evento Online Gratuito',
-    phase: 'pre_launch',
+    phase: 'pre_launch', // Usando o tipo LaunchPhase
     category: 'Anúncios (Pré-Lançamento)',
     description: 'Crie anúncios chamativos para convidar pessoas para seu webinar, masterclass ou live.',
     fields: [
@@ -452,7 +461,7 @@ export const allCopyPurposesConfig: CopyPurposeConfig[] = [
 
 // Schema para a resposta da IA (usado na API Gemini)
 export const aiResponseSchema = {
-  type: "OBJECT" as const, // Adicionado "as const" para tipagem mais estrita
+  type: "OBJECT" as const,
   properties: {
     mainCopy: { type: "STRING" as const, description: "O texto principal da copy gerada." },
     alternativeVariation1: { type: "STRING" as const, description: "Uma variação alternativa da copy principal." },
