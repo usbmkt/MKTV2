@@ -1,170 +1,452 @@
-// client/src/config/copyConfigurations.ts
-export type LaunchPhase = 'pre_launch' | 'launch' | 'post_launch';
+// client/src/pages/copy.tsx
+import React, { useState, useEffect, useMemo, ChangeEvent } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useForm, Controller, FormProvider } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel as ShadcnSelectLabel } from '@/components/ui/select';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { useToast } from '@/hooks/use-toast';
+import { apiRequest } from '@/lib/api';
+import {
+  Bot,
+  Copy as CopyIcon,
+  Save,
+  Edit,
+  Trash2,
+  Loader2,
+  Sparkles,
+  FileText,
+  Search,
+  Info,
+  ChevronDown,
+  RotateCcw, // Para Reutilizar
+} from 'lucide-react';
+import { allCopyPurposesConfig, type CopyPurposeConfig, type FieldDefinition, type LaunchPhase as LaunchPhaseType } from '@/config/copyConfigurations'; // Importar do novo arquivo
 
-export interface FieldDefinition {
-  name: string;
-  label: string;
-  type: 'text' | 'textarea' | 'select' | 'number' | 'date';
-  placeholder?: string;
-  tooltip: string;
-  required?: boolean;
-  options?: Array<{ value: string; label: string }>;
-  defaultValue?: string | number | boolean;
-  dependsOn?: string;
-  showIf?: (formData: Record<string, any>) => boolean;
+// --- Interfaces (Parte 1 do seu prompt) ---
+interface BaseGeneratorFormState {
+  product: string;
+  audience: string;
+  objective: 'sales' | 'leads' | 'engagement' | 'awareness';
+  tone: 'professional' | 'casual' | 'urgent' | 'inspirational' | 'educational' | 'empathetic' | 'divertido' | 'sofisticado';
 }
 
-export interface CopyPurposeConfig {
-  key: string;
-  label: string;
-  phase: LaunchPhase;
-  fields: FieldDefinition[];
-  category: string;
-  promptEnhancer?: (basePrompt: string, details: Record<string, any>, baseForm: any /* BaseGeneratorFormState */) => string;
+type SpecificPurposeData = Record<string, any>;
+
+interface FullGeneratorPayload extends BaseGeneratorFormState {
+  launchPhase: LaunchPhaseType;
+  copyPurposeKey: string;
+  details: SpecificPurposeData;
 }
 
-export const allCopyPurposesConfig: CopyPurposeConfig[] = [
-  // --- PRÉ-LANÇAMENTO ---
-  {
-    key: 'prelaunch_ad_event_invitation',
-    label: 'Anúncio: Convite para Evento Online Gratuito (Webinar/Masterclass)',
-    phase: 'pre_launch',
-    category: 'Anúncios (Pré-Lançamento)',
-    fields: [
-      { name: 'eventName', label: 'Nome do Evento *', type: 'text', placeholder: 'Ex: Masterclass "Decole Seu Negócio Online"', tooltip: 'O título principal do seu evento.', required: true },
-      { name: 'eventSubtitle', label: 'Subtítulo do Evento (Opcional)', type: 'text', placeholder: 'Ex: O guia definitivo para...', tooltip: 'Uma frase curta para complementar o nome.'},
-      { name: 'eventFormat', label: 'Formato do Evento', type: 'text', placeholder: 'Ex: Workshop online de 3 dias via Zoom', tooltip: 'Descreva como será o evento (live, gravado, desafio, etc.).', defaultValue: 'Webinar Ao Vivo' },
-      { name: 'eventDateTime', label: 'Data e Hora Principal do Evento *', type: 'text', placeholder: 'Ex: Terça, 25 de Junho, às 20h (Horário de Brasília)', tooltip: 'Quando o evento principal acontecerá? Inclua fuso horário se relevante.', required: true },
-      { name: 'eventDuration', label: 'Duração Estimada do Evento', type: 'text', placeholder: 'Ex: Aproximadamente 1h30', tooltip: 'Quanto tempo o público deve reservar?' },
-      { name: 'eventPromise', label: 'Principal Promessa/Transformação do Evento *', type: 'textarea', placeholder: 'Ex: Você vai descobrir o método exato para criar anúncios que vendem todos os dias, mesmo começando do zero.', tooltip: 'O que a pessoa vai ganhar/aprender de mais valioso?', required: true },
-      { name: 'eventTopics', label: 'Principais Tópicos Abordados (1 por linha) *', type: 'textarea', placeholder: 'Ex:\n- Como definir seu público ideal\n- Os 3 erros que te fazem perder dinheiro em anúncios\n- O segredo das headlines que convertem', tooltip: 'Liste os pontos chave que serão ensinados.', required: true },
-      { name: 'eventTargetAudience', label: 'Público Específico Deste Evento', type: 'text', placeholder: 'Ex: Empreendedores que já tentaram anunciar e não tiveram resultado', tooltip: 'Para quem este evento é especialmente desenhado?' },
-      { name: 'eventCTA', label: 'Chamada para Ação do Anúncio *', type: 'text', placeholder: 'Ex: "Garanta sua vaga gratuita agora!" ou "Clique em Saiba Mais e inscreva-se!"', tooltip: 'O que você quer que a pessoa faça ao ver o anúncio?', required: true, defaultValue: 'Inscreva-se Gratuitamente!' },
-      { name: 'urgencyScarcityElement', label: 'Elemento de Urgência/Escassez (Opcional)', type: 'text', placeholder: 'Ex: Vagas limitadas, Bônus para os 100 primeiros inscritos', tooltip: 'Algum motivo para a pessoa agir rápido?' },
-    ],
-  },
-  {
-    key: 'prelaunch_ad_lead_magnet_download',
-    label: 'Anúncio: Download de Material Rico (E-book, Checklist)',
-    phase: 'pre_launch',
-    category: 'Anúncios (Pré-Lançamento)',
-    fields: [
-      { name: 'leadMagnetTitle', label: 'Título do Material Rico *', type: 'text', placeholder: 'Ex: Guia Completo: 5 Passos Para Organizar Suas Finanças', tooltip: 'O nome chamativo do seu e-book, checklist, template, etc.', required: true },
-      { name: 'leadMagnetFormat', label: 'Formato do Material Rico', type: 'text', placeholder: 'Ex: E-book em PDF com 30 páginas, Planilha no Google Sheets', tooltip: 'Qual o formato prático do material?', defaultValue: 'E-book PDF' },
-      { name: 'leadMagnetBenefit', label: 'Principal Benefício/Problema que Resolve *', type: 'textarea', placeholder: 'Ex: Aprenda a sair das dívidas e começar a investir em 30 dias com este guia prático.', tooltip: 'Qual a grande vantagem ou solução que o material oferece?', required: true },
-      { name: 'leadMagnetContentTeaser', label: 'Conteúdo Resumido/Destaques (1 por linha)', type: 'textarea', placeholder: 'Ex:\n- Checklist para controle de gastos\n- Planilha de orçamento mensal pronta para usar\n- Dicas de apps de finanças', tooltip: 'O que a pessoa encontrará de mais valioso dentro do material?'},
-      { name: 'targetAudienceForMagnet', label: 'Público Ideal para este Material', type: 'text', placeholder: 'Ex: Pessoas que se sentem perdidas com suas finanças pessoais.', tooltip: 'Para quem este material é mais indicado?'},
-      { name: 'leadMagnetCTA', label: 'Chamada para Ação do Anúncio *', type: 'text', placeholder: 'Ex: "Baixe seu guia gratuito agora!"', tooltip: 'O que você quer que a pessoa faça?', required: true, defaultValue: 'Download Gratuito!' },
-    ],
-  },
-  {
-    key: 'prelaunch_email_welcome_confirmation',
-    label: 'E-mail: Boas-vindas e Confirmação de Inscrição',
-    phase: 'pre_launch',
-    category: 'E-mails (Pré-Lançamento)',
-    fields: [
-      { name: 'signupReason', label: 'Motivo da Inscrição do Lead *', type: 'text', placeholder: 'Ex: Inscrição na Masterclass XPTO, Download do Guia Y', tooltip: 'O que o lead fez para entrar na sua lista e receber este e-mail?', required: true },
-      { name: 'deliveredItemName', label: 'Nome do Item Entregue (se houver)', type: 'text', placeholder: 'Ex: Acesso à Masterclass, Seu Guia de Finanças', tooltip: 'Nome do evento/material que está sendo confirmado/entregue.'},
-      { name: 'deliveredItemLink', label: 'Link de Acesso/Download (se houver)', type: 'text', placeholder: 'Ex: https://...', tooltip: 'O link direto para o evento, material, grupo, etc.'},
-      { name: 'senderName', label: 'Nome do Remetente do E-mail *', type: 'text', placeholder: 'Ex: João Silva da Empresa XPTO', tooltip: 'Como você ou sua empresa devem ser identificados?', required: true },
-      { name: 'nextStepsForLead', label: 'Próximos Passos Sugeridos (1 por linha)', type: 'textarea', placeholder: 'Ex:\n- Adicione este e-mail aos seus contatos.\n- Marque na agenda o dia do nosso evento!\n- Siga-nos no Instagram @seuperfil', tooltip: 'O que você quer que o lead faça em seguida?'},
-      { name: 'valueTeaser', label: 'Pequeno Teaser de Conteúdo Futuro (Opcional)', type: 'textarea', placeholder: 'Ex: Nos próximos dias, vou compartilhar dicas exclusivas sobre X...', tooltip: 'Uma pequena amostra do que mais ele pode esperar.'},
-    ],
-  },
-  {
-    key: 'prelaunch_social_post_value_engagement',
-    label: 'Post Social: Conteúdo de Valor (Educação/Engajamento)',
-    phase: 'pre_launch',
-    category: 'Posts Redes Sociais (Pré-Lançamento)',
-    fields: [
-      { name: 'postTopic', label: 'Tópico Central do Post *', type: 'text', placeholder: 'Ex: 3 Mitos sobre Investimentos', tooltip: 'Sobre qual assunto específico será o post?', required: true },
-      { name: 'postFormatSuggestion', label: 'Formato Sugerido', type: 'select', options: [{value: 'carrossel', label: 'Carrossel'}, {value: 'reels_script', label: 'Roteiro Reels/TikTok'}, {value: 'imagem_unica_texto', label: 'Imagem Única com Texto Longo'}, {value: 'enquete_story', label: 'Enquete para Story'}], tooltip: 'Qual formato visual/de conteúdo é mais adequado?', defaultValue: 'carrossel'},
-      { name: 'mainTeachingPoint', label: 'Principal Ensinamento/Dica *', type: 'textarea', placeholder: 'Ex: A importância de começar pequeno.', tooltip: 'Qual a mensagem chave ou lição?', required: true},
-      { name: 'supportingPoints', label: 'Pontos de Suporte (1 por linha)', type: 'textarea', placeholder: 'Ex:\n- Dica prática 1...\n- Exemplo real...', tooltip: 'Detalhes que sustentam o ensinamento.'},
-      { name: 'engagementPrompt', label: 'Chamada para Engajamento *', type: 'text', placeholder: 'Ex: "Qual sua maior dificuldade? Comenta aqui!"', tooltip: 'Como incentivar interação?', required: true},
-      { name: 'relevantHashtags', label: 'Hashtags Relevantes (,)', type: 'text', placeholder: '#dicas, #marketing', tooltip: 'Sugestões de hashtags.'}
-    ]
-  },
-  // --- LANÇAMENTO ---
-  {
-    key: 'launch_sales_page_headline',
-    label: 'Página de Vendas: Headline Principal',
-    phase: 'launch',
-    category: 'Página de Vendas',
-    fields: [
-      { name: 'productName', label: 'Nome do Produto/Oferta Principal *', type: 'text', placeholder: 'Ex: Curso Online "Método Vendas Imparáveis"', required: true, tooltip: 'O nome exato do seu produto/serviço.'  },
-      { name: 'mainTransformation', label: 'Principal Transformação/Resultado da Oferta *', type: 'textarea', placeholder: 'Ex: Conquistar seus primeiros 10 clientes em 30 dias.', required: true, tooltip: 'O resultado final mais desejado.' },
-      { name: 'targetAudiencePain', label: 'Principal Dor/Problema do Público Resolvido *', type: 'text', placeholder: 'Ex: Dificuldade em atrair clientes qualificados.', required: true, tooltip: 'Qual o maior problema que seu produto soluciona?' },
-      { name: 'uniqueMechanism', label: 'Mecanismo Único/Diferencial (Opcional)', type: 'text', placeholder: 'Ex: Nosso método "Cliente Atrai Cliente".', tooltip: 'Sua abordagem única.'},
-      { name: 'timeOrEffortElement', label: 'Elemento de Tempo/Esforço (Opcional)', type: 'text', placeholder: 'Ex: Em apenas 15 minutos por dia.', tooltip: 'Como economiza tempo ou simplifica.'},
-    ]
-  },
-  {
-    key: 'launch_ad_direct_to_sales_page',
-    label: 'Anúncio: Direto para Página de Vendas',
-    phase: 'launch',
-    category: 'Anúncios (Lançamento)',
-    fields: [
-      { name: 'productName', label: 'Nome do Produto/Oferta Principal *', type: 'text', required: true, tooltip: 'O nome exato do seu produto/serviço.'  },
-      { name: 'offerHeadline', label: 'Headline Principal do Anúncio *', type: 'text', placeholder: 'Ex: Cansado de...? Descubra como!', required: true, tooltip: 'A frase de impacto para o anúncio.'},
-      { name: 'keyBenefits', label: 'Principais Benefícios da Oferta (1 por linha) *', type: 'textarea', placeholder: 'Ex:\n- Aumente suas vendas\n- Tenha clareza', required: true, tooltip: 'Resultados mais atraentes.'},
-      { name: 'targetAudienceFocus', label: 'Foco no Público-Alvo *', type: 'text', placeholder: 'Ex: Para coaches que querem lotar a agenda.', required: true, tooltip: 'Conexão direta com o público.'},
-      { name: 'callToActionSalesPage', label: 'CTA para Página de Vendas *', type: 'text', placeholder: 'Ex: "Clique em Saiba Mais!"', required: true, defaultValue: 'Ver Detalhes e Inscrever-se!'},
-      { name: 'urgencyElementLaunch', label: 'Urgência/Escassez (Opcional)', type: 'text', placeholder: 'Ex: Inscrições SÓ esta semana!', tooltip: 'Por que agir agora?'},
-    ]
-  },
-  {
-    key: 'launch_email_cart_open',
-    label: 'E-mail: Abertura de Carrinho',
-    phase: 'launch',
-    category: 'E-mails (Lançamento)',
-    fields: [
-      { name: 'productName', label: 'Nome do Produto/Oferta Principal *', type: 'text', required: true, tooltip: 'O nome exato do seu produto/serviço.'  },
-      { name: 'greetingLine', label: 'Saudação Personalizada (Opcional)', type: 'text', placeholder: 'Ex: Chegou o momento, [Nome]!', tooltip: 'Abertura pessoal.'},
-      { name: 'mainOfferAnnouncement', label: 'Anúncio Principal da Abertura *', type: 'textarea', placeholder: 'Ex: As portas para o [Produto] estão abertas!', required: true, tooltip: 'Mensagem central.'},
-      { name: 'linkToSalesPage', label: 'Link da Página de Vendas *', type: 'text', placeholder: 'https://...', required: true, tooltip: 'URL da página de vendas.'},
-      { name: 'keyBonusesIfAny', label: 'Bônus Principais (1 por linha, opcional)', type: 'textarea', placeholder: 'Ex:\n- Bônus 1: Acesso VIP', tooltip: 'Bônus importantes.'},
-      { name: 'reasonToActNow', label: 'Motivo para Agir Agora *', type: 'text', placeholder: 'Ex: Bônus para os 50 primeiros.', required: true, tooltip: 'Urgência/Escassez.'},
-      { name: 'senderSignature', label: 'Assinatura do E-mail *', type: 'text', placeholder: 'Ex: Abraços, João', required: true},
-    ]
-  },
-  // --- PÓS-LANÇAMENTO ---
-  {
-    key: 'postlaunch_email_thank_you_non_buyers',
-    label: 'E-mail: Agradecimento para Não Compradores',
-    phase: 'post_launch',
-    category: 'E-mails (Pós-Lançamento)',
-    fields: [
-      { name: 'launchName', label: 'Nome do Lançamento Encerrado *', type: 'text', placeholder: 'Ex: Curso Vendas Imparáveis', required: true, tooltip: 'Qual produto teve o carrinho fechado?' },
-      { name: 'mainThankYouMessage', label: 'Mensagem Principal de Agradecimento *', type: 'textarea', placeholder: 'Ex: Agradeço seu interesse no [Lançamento].', required: true, tooltip: 'Seja genuíno.' },
-      { name: 'valueDeliveredDuringLaunch', label: 'Relembrar Valor Entregue (Opcional)', type: 'text', placeholder: 'Ex: Espero que os conteúdos da Semana X tenham sido úteis.', tooltip: 'Valor compartilhado gratuitamente.'},
-      { name: 'futureOpportunityTeaser', label: 'Teaser para Futuras Oportunidades (Opcional)', type: 'text', placeholder: 'Ex: Em breve teremos mais novidades.', tooltip: 'Deixe uma porta aberta.'},
-      { name: 'feedbackRequestLink', label: 'Link para Pesquisa de Feedback (Opcional)', type: 'text', placeholder: 'Ex: https://forms.gle/suapesquisa', tooltip: 'Link para feedback.'},
-    ],
-  },
-  // Adicione mais finalidades conforme a lista completa discutida (anuncio_lista_espera_vip, etc.)
+interface GeneratedSpecificCopyItem {
+  mainCopy: string;
+  alternativeVariation1?: string;
+  alternativeVariation2?: string;
+  platformSuggestion?: string;
+  notes?: string;
+}
+
+interface GeneratedSpecificCopyResult extends GeneratedSpecificCopyItem {
+  timestamp: Date;
+  purposeKey: string;
+  // Adicionado para casar com a estrutura da API de cópias
+  type?: string; 
+  platform?: string; 
+}
+
+interface SavedCopy {
+  id: string | number;
+  title: string;
+  content: string; // mainCopy
+  purposeKey: string;
+  launchPhase: LaunchPhaseType;
+  details: SpecificPurposeData;
+  baseInfo: BaseGeneratorFormState;
+  platform?: string;
+  campaignId?: number;
+  createdAt: string;
+  lastUpdatedAt: string;
+  isFavorite?: boolean;
+  tags?: string[];
+  fullGeneratedResponse?: GeneratedSpecificCopyItem;
+}
+// --- End Interfaces ---
+
+// Zod schema para o formulário base
+const baseGeneratorFormSchema = z.object({
+  product: z.string().min(3, "Produto/Serviço deve ter pelo menos 3 caracteres."),
+  audience: z.string().min(3, "Público-Alvo deve ter pelo menos 3 caracteres."),
+  objective: z.enum(['sales', 'leads', 'engagement', 'awareness']),
+  tone: z.enum(['professional', 'casual', 'urgent', 'inspirational', 'educational', 'empathetic', 'divertido', 'sofisticado']),
+});
+
+const objectiveOptions: Array<{ value: BaseGeneratorFormState['objective']; label: string }> = [
+    { value: 'sales', label: 'Gerar Vendas' }, { value: 'leads', label: 'Gerar Leads' },
+    { value: 'engagement', label: 'Aumentar Engajamento' }, { value: 'awareness', label: 'Criar Reconhecimento' }
+];
+const toneOptions: Array<{ value: BaseGeneratorFormState['tone']; label: string }> = [
+    { value: 'professional', label: 'Profissional' }, { value: 'casual', label: 'Casual' },
+    { value: 'urgent', label: 'Urgente' }, { value: 'inspirational', label: 'Inspiracional' },
+    { value: 'educational', label: 'Educativo' }, { value: 'empathetic', label: 'Empático' },
+    { value: 'divertido', label: 'Divertido' }, { value: 'sofisticado', label: 'Sofisticado' }
 ];
 
-// Adicionando as outras finalidades mencionadas no prompt, mas com campos placeholder por enquanto.
-// O USUÁRIO DEVE COMPLETAR ESSES CAMPOS DETALHADAMENTE.
-const placeholderFields: FieldDefinition[] = [
-  { name: 'detail1', label: 'Detalhe Importante 1*', type: 'text', placeholder: 'Informação crucial para esta copy', tooltip: 'Descreva o primeiro detalhe essencial.', required: true },
-  { name: 'detail2', label: 'Detalhe Importante 2', type: 'textarea', placeholder: 'Mais informações sobre o tópico', tooltip: 'Descreva o segundo detalhe importante.' },
-  { name: 'cta_specific', label: 'Chamada para Ação Específica', type: 'text', placeholder: 'Ex: "Saiba Mais Agora Mesmo!"', tooltip: 'Qual ação o usuário deve tomar?', defaultValue: 'Veja Mais' }
-];
 
-allCopyPurposesConfig.push(
-  { key: 'prelaunch_ad_waitlist_vip', label: 'Anúncio: Lista de Espera/VIP', phase: 'pre_launch', category: 'Anúncios (Pré-Lançamento)', fields: placeholderFields },
-  { key: 'prelaunch_social_post_anticipation', label: 'Post Social: Curiosidade/Antecipação', phase: 'pre_launch', category: 'Posts Redes Sociais (Pré-Lançamento)', fields: placeholderFields },
-  { key: 'prelaunch_landing_page_title', label: 'Página de Captura: Título Principal', phase: 'pre_launch', category: 'Página de Captura', fields: placeholderFields },
-  { key: 'prelaunch_email_value_nurturing', label: 'E-mail: Conteúdo de Valor (Aquecimento)', phase: 'pre_launch', category: 'E-mails (Pré-Lançamento)', fields: placeholderFields },
-  { key: 'launch_email_testimonial_proof', label: 'E-mail: Prova Social/Depoimentos', phase: 'launch', category: 'E-mails (Lançamento)', fields: placeholderFields },
-  { key: 'launch_email_objection_handling', label: 'E-mail: Quebra de Objeções', phase: 'launch', category: 'E-mails (Lançamento)', fields: placeholderFields },
-  { key: 'launch_email_last_chance_24h', label: 'E-mail: Última Chance (24h)', phase: 'launch', category: 'E-mails (Lançamento)', fields: placeholderFields },
-  { key: 'launch_email_cart_closing_soon', label: 'E-mail: Carrinho Fechando em Breve', phase: 'launch', category: 'E-mails (Lançamento)', fields: placeholderFields },
-  { key: 'launch_social_post_product_demo', label: 'Post Social: Demonstração do Produto', phase: 'launch', category: 'Posts Redes Sociais (Lançamento)', fields: placeholderFields },
-  { key: 'launch_social_post_live_qa', label: 'Post Social: Sessão de Q&A Ao Vivo', phase: 'launch', category: 'Posts Redes Sociais (Lançamento)', fields: placeholderFields },
-  { key: 'postlaunch_email_survey_buyers', label: 'E-mail: Pesquisa de Satisfação (Compradores)', phase: 'post_launch', category: 'E-mails (Pós-Lançamento)', fields: placeholderFields },
-  { key: 'postlaunch_email_upsell_cross_sell', label: 'E-mail: Upsell/Cross-sell para Compradores', phase: 'post_launch', category: 'E-mails (Pós-Lançamento)', fields: placeholderFields },
-  { key: 'postlaunch_social_post_student_results', label: 'Post Social: Resultados de Alunos/Clientes', phase: 'post_launch', category: 'Posts Redes Sociais (Pós-Lançamento)', fields: placeholderFields }
-);
+export default function CopyPage() {
+  const [baseGeneratorFormState, setBaseGeneratorFormState] = useState<BaseGeneratorFormState>({
+    product: '', audience: '', objective: 'sales', tone: 'professional',
+  });
+  const [selectedLaunchPhase, setSelectedLaunchPhase] = useState<LaunchPhaseType | ''>('');
+  const [selectedCopyPurposeKey, setSelectedCopyPurposeKey] = useState<string>('');
+  const [specificPurposeData, setSpecificPurposeData] = useState<SpecificPurposeData>({});
+  const [generatedCopies, setGeneratedCopies] = useState<GeneratedSpecificCopyResult[]>([]);
+  
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterLaunchPhase, setFilterLaunchPhase] = useState<LaunchPhaseType | 'all'>('all');
+  const [filterCopyPurpose, setFilterCopyPurpose] = useState<string | 'all'>('all');
+
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const rhfBaseForm = useForm<BaseGeneratorFormState>({
+    resolver: zodResolver(baseGeneratorFormSchema),
+    defaultValues: baseGeneratorFormState,
+  });
+
+  useEffect(() => {
+    rhfBaseForm.reset(baseGeneratorFormState);
+  }, [baseGeneratorFormState, rhfBaseForm]);
+
+  const { data: savedCopies = [], isLoading: copiesLoading, refetch: refetchSavedCopies } = useQuery<SavedCopy[]>({
+    queryKey: ['savedCopies'],
+    queryFn: async () => apiRequest('GET', '/api/copies').then(res => res.json()).then(data => Array.isArray(data) ? data : []),
+  });
+
+  const handleCopyPurposeChange = (purposeKey: string) => {
+    setSelectedCopyPurposeKey(purposeKey);
+    const currentConfig = allCopyPurposesConfig.find(p => p.key === purposeKey);
+    const defaultValues: SpecificPurposeData = {};
+    if (currentConfig) {
+      currentConfig.fields.forEach(field => {
+        defaultValues[field.name] = field.defaultValue ?? (field.type === 'textarea' || field.type === 'text' ? '' : field.type === 'number' ? 0 : '');
+      });
+    }
+    setSpecificPurposeData(defaultValues);
+    setGeneratedCopies([]); // Limpa geradas anteriormente ao mudar finalidade
+  };
+  
+  useEffect(() => {
+    setSelectedCopyPurposeKey(''); // Reseta finalidade quando fase muda
+    setSpecificPurposeData({});
+    setGeneratedCopies([]);
+  }, [selectedLaunchPhase]);
+
+
+  const handleSpecificDataChange = (name: string, value: string | number | boolean) => {
+    setSpecificPurposeData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const generateSpecificCopyMutation = useMutation<GeneratedSpecificCopyItem[], Error, FullGeneratorPayload>({
+    mutationFn: async (payload: FullGeneratorPayload) => {
+      // A chamada à API Gemini foi movida para o backend (/api/copies/generate)
+      const response = await apiRequest('POST', '/api/copies/generate', payload);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: `Erro ${response.status} ao gerar copy.`}));
+        throw new Error(errorData.message || errorData.error || `Erro desconhecido da API (${response.status})`);
+      }
+      return response.json();
+    },
+    onSuccess: (data) => {
+      if (!Array.isArray(data) || data.length === 0) {
+        toast({ title: 'Nenhuma copy gerada', description: 'A IA não retornou sugestões para esta configuração.', variant: 'default' });
+        setGeneratedCopies([]);
+        return;
+      }
+      const timestampedData = data.map(item => ({
+        ...item,
+        timestamp: new Date(),
+        purposeKey: selectedCopyPurposeKey,
+        // type e platform devem vir da API agora se ela retornar múltiplas partes
+      }));
+      setGeneratedCopies(timestampedData);
+      toast({ title: 'Copies Geradas!', description: `${timestampedData.length} ${timestampedData.length === 1 ? 'sugestão foi criada' : 'sugestões foram criadas'}.` });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Erro ao Gerar Copy', description: error.message, variant: 'destructive' });
+    },
+  });
+  
+  const saveCopyMutation = useMutation<SavedCopy, Error, Omit<SavedCopy, 'id' | 'createdAt' | 'lastUpdatedAt'>>({
+    mutationFn: async (dataToSave) => {
+      const response = await apiRequest('POST', '/api/copies', dataToSave);
+      if (!response.ok) throw new Error('Falha ao salvar copy na biblioteca.');
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['savedCopies'] });
+      toast({ title: 'Copy Salva!', description: 'Sua copy foi salva na biblioteca.' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Erro ao Salvar', description: error.message, variant: 'destructive' });
+    }
+  });
+
+  const deleteMutation = useMutation<void, Error, string | number >({
+    mutationFn: (id) => apiRequest('DELETE', `/api/copies/${id}`).then(res => {if (!res.ok) throw new Error('Falha ao excluir'); return res.json()}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['savedCopies'] });
+      toast({ title: 'Copy Excluída!' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Erro ao Excluir', description: error.message, variant: 'destructive' });
+    }
+  });
+
+  const handleBaseFormSubmit = async (data: BaseGeneratorFormState) => {
+    setBaseGeneratorFormState(data); // Atualiza o estado local que é usado no payload
+    
+    if (!selectedLaunchPhase) {
+      toast({ title: 'Seleção Necessária', description: 'Selecione uma Fase do Lançamento.', variant: 'destructive' });
+      return;
+    }
+    if (!selectedCopyPurposeKey) {
+      toast({ title: 'Seleção Necessária', description: 'Selecione uma Finalidade da Copy Específica.', variant: 'destructive' });
+      return;
+    }
+    const currentFields = allCopyPurposesConfig.find(p => p.key === selectedCopyPurposeKey)?.fields || [];
+    for (const field of currentFields) {
+      if (field.required && (!specificPurposeData[field.name] || String(specificPurposeData[field.name]).trim() === '')) {
+        toast({ title: 'Campo Específico Obrigatório', description: `O campo "${field.label}" é obrigatório.`, variant: 'destructive' });
+        return;
+      }
+    }
+
+    const payload: FullGeneratorPayload = {
+      ...data, // Usa os dados validados do react-hook-form
+      launchPhase: selectedLaunchPhase,
+      copyPurposeKey: selectedCopyPurposeKey,
+      details: specificPurposeData,
+    };
+    generateSpecificCopyMutation.mutate(payload);
+  };
+
+  const copyToClipboard = (text?: string) => { /* ... (como na sua versão) ... */ };
+  const handleSaveGeneratedCopy = (copyItem: GeneratedSpecificCopyResult) => { /* ... (como na sua versão) ... */ };
+  const handleReuseSavedCopy = (savedCopy: SavedCopy) => { /* ... (como na sua versão) ... */ };
+  
+  const currentPurposeConfigDetails = useMemo(() => allCopyPurposesConfig.find(p => p.key === selectedCopyPurposeKey), [selectedCopyPurposeKey]);
+  const currentSpecificFields: FieldDefinition[] = useMemo(() => currentPurposeConfigDetails?.fields || [], [currentPurposeConfigDetails]);
+
+  const availablePurposesForPhase = useMemo(() => { /* ... (como na sua versão) ... */ }, [selectedLaunchPhase]);
+  const filteredSavedCopies = useMemo(() => { /* ... (como na sua versão, talvez ajuste o filter para purposeKey) ... */ }, [savedCopies, searchTerm, filterLaunchPhase, filterCopyPurpose]);
+
+
+  return (
+    <div className="p-4 md:p-6 lg:p-8 space-y-6 sm:space-y-8 font-sans bg-background min-h-screen">
+      <header className="pb-4 sm:pb-6 border-b">
+        <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Gerador de Copy IA Avançado</h1>
+        <p className="text-muted-foreground mt-1 sm:mt-2">Crie textos altamente específicos para cada etapa do seu lançamento.</p>
+      </header>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8 items-start">
+        <Card className="lg:col-span-2 neu-card">
+          <CardHeader className="neu-card-header">
+            <CardTitle className="neu-card-title"><Bot className="mr-2" />Configurar Geração</CardTitle>
+            <CardDescription>Selecione a finalidade e preencha os detalhes para obter a copy perfeita.</CardDescription>
+          </CardHeader>
+          <CardContent className="neu-card-content space-y-6">
+            <FormProvider {...rhfBaseForm}>
+              <form onSubmit={rhfBaseForm.handleSubmit(handleBaseFormSubmit)} className="space-y-6">
+                <Accordion type="single" collapsible defaultValue="item-base" className="w-full">
+                  <AccordionItem value="item-base" className="border-b-0">
+                    <AccordionTrigger className="text-lg font-semibold hover:no-underline p-3 bg-muted/50 dark:bg-muted/20 rounded-t-md">
+                        Informações Base (Obrigatórias)
+                    </AccordionTrigger>
+                    <AccordionContent className="p-4 pt-3 border border-t-0 rounded-b-md bg-card">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <FormField control={rhfBaseForm.control} name="product" render={({ field }) => (<FormItem><FormLabel>Produto/Serviço Geral*</FormLabel><FormControl><Input placeholder="Ex: Consultoria de Marketing Avançada" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                        <FormField control={rhfBaseForm.control} name="audience" render={({ field }) => (<FormItem><FormLabel>Público-Alvo Geral*</FormLabel><FormControl><Input placeholder="Ex: Empresas SaaS B2B" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                        <FormField control={rhfBaseForm.control} name="objective" render={({ field }) => (<FormItem><FormLabel>Objetivo Geral da Marca</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{objectiveOptions.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)} />
+                        <FormField control={rhfBaseForm.control} name="tone" render={({ field }) => (<FormItem><FormLabel>Tom de Voz Geral</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{toneOptions.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)} />
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
+            
+                <div className="space-y-1.5">
+                    <Label htmlFor="launch-phase" className="text-md font-semibold">1. Fase do Lançamento*</Label>
+                    <Select value={selectedLaunchPhase} onValueChange={(value: LaunchPhaseType | '') => setSelectedLaunchPhase(value)}>
+                        <SelectTrigger id="launch-phase"><SelectValue placeholder="Selecione uma fase..." /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="pre_launch">Pré-Lançamento</SelectItem>
+                            <SelectItem value="launch">Lançamento</SelectItem>
+                            <SelectItem value="post_launch">Pós-Lançamento</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+
+                {selectedLaunchPhase && (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="copy-purpose-key" className="text-md font-semibold">2. Finalidade da Copy Específica*</Label>
+                    <Select value={selectedCopyPurposeKey} onValueChange={handleCopyPurposeChange} disabled={availablePurposesForPhase.length === 0}>
+                        <SelectTrigger id="copy-purpose-key"><SelectValue placeholder={availablePurposesForPhase.length > 0 ? "Selecione a finalidade..." : "Nenhuma finalidade para esta fase"} /></SelectTrigger>
+                        <SelectContent className="max-h-[300px]">
+                        {availablePurposesForPhase.map(([category, options]) => (
+                            <SelectGroup key={category}>
+                                <ShadcnSelectLabel>{category}</ShadcnSelectLabel>
+                                {options.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
+                            </SelectGroup>
+                        ))}
+                        </SelectContent>
+                    </Select>
+                     {currentPurposeConfigDetails && <CardDescription className="text-xs mt-1">{currentPurposeConfigDetails.description}</CardDescription>}
+                  </div>
+                )}
+                
+                {selectedCopyPurposeKey && currentSpecificFields.length > 0 && (
+                  <Card className="p-4 pt-2 bg-muted/30 dark:bg-muted/10 border-border/70 shadow-inner">
+                    <CardHeader className="p-0 pb-3 mb-3 border-b">
+                        <CardTitle className="text-base">3. Detalhes para: <span className="text-primary">{allCopyPurposesConfig.find(p => p.key === selectedCopyPurposeKey)?.label}</span></CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-0 space-y-4 max-h-[250px] overflow-y-auto pr-2 custom-scrollbar">
+                        {currentSpecificFields.map(field => (
+                        <div key={field.name} className="space-y-1.5">
+                            <div className="flex items-center">
+                            <Label htmlFor={`specific-${field.name}`} className="text-sm font-medium text-foreground">
+                                {field.label} {field.required && <span className="text-destructive">*</span>}
+                            </Label>
+                            {field.tooltip && (
+                                <TooltipProvider delayDuration={100}><Tooltip><TooltipTrigger asChild><Info className="w-3.5 h-3.5 ml-1.5 text-muted-foreground cursor-help" /></TooltipTrigger><TooltipContent side="top" className="max-w-xs z-50"><p className="text-xs">{field.tooltip}</p></TooltipContent></Tooltip></TooltipProvider>
+                            )}
+                            </div>
+                            {field.type === 'textarea' ? (
+                            <Textarea id={`specific-${field.name}`} placeholder={field.placeholder} value={specificPurposeData[field.name] || ''} onChange={(e) => handleSpecificDataChange(field.name, e.target.value)} rows={field.label.toLowerCase().includes('tópicos') || field.label.toLowerCase().includes('passos') || field.label.toLowerCase().includes('conteúdo') ? 4 : 2} required={field.required} className="bg-background"/>
+                            ) : field.type === 'select' ? (
+                            <Select value={specificPurposeData[field.name] || field.defaultValue || ''} onValueChange={(value) => handleSpecificDataChange(field.name, value)} required={field.required}>
+                                <SelectTrigger id={`specific-${field.name}`} className="bg-background"><SelectValue placeholder={field.placeholder || 'Selecione...'} /></SelectTrigger>
+                                <SelectContent>{field.options?.map(opt => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}</SelectContent>
+                            </Select>
+                            ) : (
+                            <Input id={`specific-${field.name}`} type={field.type as React.HTMLInputTypeAttribute} placeholder={field.placeholder} value={specificPurposeData[field.name] || ''} onChange={(e) => handleSpecificDataChange(field.name, field.type === 'number' ? parseFloat(e.target.value) || '' : e.target.value)} required={field.required} className="bg-background"/>
+                            )}
+                        </div>
+                        ))}
+                    </CardContent>
+                  </Card>
+                )}
+                 {!selectedCopyPurposeKey && selectedLaunchPhase && (
+                    <div className="text-center py-6 text-muted-foreground border rounded-md bg-muted/20">
+                        <Info className="w-8 h-8 mx-auto mb-2 opacity-70"/>
+                        <p>Selecione uma "Finalidade da Copy" para fornecer os detalhes.</p>
+                    </div>
+                )}
+
+                <Button type="submit" disabled={generateSpecificCopyMutation.isPending || !selectedCopyPurposeKey} className="w-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white text-base py-6">
+                  {generateSpecificCopyMutation.isPending ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Sparkles className="mr-2 h-5 w-5" />}
+                  Gerar Copy Avançada
+                </Button>
+              </form>
+            </FormProvider>
+          </CardContent>
+        </Card>
+
+        <Card className="lg:col-span-1 sticky top-6 neu-card">
+            <CardHeader className="neu-card-header">
+                <CardTitle className="neu-card-title"><Sparkles className="mr-2 text-primary"/>Copies Geradas pela IA</CardTitle>
+                <CardDescription>Resultados baseados nas suas configurações.</CardDescription>
+            </CardHeader>
+            <CardContent className="neu-card-content">
+                <div className="space-y-3 max-h-[calc(100vh-280px)] overflow-y-auto pr-2 custom-scrollbar">
+                {generateSpecificCopyMutation.isPending && ( <div className="text-center py-10 text-primary"><Loader2 className="w-10 h-10 mx-auto mb-3 animate-spin" /> Gerando suas copies...</div> )}
+                {!generateSpecificCopyMutation.isPending && generatedCopies.length === 0 && ( <div className="text-center py-10 text-muted-foreground"><Bot className="w-12 h-12 mx-auto mb-3 opacity-60" /><p>Suas copies personalizadas aparecerão aqui.</p></div> )}
+                {generatedCopies.map((copy, index) => {
+                    const displayContent = copy.mainCopy || (copy as any).content; // Compatibilidade
+                    const purposeConfig = allCopyPurposesConfig.find(p => p.key === copy.purposeKey);
+                    return (
+                    <div key={index} className="border border-border rounded-lg p-3 bg-card hover:shadow-md transition-shadow relative">
+                        <div className="flex justify-between items-center mb-1.5">
+                        <Badge variant="outline" className="text-xs font-medium">{purposeConfig?.label || copy.purposeKey}</Badge>
+                        <div className="flex space-x-1">
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => copyToClipboard(displayContent)} title="Copiar Principal"><CopyIcon className="w-3.5 h-3.5" /></Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleSaveGeneratedCopy(copy)} disabled={saveCopyMutation.isPending} title="Salvar na Biblioteca"><Save className="w-3.5 h-3.5" /></Button>
+                        </div>
+                        </div>
+                        <h5 className="font-semibold text-sm text-foreground mt-1">Texto Principal:</h5>
+                        <p className="text-sm text-muted-foreground mb-2 whitespace-pre-line p-2 bg-muted/30 dark:bg-muted/20 rounded">{displayContent}</p>
+                        
+                        {copy.alternativeVariation1 && (<details className="text-xs my-1"><summary className="cursor-pointer text-muted-foreground hover:text-primary font-medium">Ver Variação 1</summary><p className="mt-1 p-2 bg-muted/30 dark:bg-muted/20 rounded whitespace-pre-line text-muted-foreground">{copy.alternativeVariation1}</p></details>)}
+                        {copy.alternativeVariation2 && (<details className="text-xs my-1"><summary className="cursor-pointer text-muted-foreground hover:text-primary font-medium">Ver Variação 2</summary><p className="mt-1 p-2 bg-muted/30 dark:bg-muted/20 rounded whitespace-pre-line text-muted-foreground">{copy.alternativeVariation2}</p></details>)}
+                        
+                        {copy.platformSuggestion && <p className="text-xs text-muted-foreground mt-2">Plataforma Sugerida: <Badge variant="secondary" className="text-xs">{copy.platformSuggestion}</Badge></p>}
+                        {copy.notes && <p className="text-xs text-amber-700 dark:text-amber-500 mt-1 italic">Nota da IA: {copy.notes}</p>}
+                        <p className="text-xs text-muted-foreground/70 text-right mt-1.5">Gerado: {copy.timestamp.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}</p>
+                    </div>
+                    );
+                })}
+                </div>
+            </CardContent>
+        </Card>
+      </div>
+
+      <Card className="neu-card">
+        <CardHeader className="neu-card-header flex-wrap gap-3 md:flex-nowrap md:items-center md:justify-between">
+          <CardTitle className="neu-card-title"><FileText className="mr-2"/> Biblioteca de Copies Salvas</CardTitle>
+          <div className="flex flex-col sm:flex-row items-stretch gap-2 w-full md:w-auto">
+            <div className="relative flex-grow"><Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" /><Input placeholder="Buscar na biblioteca..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="neu-input pl-8 text-sm" /></div>
+            <Select value={filterLaunchPhase} onValueChange={(v) => setFilterLaunchPhase(v as LaunchPhaseType | 'all')}>
+                <SelectTrigger className="neu-input text-sm w-full sm:w-auto"><SelectValue placeholder="Filtrar Fase..." /></SelectTrigger>
+                <SelectContent><SelectItem value="all">Todas as Fases</SelectItem><SelectItem value="pre_launch">Pré-Lançamento</SelectItem><SelectItem value="launch">Lançamento</SelectItem><SelectItem value="post_launch">Pós-Lançamento</SelectItem></SelectContent>
+            </Select>
+            <Select value={filterCopyPurpose} onValueChange={(v) => setFilterCopyPurpose(v as string | 'all')}>
+                <SelectTrigger className="neu-input text-sm w-full sm:w-auto"><SelectValue placeholder="Filtrar Finalidade..." /></SelectTrigger>
+                <SelectContent className="max-h-60">
+                    <SelectItem value="all">Todas Finalidades</SelectItem>
+                    {allCopyPurposesConfig.map(p => <SelectItem key={p.key} value={p.key}>{p.label}</SelectItem>)}
+                </SelectContent>
+            </Select>
+          </div>
+        </CardHeader>
+        <CardContent className="neu-card-content">
+          {copiesLoading && <div className="text-center py-8"><Loader2 className="w-8 h-8 animate-spin text-primary mx-auto"/> Carregando biblioteca...</div>}
+          {!copiesLoading && filteredSavedCopies.length === 0 && (
+             <div className="text-center py-12 text-muted-foreground"><FileText className="w-16 h-16 mx-auto mb-4 opacity-50" /><h3 className="text-lg font-semibold mb-2">Nenhuma copy encontrada.</h3><p>{(savedCopies || []).length === 0 ? 'Suas copies salvas aparecerão aqui.' : 'Ajuste os filtros ou crie novas copies.'}</p></div>
+           )}
+           {!copiesLoading && filteredSavedCopies.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {filteredSavedCopies.map((copy) => (
+                <Card key={copy.id} className="neu-card flex flex-col hover:shadow-lg transition-shadow duration-200">
+                  <CardContent className="p-4 flex flex-col flex-grow">
+                    <h4 className="font-semibold text-foreground line-clamp-2 mb-1 text-base leading-tight">{copy.title}</h4>
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                        <Badge variant="outline" className="text-xs">{allCopyPurposesConfig.find(p => p.key === copy.purposeKey)?.category || 'Desconhecido'}</Badge>
+                        <Badge variant="secondary" className="text-xs">{copy.launchPhase === 'pre_launch' ? 'Pré-Lançamento' : copy.launchPhase === 'launch' ? 'Lançamento' : 'Pós-Lançamento'}</Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground line-clamp-3 flex-grow mb-2">{copy.content}</p>
+                    <div className="flex justify-between items-center mt-auto pt-2 border-t border-border/50">
+                      <span className="text-xs text-muted-foreground">{new Date(copy.createdAt).toLocaleDateString('pt-BR')}</span>
+                      <div className="flex space-x-0.5">
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleReuseSavedCopy(copy)} title="Reutilizar no Gerador"><RotateCcw className="w-3.5 h-3.5" /></Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => copyToClipboard(copy.content)} title="Copiar"><CopyIcon className="w-3.5 h-3.5" /></Button>
+                        {/* <Button variant="ghost" size="icon" className="h-7 w-7" title="Editar (Futuro)"><Edit className="w-3.5 h-3.5" /></Button> */}
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => deleteMutation.mutate(copy.id)} disabled={deleteMutation.isPending && deleteMutation.variables === copy.id} title="Excluir"><Trash2 className="w-3.5 h-3.5" /></Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+           )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
