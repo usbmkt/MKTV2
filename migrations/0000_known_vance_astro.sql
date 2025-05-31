@@ -1,6 +1,28 @@
-CREATE TYPE "public"."campaign_status" AS ENUM('active', 'paused', 'completed', 'draft');--> statement-breakpoint
-CREATE TYPE "public"."chat_sender" AS ENUM('user', 'agent');--> statement-breakpoint
-CREATE TYPE "public"."launch_phase" AS ENUM('pre_launch', 'launch', 'post_launch');--> statement-breakpoint
+-- Corrigido para ser idempotente
+DO $$ BEGIN
+    CREATE TYPE "public"."campaign_status" AS ENUM('active', 'paused', 'completed', 'draft');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+
+-- Corrigido para ser idempotente
+DO $$ BEGIN
+    CREATE TYPE "public"."chat_sender" AS ENUM('user', 'agent');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+
+-- Corrigido para ser idempotente
+DO $$ BEGIN
+    CREATE TYPE "public"."launch_phase" AS ENUM('pre_launch', 'launch', 'post_launch');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+
+-- O restante do arquivo permanece o mesmo
 CREATE TABLE "alerts" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" integer NOT NULL,
