@@ -1,742 +1,228 @@
-// server/storage.ts
-import dotenv from "dotenv";
-dotenv.config();
+// client/src/pages/funnel.tsx
+import { useState, useMemo, useEffect, ChangeEvent } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Select as ShadSelect, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Label } from '@/components/ui/label';
+import { Slider } from '@/components/ui/slider';
+import { Users, MousePointer, ShoppingCart, CreditCard, TrendingUp, Plus, Edit, Trash2, Loader2, AlertTriangle, Link as LinkIcon, Filter as FilterIcon, BarChartHorizontalBig, Settings, Percent, ShoppingBag, DollarSign as DollarSignIcon } from 'lucide-react';
+import { ResponsiveContainer, FunnelChart, Funnel as RechartsFunnel, Tooltip as RechartsTooltip, LabelList, Cell } from 'recharts';
+import { useToast } from '@/hooks/use-toast';
+import { apiRequest } from '@/lib/api';
+import { Funnel as FunnelType, FunnelStage, InsertFunnel, insertFunnelSchema, Campaign as CampaignType } from '@shared/schema';
 
-import { db } from './db'; 
-import {
-  users, campaigns, creatives, metrics, whatsappMessages, copies, alerts, budgets, landingPages,
-  chatSessions, chatMessages, funnels, funnelStages, 
-  type User, type InsertUser, type Campaign, type InsertCampaign,
-  type Creative, type InsertCreative, type Metric, type InsertMetric,
-  type WhatsappMessage, type InsertWhatsappMessage, type Copy, type InsertCopy,
-  type Alert, type InsertAlert, type Budget, type InsertBudget,
-  type LandingPage, type InsertLandingPage,
-  type ChatSession, type InsertChatSession, type ChatMessage, type InsertChatMessage,
-  type Funnel as FunnelTypeFromSchema, // Renomeado para evitar conflito com a interface local Funnel
-  type InsertFunnel, 
-  type FunnelStage as FunnelStageTypeFromSchema, // Renomeado
-  type InsertFunnelStage 
-} from '../shared/schema'; 
+interface FunnelWithStages extends FunnelType {
+  stages: FunnelStage[];
+}
 
-// Adicionado asc para ordenação
-import { eq, count, sum, sql, desc, and, or, gte, lte, isNull, asc } from 'drizzle-orm'; 
+type FunnelFormData = Pick<InsertFunnel, "name" | "description" | "campaignId">;
 
-import * as bcrypt from 'bcrypt'; 
-import jwt from 'jsonwebtoken';
-import { JWT_SECRET } from './config'; 
+interface SimulatorData {
+  investimentoDiario: number;
+  cpc: number;
+  precoProduto: number;
+  alcanceOrganico: number;
+  conversaoAlcanceParaCliques: number;
+  taxaConversaoSite: number;
+}
 
-const chartColors = {
-  palette: [
-    'rgba(75, 192, 192, 1)', 
-    'rgba(255, 99, 132, 1)', 
-    'rgba(54, 162, 235, 1)', 
-    'rgba(255, 206, 86, 1)', 
-    'rgba(153, 102, 255, 1)',
-    'rgba(255, 159, 64, 1)', 
-    'rgba(200, 200, 200, 1)' 
-  ],
-  background: [
-    'rgba(75, 192, 192, 0.2)',
-    'rgba(255, 99, 132, 0.2)',
-    'rgba(54, 162, 235, 0.2)',
-    'rgba(255, 206, 86, 0.2)',
-    'rgba(153, 102, 255, 0.2)',
-    'rgba(255, 159, 64, 0.2)',
-    'rgba(200, 200, 200, 0.2)'
-  ]
+const initialSimulatorData: SimulatorData = {
+  investimentoDiario: 279.70,
+  cpc: 1.95,
+  precoProduto: 97.00,
+  alcanceOrganico: 12000,
+  conversaoAlcanceParaCliques: 2.00,
+  taxaConversaoSite: 2.50,
 };
 
-// Interfaces para dados de Funil que incluem stages (para o retorno da API)
-interface FunnelWithStages extends FunnelTypeFromSchema {
-  stages: FunnelStageTypeFromSchema[];
-}
+const FUNNEL_COLORS = ['#8884d8', '#83a6ed', '#8dd1e1', '#82ca9d', '#a4de6c', '#d0ed57', '#ffc658'];
+const SIMULATOR_FUNNEL_COLORS = ['#00C49F', '#FFBB28', '#FF8042'];
 
 
-function generateSimulatedLineChartData(label: string, startValue: number, countNum: number, maxFluctuation: number, color: string): { labels: string[], datasets: { label: string, data: number[], borderColor: string, backgroundColor: string, fill: boolean, tension: number }[] } {
-  const data = [];
-  const labels = [];
-  let currentValue = startValue;
-
-  for (let i = 0; i < countNum; i++) {
-    labels.push(`Dia ${i + 1}`); 
-    data.push(Math.round(currentValue));
-    currentValue += (Math.random() * maxFluctuation * 2) - maxFluctuation;
-    if (currentValue < 0) currentValue = 0; 
-  }
-
-  return {
-    labels: labels,
-    datasets: [
-      {
-        label: label,
-        data: data,
-        borderColor: color,
-        backgroundColor: color.replace('1)', '0.2)'), 
-        fill: true,
-        tension: 0.4,
-      },
-    ],
-  };
-}
-
-function generateSimulatedBarChartData(label: string, categories: string[], baseValue: number, maxFluctuation: number, colors: string[]): { labels: string[], datasets: { label: string, data: number[], backgroundColor: string[] }[] } {
-  const data = categories.map(() => Math.round(baseValue + (Math.random() * maxFluctuation * 2) - maxFluctuation));
-  return {
-    labels: categories,
-    datasets: [
-      {
-        label: label,
-        data: data,
-        backgroundColor: colors,
-      },
-    ],
-  };
-}
-
-function generateSimulatedDoughnutChartData(labels: string[], baseValue: number, maxFluctuation: number, colors: string[]): { labels: string[], datasets: { data: number[], backgroundColor: string[], borderWidth: number }[] } {
-  const data = labels.map(() => Math.round(baseValue + (Math.random() * maxFluctuation * 2) - maxFluctuation));
-  return {
-    labels: labels,
-    datasets: [
-      {
-        data: data,
-        backgroundColor: colors.map(color => color.replace('1)', '0.8)')), 
-        borderWidth: 0,
-      },
-    ],
-  };
-}
-
-
-export interface IStorage {
-  getUser(id: number): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  getUserByEmail(email: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
-  validatePassword(password: string, hashedPassword: string): Promise<boolean>;
-
-  getCampaigns(userId: number, limit?: number): Promise<Campaign[]>;
-  getCampaign(id: number, userId: number): Promise<Campaign | undefined>;
-  createCampaign(campaign: InsertCampaign): Promise<Campaign>;
-  updateCampaign(id: number, campaign: Partial<Omit<InsertCampaign, 'userId'>>, userId: number): Promise<Campaign | undefined>;
-  deleteCampaign(id: number, userId: number): Promise<boolean>;
-
-  getCreatives(userId: number, campaignId?: number | null): Promise<Creative[]>; // campaignId pode ser null
-  getCreative(id: number, userId: number): Promise<Creative | undefined>;
-  createCreative(creative: InsertCreative): Promise<Creative>;
-  updateCreative(id: number, creative: Partial<Omit<InsertCreative, 'userId'>>, userId: number): Promise<Creative | undefined>;
-  deleteCreative(id: number, userId: number): Promise<boolean>;
-
-  getMetricsForCampaign(campaignId: number, userId: number): Promise<Metric[]>;
-  createMetric(metricData: InsertMetric): Promise<Metric>;
-
-  getMessages(userId: number, contactNumber?: string): Promise<WhatsappMessage[]>;
-  createMessage(messageData: InsertWhatsappMessage): Promise<WhatsappMessage>;
-  markMessageAsRead(id: number, userId: number): Promise<boolean>;
-  getContacts(userId: number): Promise<{ contactNumber: string; contactName: string | null; lastMessage: string; timestamp: Date, unreadCount: number }[]>;
-
-  getCopies(userId: number, campaignId?: number | null): Promise<Copy[]>; // campaignId pode ser null
-  createCopy(copy: InsertCopy): Promise<Copy>;
-  deleteCopy(id: number, userId: number): Promise<boolean>; 
-  updateCopy(id: number, copyData: Partial<Omit<InsertCopy, 'userId' | 'campaignId'>>, userId: number): Promise<Copy | undefined>;
-
-  getAlerts(userId: number, onlyUnread?: boolean): Promise<Alert[]>;
-  createAlert(alertData: InsertAlert): Promise<Alert>;
-  markAlertAsRead(id: number, userId: number): Promise<boolean>;
-
-  getBudgets(userId: number, campaignId?: number | null): Promise<Budget[]>; // campaignId pode ser null
-  createBudget(budget: InsertBudget): Promise<Budget>;
-  updateBudget(id: number, budgetData: Partial<Omit<InsertBudget, 'userId' | 'campaignId'>>, userId: number): Promise<Budget | undefined>;
-
-  getLandingPages(userId: number): Promise<LandingPage[]>;
-  getLandingPage(id: number, userId: number): Promise<LandingPage | undefined>;
-  getLandingPageBySlug(slug: string): Promise<LandingPage | undefined>;
-  getLandingPageByStudioProjectId(studioProjectId: string, userId: number): Promise<LandingPage | undefined>; 
-  createLandingPage(lpData: InsertLandingPage): Promise<LandingPage>;
-  updateLandingPage(id: number, lpData: Partial<Omit<InsertLandingPage, 'userId'>>, userId: number): Promise<LandingPage | undefined>;
-  deleteLandingPage(id: number, userId: number): Promise<boolean>;
-
-  createChatSession(userId: number, title?: string): Promise<ChatSession>;
-  getChatSession(sessionId: number, userId: number): Promise<ChatSession | undefined>;
-  getChatSessions(userId: number): Promise<ChatSession[]>;
-  updateChatSessionTitle(sessionId: number, userId: number, newTitle: string): Promise<ChatSession | undefined>;
-  deleteChatSession(sessionId: number, userId: number): Promise<boolean>;
-  addChatMessage(messageData: InsertChatMessage): Promise<ChatMessage>;
-  getChatMessages(sessionId: number, userId: number): Promise<ChatMessage[]>;
-
-  // Funis
-  getFunnels(userId: number, campaignId?: number | null): Promise<FunnelWithStages[]>; // campaignId pode ser null
-  getFunnel(id: number, userId: number): Promise<FunnelWithStages | undefined>;
-  createFunnel(funnelData: InsertFunnel): Promise<FunnelTypeFromSchema>; // Retorna o tipo base do schema
-  updateFunnel(id: number, funnelData: Partial<Omit<InsertFunnel, 'userId'>>, userId: number): Promise<FunnelTypeFromSchema | undefined>;
-  deleteFunnel(id: number, userId: number): Promise<boolean>;
-
-  getFunnelStages(funnelId: number, userId: number): Promise<FunnelStageTypeFromSchema[]>; 
-  createFunnelStage(stageData: InsertFunnelStage): Promise<FunnelStageTypeFromSchema>;
-  updateFunnelStage(id: number, stageData: Partial<Omit<InsertFunnelStage, 'funnelId'>>, userId: number): Promise<FunnelStageTypeFromSchema | undefined>;
-  deleteFunnelStage(id: number, userId: number): Promise<boolean>;
+export default function FunnelPage() {
+  const [selectedFunnelId, setSelectedFunnelId] = useState<number | null>(null);
+  const [isFormModalOpen, setIsFormModalOpen] = useState(false);
+  const [editingFunnel, setEditingFunnel] = useState<FunnelType | null>(null);
+  const [campaignFilter, setCampaignFilter] = useState<string>('all');
+  const [simulatorData, setSimulatorData] = useState<SimulatorData>(initialSimulatorData);
   
-  getDashboardData(userId: number, timeRange: string): Promise<any>; 
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data: allFunnelsData, isLoading: isLoadingFunnels, error: funnelsError, refetch: refetchFunnelsList } = useQuery<FunnelType[]>({
+    queryKey: ['funnels'],
+    queryFn: async () => {
+        const response = await apiRequest('GET', '/api/funnels');
+        const data = await response.json();
+        return Array.isArray(data) ? data : []; 
+    },
+  });
+  const allFunnels = allFunnelsData || []; 
+
+  const { data: rawSelectedFunnelData, isLoading: isLoadingSelectedFunnel, error: selectedFunnelError } = useQuery<FunnelWithStages | null | undefined>({
+    queryKey: ['funnelDetails', selectedFunnelId],
+    queryFn: async () => {
+        if (!selectedFunnelId) return null; 
+        const response = await apiRequest('GET', `/api/funnels/${selectedFunnelId}`);
+        if (!response.ok) {
+             console.error(`Erro ao buscar funil ${selectedFunnelId}: ${response.status}`);
+             const errorData = await response.json().catch(() => ({ message: `HTTP error ${response.status}`}));
+             throw new Error(errorData.message || `Erro ${response.status} ao buscar detalhes do funil.`);
+        }
+        const data = await response.json();
+        if (!data) return null; 
+        return { ...data, stages: Array.isArray(data.stages) ? data.stages : [] };
+    },
+    enabled: !!selectedFunnelId,
+    retry: false,
+  });
+  const selectedFunnelData = rawSelectedFunnelData || undefined;
+  
+  const { data: campaignsListData = [] } = useQuery<CampaignType[]>({
+    queryKey: ['campaignsForFunnelForm'],
+    queryFn: async () => apiRequest('GET', '/api/campaigns').then(res => {
+        const data = await res.json();
+        return Array.isArray(data) ? data : [];
+    }),
+  });
+  const campaignsList = campaignsListData || [];
+
+  const form = useForm<FunnelFormData>({
+    resolver: zodResolver(insertFunnelSchema.pick({ name: true, description: true, campaignId: true })),
+    defaultValues: { name: '', description: '', campaignId: null },
+  });
+  
+  useEffect(() => {
+    if (editingFunnel) {
+      form.reset({
+        name: editingFunnel.name,
+        description: editingFunnel.description || '',
+        campaignId: editingFunnel.campaignId === undefined || editingFunnel.campaignId === null ? null : editingFunnel.campaignId,
+      });
+    } else {
+      form.reset({ name: '', description: '', campaignId: null });
+    }
+  }, [editingFunnel, form, isFormModalOpen]);
+
+  const funnelMutation = useMutation<FunnelType, Error, FunnelFormData & { id?: number }>({
+    mutationFn: async (data) => {
+      const method = data.id ? 'PUT' : 'POST';
+      const url = data.id ? `/api/funnels/${data.id}` : '/api/funnels';
+      return apiRequest(method, url, data).then(res => res.json());
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['funnels'] });
+      toast({ title: `Funil ${editingFunnel ? 'atualizado' : 'criado'}!` });
+      setIsFormModalOpen(false);
+      setEditingFunnel(null);
+      setSelectedFunnelId(data.id);
+      queryClient.invalidateQueries({ queryKey: ['funnelDetails', data.id] });
+    },
+    onError: (error) => toast({ title: 'Erro ao salvar funil', description: error.message, variant: 'destructive' }),
+  });
+
+  const deleteFunnelMutation = useMutation<void, Error, number>({
+    mutationFn: (id) => apiRequest('DELETE', `/api/funnels/${id}`).then(res => { if(!res.ok) throw new Error('Falha ao excluir'); return res.json()}),
+    onSuccess: (_, deletedFunnelId) => {
+      queryClient.invalidateQueries({ queryKey: ['funnels'] }).then(() => {
+        if (selectedFunnelId === deletedFunnelId) {
+            const currentFunnels = queryClient.getQueryData<FunnelType[]>(['funnels']) || [];
+            const remainingFunnels = currentFunnels.filter(f => f.id !== deletedFunnelId);
+            
+            const listAfterCampaignFilter = campaignFilter === 'all' 
+                ? remainingFunnels 
+                : remainingFunnels.filter(f => f.campaignId === parseInt(campaignFilter));
+
+            setSelectedFunnelId(listAfterCampaignFilter.length > 0 ? listAfterCampaignFilter[0].id : null);
+        }
+      });
+      toast({ title: 'Funil excluído!' });
+    },
+    onError: (error) => toast({ title: 'Erro ao excluir funil', description: error.message, variant: 'destructive' }),
+  });
+
+  const handleOpenFormModal = (funnel?: FunnelType) => { setEditingFunnel(funnel || null); setIsFormModalOpen(true); };
+  const onSubmitFunnelForm = (data: FunnelFormData) => funnelMutation.mutate({ ...data, id: editingFunnel?.id });
+  const handleDeleteFunnel = (id: number) => { if (window.confirm('Excluir este funil e suas etapas?')) deleteFunnelMutation.mutate(id); };
+  
+  const filteredFunnelsList = useMemo(() => {
+    if (!Array.isArray(allFunnels)) return [];
+    if (campaignFilter === 'all') return allFunnels;
+    const campaignIdNum = parseInt(campaignFilter);
+    return allFunnels.filter(funnel => funnel.campaignId === campaignIdNum);
+  }, [allFunnels, campaignFilter]);
+
+  useEffect(() => {
+    if (!isLoadingFunnels && Array.isArray(filteredFunnelsList)) {
+      if (filteredFunnelsList.length > 0) {
+        if (!selectedFunnelId || !filteredFunnelsList.find(f => f.id === selectedFunnelId)) {
+          setSelectedFunnelId(filteredFunnelsList[0].id);
+        }
+      } else { 
+        setSelectedFunnelId(null); 
+      }
+    }
+  }, [filteredFunnelsList, selectedFunnelId, isLoadingFunnels]);
+
+  const savedFunnelChartData = useMemo(() => {
+    const stages = selectedFunnelData?.stages; 
+    if (!selectedFunnelData || !stages || stages.length === 0) return [];
+    let currentStageValue = 1000; 
+    return stages.sort((a, b) => a.order - b.order).map((stage, index) => {
+        if (index === 0) currentStageValue = 1000; 
+        else currentStageValue = Math.max(1, Math.floor(currentStageValue * (0.4 + Math.random() * 0.45))); 
+        return { value: currentStageValue, name: `${stage.order}. ${stage.name}`, fill: FUNNEL_COLORS[index % FUNNEL_COLORS.length], stageId: stage.id, description: stage.description };
+    });
+  }, [selectedFunnelData]);
+
+  const handleSimulatorInputChange = (e: ChangeEvent<HTMLInputElement>) => setSimulatorData(prev => ({ ...prev, [e.target.name]: parseFloat(e.target.value) || 0 }));
+  const handleSimulatorSliderChange = (name: keyof SimulatorData, value: number[]) => setSimulatorData(prev => ({ ...prev, [name]: value[0] || 0 }));
+  const simulatorCalculations = useMemo(() => {const d=simulatorData; const vP=d.cpc>0?d.investimentoDiario/d.cpc:0; const vO=d.alcanceOrganico*(d.conversaoAlcanceParaCliques/100); const tV=vP+vO; const v=tV*(d.taxaConversaoSite/100); const fD=v*d.precoProduto; const lD=fD-d.investimentoDiario; return{visitantesPagos:Math.round(vP),visitantesOrganicos:Math.round(vO),totalVisitantes:Math.round(tV),vendas:parseFloat(v.toFixed(2)),vendasDisplay:Math.round(v),faturamentoDiario:fD,lucroDiario:lD,faturamentoSemanal:fD*7,lucroSemanal:lD*7,faturamentoMensal:fD*30,lucroMensal:lD*30,vendasSemanais:Math.round(v*7),vendasMensais:Math.round(v*30)};}, [simulatorData]);
+  const simulatorFunnelChartData = useMemo(() => [{name:'Total Visitantes',value:simulatorCalculations.totalVisitantes,fill:SIMULATOR_FUNNEL_COLORS[0]},{name:'Vendas Estimadas',value:simulatorCalculations.vendasDisplay,fill:SIMULATOR_FUNNEL_COLORS[1]}].filter(item=>item.value>0),[simulatorCalculations]);
+  const simulatorInputFields:Array<{id:keyof SimulatorData,label:string,min:number,max:number,step:number,unit?:string,icon:React.ElementType}>=[{id:'investimentoDiario',label:'Investimento Diário (R$)',min:0,max:5000,step:10,icon:DollarSignIcon},{id:'cpc',label:'Custo por Clique - CPC (R$)',min:0.01,max:20,step:0.01,icon:MousePointer},{id:'precoProduto',label:'Preço do Produto (R$)',min:0,max:2000,step:1,icon:ShoppingBag},{id:'alcanceOrganico',label:'Alcance Orgânico (diário)',min:0,max:100000,step:500,icon:Users},{id:'conversaoAlcanceParaCliques',label:'Conversão Alcance p/ Cliques (%)',min:0.1,max:20,step:0.1,unit:'%',icon:Percent},{id:'taxaConversaoSite',label:'Taxa de Conversão do Site (%)',min:0.1,max:20,step:0.1,unit:'%',icon:TrendingUp}];
+  const formatCurrency=(value:number)=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(value);
+  const formatNumber=(value:number)=>new Intl.NumberFormat('pt-BR').format(value);
+
+  if(isLoadingFunnels)return <div className="p-8 text-center"><Loader2 className="h-12 w-12 animate-spin mx-auto text-primary"/>Carregando funis...</div>;
+  if(funnelsError)return <div className="p-8 text-center text-destructive"><AlertTriangle className="h-12 w-12 mx-auto mb-2"/>Erro:{funnelsError.message}<Button onClick={() => refetchFunnelsList()} className="mt-4">Tentar Novamente</Button></div>;
+  
+  const selectedCampaignNameForSavedFunnel = selectedFunnelData?.campaignId && Array.isArray(campaignsList) && campaignsList.length > 0 ? campaignsList.find(c=>c.id===selectedFunnelData.campaignId)?.name : null;
+  const stagesForDetailedView = selectedFunnelData?.stages;
+  const initialVisitorsSaved = savedFunnelChartData[0]?.value||0;
+  const finalConversionsSaved = savedFunnelChartData.length > 0 ? savedFunnelChartData[savedFunnelChartData.length - 1]?.value || 0 : 0;
+  const overallConversionRateSaved = initialVisitorsSaved > 0 ? (finalConversionsSaved / initialVisitorsSaved * 100) : 0;
+
+  return (
+    <div className="space-y-6 p-4 md:p-8">
+      <div className="flex justify-between items-center">
+        <div><h1 className="text-3xl font-bold tracking-tight">Análise e Simulação de Funis</h1><p className="text-muted-foreground">Gerencie funis e simule previsões.</p></div>
+        <Button onClick={() => handleOpenFormModal()}><Plus className="w-4 h-4 mr-2" /> Novo Funil Salvo</Button>
+      </div>
+      <Tabs defaultValue="overview" className="space-y-4">
+        <TabsList><TabsTrigger value="overview">Funis Salvos</TabsTrigger><TabsTrigger value="simulator">Simulador</TabsTrigger><TabsTrigger value="detailed" disabled={!selectedFunnelId || !stagesForDetailedView || stagesForDetailedView.length === 0}>Detalhes (Salvo)</TabsTrigger><TabsTrigger value="optimization" disabled={!selectedFunnelId}>Otimização (Salvo)</TabsTrigger></TabsList>
+        <TabsContent value="overview" className="space-y-4">
+          <Card><CardHeader className="flex flex-row items-center justify-between"><CardTitle>Selecionar Funil Salvo</CardTitle><div className="w-64"><ShadSelect value={campaignFilter} onValueChange={setCampaignFilter}><SelectTrigger><FilterIcon className="w-4 h-4 mr-2"/><SelectValue placeholder="Filtrar"/></SelectTrigger><SelectContent><SelectItem value="all">Todas Campanhas</SelectItem>{Array.isArray(campaignsList) && campaignsList.map(c=><SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}</SelectContent></ShadSelect></div></CardHeader>
+            <CardContent>{!Array.isArray(filteredFunnelsList) || filteredFunnelsList.length === 0 ? <p className="text-muted-foreground text-center py-4">Nenhum funil salvo encontrado.</p> : (<div className="grid grid-cols-1 md:grid-cols-2 gap-4">{filteredFunnelsList.map(f => {const cN=f.campaignId&&Array.isArray(campaignsList)&&campaignsList.length>0?campaignsList.find(c=>c.id===f.campaignId)?.name:null; return(<div key={f.id} className={`p-4 border rounded-lg cursor-pointer ${selectedFunnelId===f.id?'border-primary bg-primary/5':'hover:border-primary/50'}`} onClick={()=>setSelectedFunnelId(f.id)}><div className="flex justify-between items-start"><h3 className="font-semibold flex-1 mr-2">{f.name}</h3><div className="flex-shrink-0 space-x-1"><Button variant="ghost" size="icon" className="h-7 w-7" onClick={e=>{e.stopPropagation();handleOpenFormModal(f);}}><Edit className="h-3.5 w-3.5"/></Button><Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-destructive/10" onClick={e=>{e.stopPropagation();handleDeleteFunnel(f.id);}} disabled={deleteFunnelMutation.isPending&&deleteFunnelMutation.variables===f.id}><Trash2 className="h-3.5 w-3.5 text-destructive"/></Button></div></div><p className="text-xs text-muted-foreground mt-1 truncate">{f.description||"Sem descrição"}</p>{cN&&<p className="text-xs text-primary/80 mt-1 flex items-center"><LinkIcon className="w-3 h-3 mr-1"/>Campanha: {cN}</p>}</div>);})}</div>)}</CardContent>
+          </Card>
+          {isLoadingSelectedFunnel && selectedFunnelId && <div className="p-8 text-center"><Loader2 className="h-8 w-8 animate-spin text-primary"/>Carregando...</div>}
+          {selectedFunnelError && <Card className="border-destructive bg-destructive/10"><CardContent className="p-4 text-destructive flex items-center"><AlertTriangle className="h-5 w-5 mr-2"/>Erro: {selectedFunnelError.message}</CardContent></Card>}
+          {selectedFunnelData && !isLoadingSelectedFunnel && (<> {selectedCampaignNameForSavedFunnel && (<Card className="bg-secondary/50"><CardContent className="p-3"><p className="text-sm text-center font-medium">Funil da Campanha: <span className="text-primary">{selectedCampaignNameForSavedFunnel}</span></p></CardContent></Card> )} <div className="grid grid-cols-1 md:grid-cols-4 gap-4"><Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Visitantes (Início)</CardTitle><Users className="h-4 w-4 text-muted-foreground"/></CardHeader><CardContent><div className="text-2xl font-bold">{initialVisitorsSaved.toLocaleString()}</div></CardContent></Card><Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Conversões (Fim)</CardTitle><MousePointer className="h-4 w-4 text-muted-foreground"/></CardHeader><CardContent><div className="text-2xl font-bold">{finalConversionsSaved.toLocaleString()}</div></CardContent></Card><Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Taxa Conv. Total</CardTitle><TrendingUp className="h-4 w-4 text-muted-foreground"/></CardHeader><CardContent><div className="text-2xl font-bold">{overallConversionRateSaved.toFixed(1)}%</div></CardContent></Card><Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Etapas</CardTitle><CreditCard className="h-4 w-4 text-muted-foreground"/></CardHeader><CardContent><div className="text-2xl font-bold">{selectedFunnelData.stages?.length||0}</div></CardContent></Card></div><Card><CardHeader><CardTitle>Visualização do Funil Salvo</CardTitle><CardDescription>Fluxo (valores simulados)</CardDescription></CardHeader><CardContent className="h-[400px] md:h-[500px] p-2">{savedFunnelChartData && savedFunnelChartData.length > 0 ? (<ResponsiveContainer width="100%" height="100%"><FunnelChart><RechartsTooltip formatter={(v:number,n:string)=>[`${v.toLocaleString()} usuários (simulado)`,n.substring(n.indexOf('.')+2)]}/><RechartsFunnel dataKey="value" data={savedFunnelChartData} isAnimationActive lastShapeType="rectangle" orientation="vertical" neckWidth="30%" neckHeight="0%">{savedFunnelChartData.map((entry,index)=>(<Cell key={`cell-${index}`} fill={entry.fill}/>))}<LabelList position="center" fill="#fff" dataKey="name" formatter={(v:string)=>v.substring(v.indexOf('.')+2)} className="text-xs font-semibold pointer-events-none select-none"/></RechartsFunnel></FunnelChart></ResponsiveContainer>) : <div className="flex items-center justify-center h-full text-muted-foreground">Funil sem etapas.</div>}</CardContent></Card></>)}
+          {!selectedFunnelId && !isLoadingFunnels && !isLoadingSelectedFunnel && <Card><CardContent className="p-8 text-muted-foreground text-center">Selecione ou crie um funil.</CardContent></Card>}
+        </TabsContent>
+        <TabsContent value="simulator" className="space-y-6"> {/* Conteúdo da aba Simulador */} <div className="grid grid-cols-1 lg:grid-cols-3 gap-6"><Card className="lg:col-span-1 neu-card"><CardHeader><CardTitle>Métricas da Simulação</CardTitle><CardDescription>Ajuste para simular.</CardDescription></CardHeader><CardContent className="space-y-5">{simulatorInputFields.map(field => { const Icon = field.icon; return (<div key={field.id} className="space-y-2"><Label htmlFor={`sim-${field.id}`} className="flex items-center text-sm font-medium"><Icon className="w-4 h-4 mr-2 text-primary"/>{field.label}</Label><div className="flex items-center space-x-2"><Input type="number" id={`sim-${field.id}`} name={field.id} value={simulatorData[field.id]} onChange={handleSimulatorInputChange} min={field.min} max={field.max} step={field.step} className="neu-input w-28 text-sm"/><Slider name={field.id} value={[simulatorData[field.id]]} onValueChange={(v)=>handleSimulatorSliderChange(field.id,v)} min={field.min} max={field.max} step={field.step} className="flex-1"/></div><p className="text-xs text-muted-foreground text-right">Min: {field.unit==='%'?field.min.toFixed(1):field.min}{field.unit||''} / Max: {field.unit==='%'?field.max.toFixed(1):field.max}{field.unit||''}</p></div>)})} </CardContent></Card><div className="lg:col-span-2 space-y-6"><Card className="neu-card"><CardHeader><CardTitle className="flex items-center"><BarChartHorizontalBig className="w-5 h-5 mr-2 text-primary"/>Previsão (Simulação)</CardTitle><CardDescription>Resultados calculados.</CardDescription></CardHeader><CardContent className="space-y-4"><div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center"><div><p className="text-xs text-muted-foreground">Visitantes Pagos</p><p className="font-bold text-lg">{formatNumber(simulatorCalculations.visitantesPagos)}</p></div><div><p className="text-xs text-muted-foreground">Visitantes Orgânicos</p><p className="font-bold text-lg">{formatNumber(simulatorCalculations.visitantesOrganicos)}</p></div><div><p className="text-xs text-muted-foreground">Total Visitantes</p><p className="font-bold text-lg text-primary">{formatNumber(simulatorCalculations.totalVisitantes)}</p></div><div><p className="text-xs text-muted-foreground">Vendas Estimadas</p><p className="font-bold text-lg text-green-500">{formatNumber(simulatorCalculations.vendasDisplay)}</p></div></div><div className="h-[300px] md:h-[350px] mt-4">{simulatorFunnelChartData.length > 0 ? (<ResponsiveContainer width="100%" height="100%"><FunnelChart><RechartsTooltip formatter={(v:number,n:string)=>[`${formatNumber(v)} ${n.includes('Visitantes')?'visitantes':'vendas'}`,n]}/><RechartsFunnel dataKey="value" data={simulatorFunnelChartData} isAnimationActive labelLine={false} orientation="horizontal" neckWidth="20%" neckHeight="0%" trapezoid={false}>{simulatorFunnelChartData.map((entry,index)=>(<Cell key={`cell-${index}`} fill={entry.fill}/>))}<LabelList position="center" dataKey="name" formatter={(v:string)=>v} className="text-xs md:text-sm font-semibold pointer-events-none select-none" fill="#fff"/></RechartsFunnel></FunnelChart></ResponsiveContainer>) : <div className="flex items-center justify-center h-full text-muted-foreground">Ajuste as métricas.</div>}</div></CardContent></Card><div className="grid grid-cols-1 md:grid-cols-3 gap-6"><Card className="neu-card"><CardHeader><CardTitle className="text-base">Volume de Vendas</CardTitle></CardHeader><CardContent className="space-y-1 text-sm"><p>Diário:<span className="font-semibold">{formatNumber(simulatorCalculations.vendasDisplay)}</span></p><p>Semanal:<span className="font-semibold">{formatNumber(simulatorCalculations.vendasSemanais)}</span></p><p>Mensal:<span className="font-semibold">{formatNumber(simulatorCalculations.vendasMensais)}</span></p></CardContent></Card><Card className="neu-card"><CardHeader><CardTitle className="text-base">Faturamento (R$)</CardTitle></CardHeader><CardContent className="space-y-1 text-sm"><p>Diário:<span className="font-semibold">{formatCurrency(simulatorCalculations.faturamentoDiario)}</span></p><p>Semanal:<span className="font-semibold">{formatCurrency(simulatorCalculations.faturamentoSemanal)}</span></p><p>Mensal:<span className="font-semibold">{formatCurrency(simulatorCalculations.faturamentoMensal)}</span></p></CardContent></Card><Card className="neu-card"><CardHeader><CardTitle className="text-base">Lucro Estimado (R$)</CardTitle></CardHeader><CardContent className="space-y-1 text-sm"><p>Diário:<span className="font-semibold">{formatCurrency(simulatorCalculations.lucroDiario)}</span></p><p>Semanal:<span className="font-semibold">{formatCurrency(simulatorCalculations.lucroSemanal)}</span></p><p>Mensal:<span className="font-semibold">{formatCurrency(simulatorCalculations.lucroMensal)}</span></p></CardContent></Card></div></div></div></TabsContent>
+        <TabsContent value="detailed" className="space-y-4">{selectedFunnelData&&stagesForDetailedView&&stagesForDetailedView.length>0?(<Card><CardHeader><CardTitle>Análise Detalhada (Funil Salvo)</CardTitle></CardHeader><CardContent className="space-y-6">{stagesForDetailedView.sort((a,b)=>a.order-b.order).map((stage,index)=>{const sVC=savedFunnelChartData.find(fd=>fd.stageId===stage.id)?.value||0;const pSD=index>0?stagesForDetailedView.find(s=>s.order===stage.order-1):null;const pSVC=index>0&&pSD?(savedFunnelChartData.find(fd=>fd.stageId===pSD.id)?.value||sVC):sVC;const cRFP=pSVC>0&&index>0?(sVC/pSVC*100):(index===0?100:0);const dOR=pSVC>0&&index>0?((pSVC-sVC)/pSVC*100):0;return(<div key={stage.id} className="border rounded-lg p-4"><h3 className="text-lg font-semibold">{stage.order}. {stage.name}</h3>{stage.description&&<p className="text-xs mt-1 text-muted-foreground mb-2">{stage.description}</p>}<div className="grid grid-cols-2 md:grid-cols-3 gap-4"><div><p className="text-sm text-muted-foreground">Valor (Simulado)</p><p className="text-2xl font-bold">{sVC.toLocaleString()}</p></div><div><p className="text-sm text-muted-foreground">Conv. Ant. (Simulado)</p><p className="text-2xl font-bold">{cRFP.toFixed(1)}%</p></div><div><p className="text-sm text-muted-foreground">Drop-off Ant. (Simulado)</p><p className="text-2xl font-bold text-red-500">{dOR.toFixed(1)}%</p></div></div></div>);})}<div className="text-center mt-4"><Button variant="outline" disabled><Plus className="mr-2 h-4 w-4"/>Adicionar Etapa</Button></div></CardContent></Card>):<Card><CardContent className="p-8 text-center text-muted-foreground">{selectedFunnelId?"Funil salvo sem etapas.":"Selecione um funil salvo."}</CardContent></Card>}</TabsContent>
+        <TabsContent value="optimization" className="space-y-4"></TabsContent>
+      </Tabs>
+      <Dialog open={isFormModalOpen} onOpenChange={(isOpen) => { if (!isOpen) { setIsFormModalOpen(false); setEditingFunnel(null); form.reset(); } else { setIsFormModalOpen(true); }}}> <DialogContent className="sm:max-w-[500px]"><DialogHeader><DialogTitle>{editingFunnel?'Editar Funil Salvo':'Novo Funil Salvo'}</DialogTitle><DialogDescription>{editingFunnel?'Altere os detalhes.':'Crie um novo funil.'}</DialogDescription></DialogHeader><Form {...form}><form onSubmit={form.handleSubmit(onSubmitFunnelForm)} className="space-y-4 py-4"><FormField control={form.control} name="name" render={({field})=>(<FormItem><FormLabel>Nome*</FormLabel><FormControl><Input placeholder="Ex: Funil Black Friday" {...field}/></FormControl><FormMessage/></FormItem>)}/><FormField control={form.control} name="description" render={({field})=>(<FormItem><FormLabel>Descrição</FormLabel><FormControl><Textarea placeholder="Objetivo, público..." {...field} value={field.value??''}/></FormControl><FormMessage/></FormItem>)}/><FormField control={form.control} name="campaignId" render={({field})=>(<FormItem><FormLabel>Associar à Campanha</FormLabel><ShadSelect onValueChange={v=>field.onChange(v==="NONE"?null:parseInt(v))} value={field.value===null||field.value===undefined?"NONE":String(field.value)} disabled={campaignsList.length===0}><FormControl><SelectTrigger><SelectValue placeholder={campaignsList.length===0?"Nenhuma campanha":"Nenhuma"}/></SelectTrigger></FormControl><SelectContent><SelectItem value="NONE">Nenhuma</SelectItem>{Array.isArray(campaignsList)&&campaignsList.map(c=>(<SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>))}</SelectContent></ShadSelect><FormMessage/></FormItem>)}/> <DialogFooter><Button type="button" variant="outline" onClick={()=>{setIsFormModalOpen(false);setEditingFunnel(null);form.reset();}}>Cancelar</Button><Button type="submit" disabled={funnelMutation.isPending}>{funnelMutation.isPending&&<Loader2 className="mr-2 h-4 w-4 animate-spin"/>}{editingFunnel?'Salvar':'Criar'}</Button></DialogFooter></form></Form></DialogContent></Dialog>
+    </div>
+  );
 }
-
-export class DatabaseStorage implements IStorage {
-  async getUser(id: number): Promise<User | undefined> {
-    const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
-    return result[0];
-  }
-
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    const result = await db.select().from(users).where(eq(users.username, username)).limit(1);
-    return result[0];
-  }
-
-  async getUserByEmail(email: string): Promise<User | undefined> {
-    const result = await db.select().from(users).where(eq(users.email, email)).limit(1);
-    return result[0];
-  }
-
-  async createUser(userData: InsertUser): Promise<User> {
-    const hashedPassword = await bcrypt.hash(userData.password, 10);
-    const [newUser] = await db.insert(users).values({
-      ...userData,
-      password: hashedPassword,
-    }).returning();
-    if (!newUser) throw new Error("Falha ao criar usuário.");
-    return newUser;
-  }
-
-  async validatePassword(password: string, hashedPassword: string): Promise<boolean> {
-    return bcrypt.compare(password, hashedPassword);
-  }
-
-  async getCampaigns(userId: number, limit?: number): Promise<Campaign[]> {
-    let query = db.select().from(campaigns)
-      .where(eq(campaigns.userId, userId))
-      .orderBy(desc(campaigns.createdAt));
-    if (limit) {
-      return query.limit(limit);
-    }
-    return query;
-  }
-
-  async getCampaign(id: number, userId: number): Promise<Campaign | undefined> {
-    const [campaign] = await db.select().from(campaigns)
-      .where(and(eq(campaigns.id, id), eq(campaigns.userId, userId)))
-      .limit(1);
-    return campaign;
-  }
-
-  async createCampaign(campaignData: InsertCampaign): Promise<Campaign> {
-    const [newCampaign] = await db.insert(campaigns).values(campaignData).returning();
-    if (!newCampaign) throw new Error("Falha ao criar campanha.");
-    return newCampaign;
-  }
-
-  async updateCampaign(id: number, campaignData: Partial<Omit<InsertCampaign, 'userId'>>, userId: number): Promise<Campaign | undefined> {
-    const [updatedCampaign] = await db.update(campaigns)
-      .set({ ...campaignData, updatedAt: new Date() })
-      .where(and(eq(campaigns.id, id), eq(campaigns.userId, userId)))
-      .returning();
-    return updatedCampaign;
-  }
-
-  async deleteCampaign(id: number, userId: number): Promise<boolean> {
-    const result = await db.delete(campaigns)
-      .where(and(eq(campaigns.id, id), eq(campaigns.userId, userId)));
-    return (result.rowCount ?? 0) > 0;
-  }
-
-  async getCreatives(userId: number, campaignId?: number | null): Promise<Creative[]> {
-    const conditions = [eq(creatives.userId, userId)];
-    if (campaignId !== undefined) { // Permite buscar por null explicitamente
-        conditions.push(campaignId === null ? isNull(creatives.campaignId) : eq(creatives.campaignId, campaignId));
-    }
-    return db.select().from(creatives).where(and(...conditions)).orderBy(desc(creatives.createdAt));
-  }
-
-  async getCreative(id: number, userId: number): Promise<Creative | undefined> {
-    const [creative] = await db.select().from(creatives)
-      .where(and(eq(creatives.id, id), eq(creatives.userId, userId)))
-      .limit(1);
-    return creative;
-  }
-
-  async createCreative(creativeData: InsertCreative): Promise<Creative> {
-    const [newCreative] = await db.insert(creatives).values(creativeData).returning();
-    if (!newCreative) throw new Error("Falha ao criar criativo.");
-    return newCreative;
-  }
-
-  async updateCreative(id: number, creativeData: Partial<Omit<InsertCreative, 'userId'>>, userId: number): Promise<Creative | undefined> {
-    const [updatedCreative] = await db.update(creatives)
-      .set({ ...creativeData, updatedAt: new Date() })
-      .where(and(eq(creatives.id, id), eq(creatives.userId, userId)))
-      .returning();
-    return updatedCreative;
-  }
-
-  async deleteCreative(id: number, userId: number): Promise<boolean> {
-    const result = await db.delete(creatives)
-      .where(and(eq(creatives.id, id), eq(creatives.userId, userId)));
-    return (result.rowCount ?? 0) > 0;
-  }
-
-  async getMetricsForCampaign(campaignId: number, userId: number): Promise<Metric[]> {
-    const campaignExists = await db.select({id: campaigns.id}).from(campaigns)
-      .where(and(eq(campaigns.id, campaignId), eq(campaigns.userId, userId)))
-      .limit(1);
-    if (!campaignExists.length) {
-        throw new Error("Campanha não encontrada ou não pertence ao usuário.");
-    }
-    return db.select().from(metrics)
-      .where(eq(metrics.campaignId, campaignId)) 
-      .orderBy(desc(metrics.date));
-  }
-
-  async createMetric(metricData: InsertMetric): Promise<Metric> {
-    const [newMetric] = await db.insert(metrics).values(metricData).returning();
-    if (!newMetric) throw new Error("Falha ao criar métrica.");
-    return newMetric;
-  }
-
-  async getMessages(userId: number, contactNumber?: string): Promise<WhatsappMessage[]> {
-    const conditions = [eq(whatsappMessages.userId, userId)];
-    if (contactNumber) {
-      conditions.push(eq(whatsappMessages.contactNumber, contactNumber));
-    }
-    return db.select().from(whatsappMessages).where(and(...conditions)).orderBy(desc(whatsappMessages.timestamp));
-  }
-
-  async createMessage(messageData: InsertWhatsappMessage): Promise<WhatsappMessage> {
-    const [newMessage] = await db.insert(whatsappMessages).values(messageData).returning();
-    if (!newMessage) throw new Error("Falha ao criar mensagem.");
-    return newMessage;
-  }
-
-  async markMessageAsRead(id: number, userId: number): Promise<boolean> {
-    const result = await db.update(whatsappMessages)
-      .set({ isRead: true })
-      .where(and(eq(whatsappMessages.id, id), eq(whatsappMessages.userId, userId), eq(whatsappMessages.isRead, false)));
-    return (result.rowCount ?? 0) > 0;
-  }
-
-  async getContacts(userId: number): Promise<{ contactNumber: string; contactName: string | null; lastMessage: string; timestamp: Date, unreadCount: number }[]> {
-    const allMessages = await db.select().from(whatsappMessages)
-      .where(eq(whatsappMessages.userId, userId))
-      .orderBy(desc(whatsappMessages.timestamp));
-
-    const contactsMap = new Map<string, { contactNumber: string; contactName: string | null; lastMessage: string; timestamp: Date, unreadCount: number }>();
-
-    for (const msg of allMessages) {
-      if (!contactsMap.has(msg.contactNumber)) {
-        contactsMap.set(msg.contactNumber, {
-          contactNumber: msg.contactNumber,
-          contactName: msg.contactName || null,
-          lastMessage: msg.message,
-          timestamp: new Date(msg.timestamp),
-          unreadCount: 0,
-        });
-      }
-      const contact = contactsMap.get(msg.contactNumber)!;
-      if (!msg.isRead && msg.direction === 'incoming') {
-        contact.unreadCount++;
-      }
-    }
-    return Array.from(contactsMap.values()).sort((a,b) => b.timestamp.getTime() - a.timestamp.getTime());
-  }
-
-  async getCopies(userId: number, campaignId?: number | null): Promise<Copy[]> {
-    const conditions = [eq(copies.userId, userId)];
-    if (campaignId !== undefined) { // Permite buscar por null explicitamente
-      conditions.push(campaignId === null ? isNull(copies.campaignId) : eq(copies.campaignId, campaignId));
-    }
-    return db.select().from(copies).where(and(...conditions)).orderBy(desc(copies.createdAt));
-  }
-
-  async createCopy(copyData: InsertCopy): Promise<Copy> {
-    const [newCopy] = await db.insert(copies).values(copyData).returning();
-    if (!newCopy) throw new Error("Falha ao criar copy.");
-    return newCopy;
-  }
-
-  async updateCopy(id: number, copyData: Partial<Omit<InsertCopy, 'userId' | 'campaignId'>>, userId: number): Promise<Copy | undefined> {
-    const existingCopy = await db.select().from(copies).where(and(eq(copies.id, id), eq(copies.userId, userId))).limit(1);
-    if(!existingCopy || existingCopy.length === 0) {
-        return undefined;
-    }
-    const [updatedCopy] = await db.update(copies)
-      .set(copyData) 
-      .where(and(eq(copies.id, id), eq(copies.userId, userId)))
-      .returning();
-    return updatedCopy;
-  }
-
-  async deleteCopy(id: number, userId: number): Promise<boolean> {
-    const result = await db.delete(copies)
-      .where(and(eq(copies.id, id), eq(copies.userId, userId)));
-    return (result.rowCount ?? 0) > 0;
-  }
-
-  async getAlerts(userId: number, onlyUnread?: boolean): Promise<Alert[]> {
-    const conditions = [eq(alerts.userId, userId)];
-    if (onlyUnread) {
-      conditions.push(eq(alerts.isRead, false));
-    }
-    return db.select().from(alerts).where(and(...conditions)).orderBy(desc(alerts.createdAt));
-  }
-
-  async createAlert(alertData: InsertAlert): Promise<Alert> {
-    const [newAlert] = await db.insert(alerts).values(alertData).returning();
-    if (!newAlert) throw new Error("Falha ao criar alerta.");
-    return newAlert;
-  }
-
-  async markAlertAsRead(id: number, userId: number): Promise<boolean> {
-    const result = await db.update(alerts)
-      .set({ isRead: true })
-      .where(and(eq(alerts.id, id), eq(alerts.userId, userId), eq(alerts.isRead, false)));
-    return (result.rowCount ?? 0) > 0;
-  }
-
-  async getBudgets(userId: number, campaignId?: number | null): Promise<Budget[]> {
-    const conditions = [eq(budgets.userId, userId)];
-    if (campaignId !== undefined) { // Permite buscar por null explicitamente
-      conditions.push(campaignId === null ? isNull(budgets.campaignId) : eq(budgets.campaignId, campaignId));
-    }
-    return db.select().from(budgets).where(and(...conditions)).orderBy(desc(budgets.createdAt));
-  }
-
-  async createBudget(budgetData: InsertBudget): Promise<Budget> {
-    const [newBudget] = await db.insert(budgets).values(budgetData).returning();
-    if (!newBudget) throw new Error("Falha ao criar orçamento.");
-    return newBudget;
-  }
-
-  async updateBudget(id: number, budgetData: Partial<Omit<InsertBudget, 'userId' | 'campaignId'>>, userId: number): Promise<Budget | undefined> {
-     const existingBudget = await db.select().from(budgets).where(and(eq(budgets.id, id), eq(budgets.userId, userId))).limit(1);
-    if(!existingBudget || existingBudget.length === 0) {
-        return undefined;
-    }
-    const [updatedBudget] = await db.update(budgets)
-      .set(budgetData) 
-      .where(and(eq(budgets.id, id), eq(budgets.userId, userId)))
-      .returning();
-    return updatedBudget;
-  }
-
-  async getLandingPages(userId: number): Promise<LandingPage[]> {
-    return db.select().from(landingPages)
-      .where(eq(landingPages.userId, userId))
-      .orderBy(desc(landingPages.createdAt));
-  }
-
-  async getLandingPage(id: number, userId: number): Promise<LandingPage | undefined> {
-    const [lp] = await db.select().from(landingPages)
-      .where(and(eq(landingPages.id, id), eq(landingPages.userId, userId)))
-      .limit(1);
-    return lp;
-  }
-
-  async getLandingPageBySlug(slug: string): Promise<LandingPage | undefined> {
-    const [lp] = await db.select().from(landingPages)
-      .where(eq(landingPages.slug, slug)) 
-      .limit(1);
-    return lp;
-  }
-
-  async getLandingPageByStudioProjectId(studioProjectId: string, userId: number): Promise<LandingPage | undefined> {
-    const [lp] = await db.select().from(landingPages)
-      .where(and(eq(landingPages.studioProjectId, studioProjectId), eq(landingPages.userId, userId))) 
-      .limit(1);
-    return lp;
-  }
-
-  async createLandingPage(lpData: InsertLandingPage): Promise<LandingPage> {
-    const [newLP] = await db.insert(landingPages).values(lpData).returning();
-    if (!newLP) throw new Error("Falha ao criar landing page.");
-    return newLP;
-  }
-
-  async updateLandingPage(id: number, lpData: Partial<Omit<InsertLandingPage, 'userId'>>, userId: number): Promise<LandingPage | undefined> {
-    const [updatedLP] = await db.update(landingPages)
-      .set({ ...lpData, updatedAt: new Date() })
-      .where(and(eq(landingPages.id, id), eq(landingPages.userId, userId)))
-      .returning();
-    return updatedLP;
-  }
-
-  async deleteLandingPage(id: number, userId: number): Promise<boolean> {
-    const result = await db.delete(landingPages)
-      .where(and(eq(landingPages.id, id), eq(landingPages.userId, userId)));
-    return (result.rowCount ?? 0) > 0;
-  }
-
-  async createChatSession(userId: number, title: string = 'Nova Conversa'): Promise<ChatSession> {
-    const [newSession] = await db.insert(chatSessions).values({ userId, title, createdAt: new Date(), updatedAt: new Date() }).returning();
-    if (!newSession) throw new Error("Falha ao criar nova sessão de chat.");
-    return newSession;
-  }
-
-  async getChatSession(sessionId: number, userId: number): Promise<ChatSession | undefined> {
-    const [session] = await db.select().from(chatSessions).where(and(eq(chatSessions.id, sessionId), eq(chatSessions.userId, userId))).limit(1);
-    return session;
-  }
-
-  async getChatSessions(userId: number): Promise<ChatSession[]> {
-    return db.select().from(chatSessions).where(eq(chatSessions.userId, userId)).orderBy(desc(chatSessions.updatedAt));
-  }
-
-  async updateChatSessionTitle(sessionId: number, userId: number, newTitle: string): Promise<ChatSession | undefined> {
-    const [updatedSession] = await db.update(chatSessions).set({ title: newTitle, updatedAt: new Date() }).where(and(eq(chatSessions.id, sessionId), eq(chatSessions.userId, userId))).returning();
-    return updatedSession;
-  }
-
-  async deleteChatSession(sessionId: number, userId: number): Promise<boolean> {
-    const result = await db.delete(chatSessions).where(and(eq(chatSessions.id, sessionId), eq(chatSessions.userId, userId)));
-    return (result.rowCount ?? 0) > 0;
-  }
-
-  async addChatMessage(messageData: InsertChatMessage): Promise<ChatMessage> {
-    const [newMessage] = await db.insert(chatMessages).values({ ...messageData, timestamp: new Date() }).returning();
-    if (!newMessage) throw new Error("Falha ao adicionar mensagem ao chat.");
-    await db.update(chatSessions).set({ updatedAt: new Date() }).where(eq(chatSessions.id, messageData.sessionId));
-    return newMessage;
-  }
-
-  async getChatMessages(sessionId: number, userId: number): Promise<ChatMessage[]> {
-    const sessionExists = await db.select({ id: chatSessions.id }).from(chatSessions).where(and(eq(chatSessions.id, sessionId), eq(chatSessions.userId, userId))).limit(1);
-    if (!sessionExists.length) {
-      console.warn(`Tentativa de acesso a mensagens da sessão ${sessionId} pelo usuário ${userId} falhou a verificação de propriedade.`);
-      return []; 
-    }
-    return db.select().from(chatMessages).where(eq(chatMessages.sessionId, sessionId)).orderBy(chatMessages.timestamp);
-  }
-
-  // Funis
-  async getFunnels(userId: number, campaignId?: number | null): Promise<FunnelWithStages[]> {
-    const conditions = [eq(funnels.userId, userId)];
-    if (campaignId !== undefined) {
-      conditions.push(campaignId === null ? isNull(funnels.campaignId) : eq(funnels.campaignId, campaignId));
-    }
-    // CORRIGIDO: Usar db.query para buscar funis com suas etapas
-    const result = await db.query.funnels.findMany({
-      where: and(...conditions),
-      orderBy: [desc(funnels.createdAt)],
-      with: {
-        stages: { // Este 'stages' deve corresponder ao nome da relação em funnelRelations
-          orderBy: [asc(funnelStages.order), desc(funnelStages.createdAt)]
-        }
-      }
-    });
-    return result as FunnelWithStages[]; // Fazendo um cast para o tipo esperado
-  }
-
-  async getFunnel(id: number, userId: number): Promise<FunnelWithStages | undefined> {
-    // CORRIGIDO: Usar db.query para buscar um funil com suas etapas
-    const funnel = await db.query.funnels.findFirst({
-      where: and(eq(funnels.id, id), eq(funnels.userId, userId)),
-      with: {
-        stages: {
-          orderBy: [asc(funnelStages.order), desc(funnelStages.createdAt)]
-        }
-      }
-    });
-    return funnel as FunnelWithStages | undefined;
-  }
-
-  async createFunnel(funnelData: InsertFunnel): Promise<FunnelTypeFromSchema> {
-    const [newFunnel] = await db.insert(funnels).values(funnelData).returning();
-    if (!newFunnel) throw new Error("Falha ao criar funil.");
-    return newFunnel;
-  }
-
-  async updateFunnel(id: number, funnelData: Partial<Omit<InsertFunnel, 'userId'>>, userId: number): Promise<FunnelTypeFromSchema | undefined> {
-    const [updatedFunnel] = await db.update(funnels)
-      .set({ ...funnelData, updatedAt: new Date() })
-      .where(and(eq(funnels.id, id), eq(funnels.userId, userId)))
-      .returning();
-    return updatedFunnel;
-  }
-
-  async deleteFunnel(id: number, userId: number): Promise<boolean> {
-    // Considerar deletar stages associados ou usar onDelete: 'cascade' no schema
-    const result = await db.delete(funnels)
-      .where(and(eq(funnels.id, id), eq(funnels.userId, userId)));
-    return (result.rowCount ?? 0) > 0;
-  }
-
-  async getFunnelStages(funnelId: number, userId: number): Promise<FunnelStageTypeFromSchema[]> {
-    const funnelOwner = await db.select({ id: funnels.id }).from(funnels)
-      .where(and(eq(funnels.id, funnelId), eq(funnels.userId, userId)))
-      .limit(1);
-    if (!funnelOwner.length) {
-      // Lançar erro ou retornar array vazio dependendo da política de erro
-      throw new Error("Funil não encontrado ou não pertence ao usuário.");
-    }
-    return db.select().from(funnelStages)
-      .where(eq(funnelStages.funnelId, funnelId))
-      .orderBy(asc(funnelStages.order), desc(funnelStages.createdAt)); 
-  }
-
-  async createFunnelStage(stageData: InsertFunnelStage): Promise<FunnelStageTypeFromSchema> {
-    const [newStage] = await db.insert(funnelStages).values(stageData).returning();
-    if (!newStage) throw new Error("Falha ao criar etapa do funil.");
-    return newStage;
-  }
-
-  async updateFunnelStage(id: number, stageData: Partial<Omit<InsertFunnelStage, 'funnelId'>>, userId: number): Promise<FunnelStageTypeFromSchema | undefined> {
-    // Verificar se a etapa pertence a um funil do usuário (verificação de permissão)
-    const existingStage = await db.query.funnelStages.findFirst({
-        where: eq(funnelStages.id, id),
-        with: {
-            funnel: {
-                columns: { userId: true }
-            }
-        }
-    });
-
-    if (!existingStage || existingStage.funnel?.userId !== userId) {
-        throw new Error("Etapa do funil não encontrada ou não pertence ao usuário.");
-    }
-
-    const [updatedStage] = await db.update(funnelStages)
-      .set({ ...stageData, updatedAt: new Date() })
-      .where(eq(funnelStages.id, id)) 
-      .returning();
-    return updatedStage;
-  }
-
-  async deleteFunnelStage(id: number, userId: number): Promise<boolean> {
-    const existingStage = await db.query.funnelStages.findFirst({
-        where: eq(funnelStages.id, id),
-        with: {
-            funnel: {
-                columns: { userId: true }
-            }
-        }
-    });
-    
-    if (!existingStage || existingStage.funnel?.userId !== userId) {
-        throw new Error("Etapa do funil não encontrada ou não pertence ao usuário para exclusão.");
-    }
-
-    const result = await db.delete(funnelStages).where(eq(funnelStages.id, id));
-    return (result.rowCount ?? 0) > 0;
-  }
-
-
-  async getDashboardData(userId: number, timeRange: string = '30d') {
-    const now = new Date();
-    let startDate = new Date();
-    if (timeRange === '7d') {
-        startDate.setDate(now.getDate() - 7);
-    } else { 
-        startDate.setDate(now.getDate() - 30);
-    }
-
-    const metricsTimeCondition = and(
-        eq(metrics.userId, userId),
-        gte(metrics.date, startDate) 
-    );
-
-    const budgetsUserCondition = eq(budgets.userId, userId);
-
-    const activeCampaignsResult = await db.select({ count: count() }).from(campaigns)
-      .where(and(eq(campaigns.userId, userId), eq(campaigns.status, 'active')));
-    const activeCampaigns = activeCampaignsResult[0]?.count || 0;
-
-    const totalSpentResult = await db.select({
-        total: sum(budgets.spentAmount) 
-    })
-      .from(budgets)
-      .where(budgetsUserCondition);
-    const totalSpent = parseFloat(String(totalSpentResult[0]?.total || "0")) || 0;
-
-    const totalConversionsResult = await db.select({ total: sum(metrics.conversions) })
-      .from(metrics)
-      .where(metricsTimeCondition); 
-    const conversions = parseFloat(String(totalConversionsResult[0]?.total || '0')) || 0;
-
-    const totalRevenueResult = await db.select({ total: sum(metrics.revenue) })
-      .from(metrics)
-      .where(metricsTimeCondition); 
-    const totalRevenue = parseFloat(String(totalRevenueResult[0]?.total || '0')) || 0;
-
-    const totalCostResult = await db.select({ total: sum(metrics.cost) })
-      .from(metrics)
-      .where(metricsTimeCondition); 
-    const totalCost = parseFloat(String(totalCostResult[0]?.total || '0')) || 0;
-
-    const avgROI = totalCost > 0 ? parseFloat((((totalRevenue - totalCost) / totalCost) * 100).toFixed(2)) : 0;
-
-    const totalImpressionsResult = await db.select({ total: sum(metrics.impressions) })
-      .from(metrics)
-      .where(metricsTimeCondition); 
-    const impressions = parseFloat(String(totalImpressionsResult[0]?.total || '0')) || 0;
-
-    const totalClicksResult = await db.select({ total: sum(metrics.clicks) })
-      .from(metrics)
-      .where(metricsTimeCondition); 
-    const clicks = parseFloat(String(totalClicksResult[0]?.total || '0')) || 0;
-
-    const ctr = clicks > 0 && impressions > 0 ? parseFloat(((clicks / impressions) * 100).toFixed(2)) : 0;
-    const cpc = clicks > 0 && totalCost > 0 ? parseFloat((totalCost / clicks).toFixed(2)) : 0;
-
-    const metricsData = {
-      activeCampaigns: activeCampaigns,
-      totalSpent: totalSpent, 
-      conversions: conversions, 
-      avgROI: avgROI, 
-      impressions: impressions, 
-      clicks: clicks, 
-      ctr: ctr, 
-      cpc: cpc 
-    };
-
-    const campaignsChange = parseFloat((Math.random() * 20 - 10).toFixed(1)); 
-    const spentChange = parseFloat((Math.random() * 20 - 10).toFixed(1)); 
-    const conversionsChange = parseFloat((Math.random() * 30 - 15).toFixed(1)); 
-    const roiChange = parseFloat((Math.random() * 10 - 5).toFixed(1)); 
-
-    const trends = {
-      campaignsChange,
-      spentChange,
-      conversionsChange,
-      roiChange,
-    };
-
-    const recentCampaignsRaw = await db.select().from(campaigns)
-      .where(eq(campaigns.userId, userId))
-      .orderBy(desc(campaigns.createdAt))
-      .limit(3);
-
-    const recentCampaigns = recentCampaignsRaw.map(c => ({
-      id: c.id,
-      name: c.name,
-      description: c.description || 'Nenhuma descrição',
-      status: c.status,
-      platforms: c.platforms || [],
-      budget: parseFloat(String(c.budget ?? '0')) || 0, 
-      spent: parseFloat(String(c.dailyBudget ?? '0')) || 0, 
-      performance: Math.floor(Math.random() * (95 - 60 + 1)) + 60 
-    }));
-
-    const timeSeriesData = generateSimulatedLineChartData('Desempenho Geral', 1000, timeRange === '30d' ? 30 : 7, 50, chartColors.palette[0]);
-    const channelPerformanceData = generateSimulatedDoughnutChartData(['Meta Ads', 'Google Ads', 'LinkedIn', 'TikTok'], 20, 10, chartColors.palette);
-    const conversionData = generateSimulatedLineChartData('Conversões', 200, timeRange === '30d' ? 30 : 7, 30, chartColors.palette[1]);
-    const roiData = generateSimulatedBarChartData('ROI (%)', ['Meta Ads', 'Google Ads', 'LinkedIn', 'TikTok'], 250, 100, chartColors.palette);
-
-    return {
-      metrics: metricsData,
-      recentCampaigns: recentCampaigns,
-      alertCount: (await db.select({ count: count() }).from(alerts).where(and(eq(alerts.userId, userId), eq(alerts.isRead, false))))[0]?.count || 0,
-      trends: trends,
-      timeSeriesData: timeSeriesData,
-      channelPerformanceData: channelPerformanceData,
-      conversionData: conversionData,
-      roiData: roiData,
-    };
-  }
-}
-
-export const storage = new DatabaseStorage();
