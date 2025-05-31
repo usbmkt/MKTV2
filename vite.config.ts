@@ -18,23 +18,29 @@ export default defineConfig(({ command, mode }) => {
     plugins: plugins,
     define: {
       // Expor variáveis de ambiente para o frontend
+      // Garante que o código do cliente possa acessar essas variáveis.
       'import.meta.env.VITE_FORCE_AUTH_BYPASS': JSON.stringify(process.env.VITE_FORCE_AUTH_BYPASS || process.env.FORCE_AUTH_BYPASS || 'false'),
       'import.meta.env.VITE_API_URL': JSON.stringify(process.env.VITE_API_URL || process.env.APP_BASE_URL || ''),
     },
     resolve: {
       alias: {
-        // Usando fileURLToPath para compatibilidade com ES modules
+        // Alias para facilitar importações do diretório src do cliente.
+        // Ex: import MyComponent from '@/components/MyComponent';
         "@": path.resolve(path.dirname(fileURLToPath(import.meta.url)), "client", "src"),
+        // Alias para o diretório compartilhado (shared).
+        // Crucial para importações como import { ... } from '@shared/schema';
         "@shared": path.resolve(path.dirname(fileURLToPath(import.meta.url)), "shared"),
+        // Alias para assets.
         "@assets": path.resolve(path.dirname(fileURLToPath(import.meta.url)), "attached_assets"),
       },
     },
-    // A raiz do projeto para o Vite (onde o index.html do cliente está)
+    // Define a pasta raiz para o Vite, onde ele procurará o index.html.
     root: path.resolve(path.dirname(fileURLToPath(import.meta.url)), "client"),
     build: {
-      // Diretório de saída para os assets do cliente, relativo à raiz do projeto (não à 'root' do Vite)
+      // Define o diretório de saída para os arquivos de build do cliente.
+      // Relativo à raiz do projeto (onde vite.config.ts está), não à 'root' do Vite.
       outDir: path.resolve(path.dirname(fileURLToPath(import.meta.url)), "dist/public"),
-      emptyOutDir: true, // Limpa o diretório de saída antes de cada build
+      emptyOutDir: true, // Limpa o diretório de saída antes de cada build.
       rollupOptions: {
         // external: [], // Use apenas se você explicitamente não quer empacotar uma lib
       },
@@ -58,12 +64,13 @@ export default defineConfig(({ command, mode }) => {
       // },
     },
     server: { // Configurações do servidor de desenvolvimento Vite
-      port: 3000, // Ou a porta que você preferir para desenvolvimento local
-      host: '0.0.0.0', // Permite acesso de qualquer host
-      allowedHosts: [
+      port: 3000, // Porta para o servidor de desenvolvimento.
+      host: '0.0.0.0', // Permite acesso de qualquer host na rede local.
+      allowedHosts: [ // Lista de hosts permitidos.
         'localhost',
         '127.0.0.1',
         '0.0.0.0',
+        // Adicione aqui os hosts específicos do seu ambiente de desenvolvimento/preview, se necessário.
         'work-1-cixzsejsspdqlyvw.prod-runtime.all-hands.dev',
         'work-2-cixzsejsspdqlyvw.prod-runtime.all-hands.dev',
         '.all-hands.dev',
