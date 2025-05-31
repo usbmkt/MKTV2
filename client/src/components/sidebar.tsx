@@ -8,7 +8,7 @@ import { ThemeToggle } from '@/components/theme-toggle';
 import { cn } from '@/lib/utils';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/api';
-import LogoPng from '@/assets/img/logo.png'; // Importando o logo PNG
+import LogoPng from '@/img/logo.png'; // ATUALIZADO O CAMINHO DO LOGO
 import {
   LayoutDashboard,
   Megaphone,
@@ -50,7 +50,7 @@ interface DashboardData {
 
 export default function Sidebar() {
   const [location] = useLocation();
-  const { user, logout, isAuthenticated } = useAuthStore(); // Adicionado isAuthenticated
+  const { user, logout, isAuthenticated } = useAuthStore();
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   const { data: dashboardData } = useQuery<DashboardData>({
@@ -64,7 +64,7 @@ export default function Sidebar() {
       }
       return response.json();
     },
-    enabled: !!user && isAuthenticated, // Modificado para depender de isAuthenticated também
+    enabled: !!user && isAuthenticated,
     staleTime: 5 * 60 * 1000, 
   });
 
