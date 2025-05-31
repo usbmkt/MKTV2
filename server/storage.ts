@@ -2,26 +2,23 @@
 import { db } from './db'; 
 import {
   users, campaigns, creatives, metrics, whatsappMessages, copies, alerts, budgets, landingPages,
-  chatSessions, chatMessages, funnels, funnelStages, launchPhaseEnum, // Importar launchPhaseEnum
+  chatSessions, chatMessages, funnels, funnelStages, launchPhaseEnum,
   type User, type InsertUser, type Campaign, type InsertCampaign,
   type Creative, type InsertCreative, type Metric, type InsertMetric,
-  type WhatsappMessage, type InsertWhatsappMessage, type Copy, type InsertCopy, // Usar os tipos corretos
+  type WhatsappMessage, type InsertWhatsappMessage, type Copy, type InsertCopy,
   type Alert, type InsertAlert, type Budget, type InsertBudget,
   type LandingPage, type InsertLandingPage,
   type ChatSession, type InsertChatSession, type ChatMessage, type InsertChatMessage,
   type Funnel, type InsertFunnel, type FunnelStage, type InsertFunnelStage
 } from '../shared/schema'; 
 
-import { eq, count, sum, sql, desc, and, or, gte, lte, isNull, asc } from 'drizzle-orm'; 
+import { eq, count, sum, sql, desc, and, or, gte, lte, isNull, asc, ilike } from 'drizzle-orm'; // Adicionado ilike
 import * as bcrypt from 'bcrypt'; 
-// import { JWT_SECRET } from './config'; // JWT_SECRET não é usado diretamente aqui
 
-// Funções de simulação de gráfico e cores (mantidas como no seu arquivo original)
 const chartColors = { palette: [ 'rgba(75, 192, 192, 1)', 'rgba(255, 99, 132, 1)', 'rgba(54, 162, 235, 1)', 'rgba(255, 206, 86, 1)', 'rgba(153, 102, 255, 1)', 'rgba(255, 159, 64, 1)', 'rgba(200, 200, 200, 1)' ], background: [ 'rgba(75, 192, 192, 0.2)', 'rgba(255, 99, 132, 0.2)', 'rgba(54, 162, 235, 0.2)', 'rgba(255, 206, 86, 0.2)', 'rgba(153, 102, 255, 0.2)', 'rgba(255, 159, 64, 0.2)', 'rgba(200, 200, 200, 0.2)' ] };
 function generateSimulatedLineChartData(label: string, startValue: number, countNum: number, maxFluctuation: number, color: string): { labels: string[], datasets: { label: string, data: number[], borderColor: string, backgroundColor: string, fill: boolean, tension: number }[] } { const dataPoints: number[] = []; const labels: string[] = []; let currentValue = startValue; for (let i = 0; i < countNum; i++) { labels.push(`Dia ${i + 1}`); dataPoints.push(Math.round(currentValue)); currentValue += (Math.random() * maxFluctuation * 2) - maxFluctuation; if (currentValue < 0) currentValue = 0; } return { labels: labels, datasets: [ { label: label, data: dataPoints, borderColor: color, backgroundColor: color.replace('1)', '0.2)'), fill: true, tension: 0.4, }, ], }; }
 function generateSimulatedBarChartData(label: string, categories: string[], baseValue: number, maxFluctuation: number, colors: string[]): { labels: string[], datasets: { label: string, data: number[], backgroundColor: string[] }[] } { const dataPoints: number[] = categories.map(() => Math.round(baseValue + (Math.random() * maxFluctuation * 2) - maxFluctuation)); return { labels: categories, datasets: [ { label: label, data: dataPoints, backgroundColor: colors, }, ], }; }
 function generateSimulatedDoughnutChartData(chartLabels: string[], baseValue: number, maxFluctuation: number, colors: string[]): { labels: string[], datasets: { data: number[], backgroundColor: string[], borderWidth: number }[] } { const dataPoints: number[] = chartLabels.map(() => Math.round(baseValue + (Math.random() * maxFluctuation * 2) - maxFluctuation)); return { labels: chartLabels, datasets: [ { data: dataPoints, backgroundColor: colors.map(color => color.replace('1)', '0.8)')), borderWidth: 0, }, ], }; }
-
 
 export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
@@ -45,12 +42,10 @@ export interface IStorage {
   createMessage(messageData: InsertWhatsappMessage): Promise<WhatsappMessage>;
   markMessageAsRead(id: number, userId: number): Promise<boolean>;
   getContacts(userId: number): Promise<{ contactNumber: string; contactName: string | null; lastMessage: string; timestamp: Date, unreadCount: number }[]>;
-  
   getCopies(userId: number, campaignId?: number | null, phase?: string, purposeKey?: string, searchTerm?: string): Promise<Copy[]>;
   createCopy(copy: InsertCopy): Promise<Copy>;
-  updateCopy(id: number, copyData: Partial<Omit<InsertCopy, 'userId' | 'id'>>, userId: number): Promise<Copy | undefined>;
+  updateCopy(id: number, copyData: Partial<Omit<InsertCopy, 'userId' | 'id' | 'createdAt'>>, userId: number): Promise<Copy | undefined>; // Removido createdAt
   deleteCopy(id: number, userId: number): Promise<boolean>; 
-  
   getAlerts(userId: number, onlyUnread?: boolean): Promise<Alert[]>;
   createAlert(alertData: InsertAlert): Promise<Alert>;
   markAlertAsRead(id: number, userId: number): Promise<boolean>;
@@ -107,7 +102,7 @@ export class DatabaseStorage implements IStorage {
   async getContacts(userId: number): Promise<{ contactNumber: string; contactName: string | null; lastMessage: string; timestamp: Date, unreadCount: number }[]> { const allMessages = await db.select().from(whatsappMessages).where(eq(whatsappMessages.userId, userId)).orderBy(desc(whatsappMessages.timestamp)); const contactsMap = new Map<string, { contactNumber: string; contactName: string | null; lastMessage: string; timestamp: Date, unreadCount: number }>(); for (const msg of allMessages) { if (!contactsMap.has(msg.contactNumber)) { contactsMap.set(msg.contactNumber, { contactNumber: msg.contactNumber, contactName: msg.contactName || null, lastMessage: msg.message, timestamp: new Date(msg.timestamp), unreadCount: 0, }); } const contact = contactsMap.get(msg.contactNumber)!; if (!msg.isRead && msg.direction === 'incoming') { contact.unreadCount++; } } return Array.from(contactsMap.values()).sort((a,b) => b.timestamp.getTime() - a.timestamp.getTime()); }
   
   async getCopies(userId: number, campaignId?: number | null, phase?: string, purposeKey?: string, searchTerm?: string): Promise<Copy[]> {
-    const conditions: any[] = [eq(copies.userId, userId)]; // Tipar como any[] para flexibilidade
+    const conditions: any[] = [eq(copies.userId, userId)];
     if (campaignId !== undefined) {
       conditions.push(campaignId === null ? isNull(copies.campaignId) : eq(copies.campaignId, campaignId));
     }
@@ -117,12 +112,12 @@ export class DatabaseStorage implements IStorage {
     if (purposeKey && purposeKey !== 'all') {
         conditions.push(eq(copies.purposeKey, purposeKey));
     }
-    if (searchTerm) {
+    if (searchTerm && searchTerm.trim() !== '') {
         const searchPattern = `%${searchTerm.toLowerCase()}%`;
         conditions.push(
             or(
-                sql`lower(${copies.title}) like ${searchPattern}`,
-                sql`lower(${copies.content}) like ${searchPattern}`
+                ilike(copies.title, searchPattern), // Usar ilike para case-insensitive
+                ilike(copies.content, searchPattern)
             )
         );
     }
@@ -132,31 +127,39 @@ export class DatabaseStorage implements IStorage {
   async createCopy(copyData: InsertCopy): Promise<Copy> {
     const dataToInsert = {
         ...copyData,
-        userId: copyData.userId, // userId já deve estar no copyData validado
-        // Se campaignId for undefined no frontend, o Zod schema já o converteu para null
+        // userId é obrigatório e deve vir do token autenticado, já tratado na rota
+        // campaignId é opcional, o schema Zod já trata undefined/null
         campaignId: copyData.campaignId === undefined ? null : copyData.campaignId,
-        // createdAt e lastUpdatedAt são definidos pelo banco
+        // Os campos JSONB devem ser objetos JS. Se o frontend enviar strings, precisaria de JSON.parse.
+        // O schema Zod com .default({}) garante que sejam objetos vazios se não fornecidos.
+        details: copyData.details || {},
+        baseInfo: copyData.baseInfo || {},
+        fullGeneratedResponse: copyData.fullGeneratedResponse || {},
+        tags: copyData.tags || [],
+        // createdAt e lastUpdatedAt são definidos pelo banco com defaultNow()
     };
     const [newCopy] = await db.insert(copies).values(dataToInsert).returning();
     if (!newCopy) throw new Error("Falha ao salvar a copy no banco de dados.");
     return newCopy;
   }
 
-  async updateCopy(id: number, copyData: Partial<Omit<InsertCopy, 'userId' | 'id'>>, userId: number): Promise<Copy | undefined> {
+  async updateCopy(id: number, copyData: Partial<Omit<InsertCopy, 'userId' | 'id' | 'createdAt'>>, userId: number): Promise<Copy | undefined> {
     const existingCopyResult = await db.select({id: copies.id}).from(copies).where(and(eq(copies.id, id), eq(copies.userId, userId))).limit(1);
     if(!existingCopyResult.length) {
       console.warn(`Tentativa de atualizar copy inexistente ou não pertencente ao usuário. ID: ${id}, UserID: ${userId}`);
       return undefined; 
     }
     
-    const dataToUpdate: Partial<Copy> = {
+    const dataToUpdate: Partial<Omit<Copy, 'id' | 'userId' | 'createdAt'>> = { // Omitir campos não atualizáveis
         ...copyData,
         lastUpdatedAt: new Date(),
     };
-    // Garantir que campaignId seja null se for undefined ou string vazia após o parse do Zod (embora o schema já deva tratar)
-    if (dataToUpdate.campaignId === undefined) {
-        dataToUpdate.campaignId = null;
+    
+    // Tratar campaignId explicitamente para garantir que null seja enviado se for o caso
+    if (copyData.hasOwnProperty('campaignId')) {
+        dataToUpdate.campaignId = copyData.campaignId === undefined ? null : copyData.campaignId;
     }
+
 
     const [updatedCopy] = await db.update(copies)
       .set(dataToUpdate)
