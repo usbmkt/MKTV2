@@ -4,10 +4,7 @@ import { useMCPStore, sendMessageToMCP, ChatSession, Message } from '@/lib/mcpSt
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-// COORDENADA 1: Adicionar Loader2 à importação de lucide-react
-import { 
-  Send, X, RotateCcw, MoreVertical, Plus, History, Trash, Edit, Mic, StopCircle, Paperclip, Loader2 
-} from 'lucide-react'; 
+import { Send, X, RotateCcw, MoreVertical, Plus, History, Trash, Edit, Mic, StopCircle, Paperclip, Loader2 } from 'lucide-react'; 
 import { cn } from '@/lib/utils';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -39,7 +36,7 @@ export const ChatPanel: React.FC = () => {
     updateCurrentSessionTitle,
     deleteChatSession,
     isSessionsLoading,
-    addMessage,
+    addMessage: mcpAddMessage, // Renomeado para evitar conflito com a função local, se houver
   } = useMCPStore();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -52,7 +49,7 @@ export const ChatPanel: React.FC = () => {
   const recognitionRef = useRef<any>(null);
   const speechRecognitionAvailable = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition);
 
-  // console.log("[ChatPanel] Renderizando mensagens:", messages); // Mantido para depuração
+  console.log("[ChatPanel] Renderizando. Messages no store:", JSON.stringify(messages.map(m=>({text: m.text, sender: m.sender}))));
 
   useEffect(() => {
     if (isPanelOpen) {
@@ -64,17 +61,21 @@ export const ChatPanel: React.FC = () => {
   }, [isPanelOpen, loadChatSessions, isLoading, isSessionsLoading]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setCurrentInput(e.target.value);
+    setCurrentInput(e.target.value); // Esta chamada já tem log no mcpStore
   };
 
   const handleSendMessage = async (e?: React.FormEvent<HTMLFormElement>) => {
     e?.preventDefault();
-    // console.log('[ChatPanel] handleSendMessage: currentInput =', currentInput, '| isLoading =', isLoading); // Mantido para depuração
+    // COORDENADA 2 (ChatPanel.tsx): Logs diagnósticos em handleSendMessage
+    console.log('[ChatPanel] handleSendMessage disparado.');
+    console.log('[ChatPanel] currentInput do store ANTES de trim:', currentInput);
+    console.log('[ChatPanel] isLoading do store:', isLoading);
+
     const messageText = currentInput.trim();
-    // console.log('[ChatPanel] handleSendMessage: messageText (trimmed) =', messageText); // Mantido para depuração
+    console.log('[ChatPanel] messageText (após trim):', `"${messageText}"`);
 
     if (!messageText || isLoading) {
-      // console.log('[ChatPanel] handleSendMessage: Retornando (messageText vazio ou isLoading true)'); // Mantido para depuração
+      console.warn('[ChatPanel] handleSendMessage: Retornando. messageText vazio ou isLoading é true.');
       return;
     }
     
@@ -82,9 +83,9 @@ export const ChatPanel: React.FC = () => {
         recognitionRef.current.stop();
         setIsListening(false);
     }
-    // console.log('[ChatPanel] handleSendMessage: Chamando sendMessageToMCP com texto:', messageText); // Mantido para depuração
+    console.log('[ChatPanel] handleSendMessage: Chamando clearCurrentInput e sendMessageToMCP com texto:', messageText);
+    clearCurrentInput(); // Limpa o input visualmente ANTES de enviar
     await sendMessageToMCP(messageText);
-    useMCPStore.getState().clearCurrentInput(); 
   };
 
   useEffect(() => {
@@ -98,11 +99,6 @@ export const ChatPanel: React.FC = () => {
       const viewport = scrollAreaRef.current.querySelector('div[data-radix-scroll-area-viewport]');
       if (viewport) {
         viewport.scrollTop = viewport.scrollHeight;
-      } else {
-        const firstChildDiv = scrollAreaRef.current.children[0] as HTMLElement;
-        if (firstChildDiv && firstChildDiv.tagName === 'DIV') {
-            firstChildDiv.scrollTop = firstChildDiv.scrollHeight;
-        }
       }
     }
   }, [messages, isLoading]);
@@ -144,7 +140,7 @@ export const ChatPanel: React.FC = () => {
 
   const handleVoiceInput = () => {
     if (!speechRecognitionAvailable) { 
-      addMessage({ id: `speech-error-${Date.now()}`, text: 'Seu navegador não suporta reconhecimento de voz.', sender: 'system', timestamp: new Date() });
+      mcpAddMessage({ id: `speech-error-${Date.now()}`, text: 'Seu navegador não suporta reconhecimento de voz.', sender: 'system', timestamp: new Date() });
       return;
     }
     if (!recognitionRef.current) {
@@ -161,13 +157,16 @@ export const ChatPanel: React.FC = () => {
                 else interimTranscript += event.results[i][0].transcript;
             }
             setCurrentInput(finalTranscript || interimTranscript);
-            if (finalTranscript.trim()) recognitionRef.current.stop();
+            if (finalTranscript.trim()) {
+              recognitionRef.current.stop(); // Para de ouvir após resultado final
+              // handleSendMessage(); // Poderia chamar o envio aqui se quisesse envio automático
+            }
         };
         recognitionRef.current.onerror = (event: any) => {
             let errMsg = 'Erro no reconhecimento de voz.';
             if (event.error === 'not-allowed') errMsg = 'Permissão do microfone negada.';
             else if (event.error === 'no-speech') errMsg = 'Nenhuma fala detectada.';
-            addMessage({ id: `speech-error-detail-${Date.now()}`, text: errMsg, sender: 'system', timestamp: new Date() });
+            mcpAddMessage({ id: `speech-error-detail-${Date.now()}`, text: errMsg, sender: 'system', timestamp: new Date() });
             setIsListening(false); setCurrentInput('');
         };
         recognitionRef.current.onend = () => {
@@ -180,7 +179,7 @@ export const ChatPanel: React.FC = () => {
         try { recognitionRef.current.start(); } 
         catch (error) {
             setIsListening(false); setCurrentInput('');
-            addMessage({ id: `speech-start-error-${Date.now()}`, text: 'Não foi possível iniciar reconhecimento de voz.', sender: 'system', timestamp: new Date() });
+            mcpAddMessage({ id: `speech-start-error-${Date.now()}`, text: 'Não foi possível iniciar reconhecimento de voz.', sender: 'system', timestamp: new Date() });
         }
     } else { recognitionRef.current.stop(); }
   };
@@ -215,10 +214,11 @@ export const ChatPanel: React.FC = () => {
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => {
                  const csId = useMCPStore.getState().currentSessionId;
-                 if (csId) useMCPStore.setState({ messages: [{ ...initialAgentMessageDefault, text: 'Conversa reiniciada. Como posso ajudar?', sessionId: csId }]});
+                 const defaultMsg = {...initialAgentMessageDefault, text: 'Conversa reiniciada. Como posso ajudar?', sessionId: csId || undefined };
+                 if (csId) useMCPStore.setState({ messages: [defaultMsg]});
                  else handleStartNewChat();
               }}><RotateCcw className="mr-2 h-4 w-4" /> Reiniciar Atual</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => { if(currentSessionId) handleDeleteSession(currentSessionId); }} disabled={!currentSessionId} className="text-destructive focus:text-destructive"><Trash className="mr-2 h-4 w-4" /> Excluir Atual</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => { if(currentSessionId) handleDeleteSession(currentSessionId); }} disabled={!currentSessionId} className="text-destructive focus:text-destructive hover:bg-destructive/10 focus:bg-destructive/10"><Trash className="mr-2 h-4 w-4" /> Excluir Atual</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
           <Button variant="ghost" size="icon" onClick={togglePanel} title="Fechar Painel" aria-label="Fechar painel do Agente MCP"><X className="h-5 w-5" /></Button>
@@ -240,7 +240,7 @@ export const ChatPanel: React.FC = () => {
               <p className={cn("text-sm whitespace-pre-wrap", msg.sender === 'system' ? 'italic' : '')}>{msg.text}</p>
               {msg.sender !== 'system' && (
                 <span className={cn("text-xs mt-1", msg.sender === 'user' ? 'text-primary-foreground/70 self-end' : 'text-muted-foreground/70 self-start')}>
-                  {format(msg.timestamp, 'HH:mm', { locale: ptBR })}
+                  {format(new Date(msg.timestamp), 'HH:mm', { locale: ptBR })}
                 </span>
               )}
             </div>
@@ -279,7 +279,7 @@ export const ChatPanel: React.FC = () => {
             <DialogTitle>Conversas Antigas</DialogTitle>
             <DialogDescription>Selecione uma conversa para carregar o histórico ou inicie uma nova.</DialogDescription>
           </DialogHeader>
-          <ScrollArea className="max-h-[calc(70vh-200px)] py-4 pr-3"> {/* Ajuste de altura e padding */}
+          <ScrollArea className="max-h-[calc(70vh-200px)] py-4 pr-3">
             <div className="grid gap-3">
                 {isSessionsLoading ? (
                   <div className="text-center text-muted-foreground py-4">Carregando conversas... <Loader2 className="inline w-4 h-4 animate-spin"/></div>
