@@ -18,12 +18,18 @@ import {
   insertLandingPageSchema,
   insertChatSessionSchema,
   insertChatMessageSchema,
-  insertFunnelSchema, // Adicionado schema de funil
-  insertFunnelStageSchema, // Adicionado schema de etapa de funil
+  insertFunnelSchema,      // <<--- ADICIONADO
+  insertFunnelStageSchema, // <<--- ADICIONADO
   User,
   LandingPage,
   ChatMessage,
-  ChatSession
+  ChatSession,
+  Campaign,     // Adicionado para updateCampaign
+  Creative,     // Adicionado para updateCreative
+  Copy,         // Adicionado para updateCopy
+  Budget,       // Adicionado para updateBudget
+  Funnel,       // Adicionado para funcs de Funil
+  FunnelStage   // Adicionado para funcs de FunilStage
 } from "../shared/schema";
 import { ZodError } from "zod";
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
@@ -34,7 +40,6 @@ const LP_ASSETS_DIR = path.resolve(UPLOADS_ROOT_DIR, 'lp-assets');
 const CREATIVES_ASSETS_DIR = path.resolve(UPLOADS_ROOT_DIR, 'creatives-assets');
 const MCP_ATTACHMENTS_DIR = path.resolve(UPLOADS_ROOT_DIR, 'mcp-attachments');
 
-// Garantir que os diretórios de upload existam
 [UPLOADS_ROOT_DIR, LP_ASSETS_DIR, CREATIVES_ASSETS_DIR, MCP_ATTACHMENTS_DIR].forEach(dir => {
     if (!fs.existsSync(dir)){
         fs.mkdirSync(dir, { recursive: true });
@@ -118,10 +123,10 @@ const authenticateToken = async (req: AuthenticatedRequest, res: Response, next:
   if (process.env.FORCE_AUTH_BYPASS === 'true') {
     console.log('[AUTH] Bypass ativo - criando usuário mock');
     req.user = {
-      id: 1,
-      username: 'admin',
-      email: 'admin@usbmkt.com',
-      password: 'hashed_password',
+      id: 1, // Assumindo que o ID 1 é um admin ou usuário de teste válido
+      username: 'admin_bypass',
+      email: 'admin_bypass@usbmkt.com',
+      password: 'hashed_password_bypass', // Senha não é usada diretamente aqui
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -261,7 +266,6 @@ export async function registerRoutes(app: Express): Promise<HttpServer> {
     } catch (error) { next(error); }
   });
 
-  // Rotas de Campanhas (Existentes)
   app.get('/api/campaigns', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try { res.json(await storage.getCampaigns(req.user!.id)); } catch (error) { next(error); }
   });
@@ -284,8 +288,9 @@ export async function registerRoutes(app: Express): Promise<HttpServer> {
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ error: 'ID da campanha inválido.' });
-      const { userId, ...updateData } = req.body;
-      const campaignData = insertCampaignSchema.partial().parse(updateData);
+      // Removendo userId do corpo, ele vem do token
+      const { userId, ...updateData } = req.body; 
+      const campaignData = insertCampaignSchema.partial().parse(updateData); // Validar apenas os campos enviados
       const campaign = await storage.updateCampaign(id, campaignData, req.user!.id);
       if (!campaign) return res.status(404).json({ error: 'Campanha não encontrada ou não pertence ao usuário.' });
       res.json(campaign);
@@ -301,18 +306,30 @@ export async function registerRoutes(app: Express): Promise<HttpServer> {
     } catch (error) { next(error); }
   });
 
-  // Rotas de Criativos (Existentes)
   app.get('/api/creatives', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
-      const campaignId = req.query.campaignId ? parseInt(req.query.campaignId as string) : undefined;
-      if (req.query.campaignId && isNaN(campaignId!)) return res.status(400).json({ error: 'ID da campanha inválido.' });
+      const campaignIdQuery = req.query.campaignId as string | undefined;
+      let campaignId: number | null | undefined = undefined;
+
+      if (campaignIdQuery !== undefined) {
+        if (campaignIdQuery.toLowerCase() === 'null' || campaignIdQuery === '') {
+          campaignId = null; // Para buscar criativos não associados
+        } else {
+          campaignId = parseInt(campaignIdQuery);
+          if (isNaN(campaignId)) return res.status(400).json({ error: 'ID da campanha inválido.' });
+        }
+      }
       res.json(await storage.getCreatives(req.user!.id, campaignId));
     } catch (error) { next(error); }
   });
+
   app.post('/api/creatives', authenticateToken, creativesUpload.single('file'), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
+      const parsedCampaignId = req.body.campaignId === 'null' || req.body.campaignId === '' ? null : (req.body.campaignId ? parseInt(req.body.campaignId) : undefined);
+
       const creativeData = insertCreativeSchema.parse({
         ...req.body,
+        campaignId: parsedCampaignId, // Usar o valor parseado
         userId: req.user!.id,
         fileUrl: req.file ? `/${UPLOADS_ROOT_DIR}/creatives-assets/${req.file.filename}` : req.body.fileUrl || null,
       });
@@ -331,80 +348,88 @@ export async function registerRoutes(app: Express): Promise<HttpServer> {
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ error: 'ID do criativo inválido.' });
-      const creative = await storage.getCreative(id, req.user!.id);
+      const creative = await storage.getCreative(id, req.user!.id); // Pega o criativo para saber o fileUrl
       if (!creative) return res.status(404).json({ error: 'Criativo não encontrado.' });
+      
       const success = await storage.deleteCreative(id, req.user!.id);
       if (!success) return res.status(404).json({ error: 'Criativo não encontrado ou não pode ser excluído.' });
+      
       if (creative.fileUrl) {
         const filePath = path.join(process.cwd(), creative.fileUrl.startsWith('/') ? creative.fileUrl.substring(1) : creative.fileUrl);
         if (fs.existsSync(filePath)) {
           fs.unlink(filePath, (err) => {
             if (err) console.error(`Erro ao deletar arquivo físico ${filePath}:`, err);
+            else console.log(`Arquivo físico ${filePath} deletado com sucesso.`);
           });
+        } else {
+            console.warn(`Arquivo físico ${filePath} não encontrado para exclusão.`);
         }
       }
       res.status(200).json({ message: 'Criativo excluído com sucesso.' });
     } catch (error) { next(error); }
   });
+
   app.put('/api/creatives/:id', authenticateToken, creativesUpload.single('file'), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ error: 'ID do criativo inválido.' });
       const userId = req.user!.id;
+
       const existingCreative = await storage.getCreative(id, userId);
       if (!existingCreative) {
+        if (req.file) fs.unlinkSync(req.file.path); // Remove o novo arquivo se o criativo não existe
         return res.status(404).json({ error: 'Criativo não encontrado ou não pertence ao usuário.' });
       }
+      
+      const parsedCampaignId = req.body.campaignId === 'null' || req.body.campaignId === '' ? null : (req.body.campaignId ? parseInt(req.body.campaignId) : undefined);
+
       const { userId: _, ...updateDataRaw } = req.body;
-      const updateData = insertCreativeSchema.partial().parse(updateDataRaw);
-      let newFileUrl: string | null | undefined = undefined;
+      const updateData = insertCreativeSchema.partial().parse({
+        ...updateDataRaw,
+        campaignId: parsedCampaignId, // Usar o valor parseado
+      }); 
+
+      // Lógica para lidar com fileUrl
+      let newFileUrl: string | null | undefined = undefined; // undefined significa "não mudar"
       const appBaseUrl = process.env.APP_BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
-      if (req.file) {
+
+      if (req.file) { // Novo arquivo enviado
         newFileUrl = `${appBaseUrl}/${UPLOADS_ROOT_DIR}/creatives-assets/${req.file.filename}`;
-        if (existingCreative.fileUrl && existingCreative.fileUrl !== newFileUrl) {
-          try {
-            const oldFilePath = path.join(process.cwd(), existingCreative.fileUrl.startsWith('/') ? existingCreative.fileUrl.substring(1) : existingCreative.fileUrl);
-            if (fs.existsSync(oldFilePath)) {
-              fs.unlinkSync(oldFilePath);
-              console.log(`[CREATIVE_UPDATE] Old file deleted: ${oldFilePath}`);
-            }
-          } catch (unlinkErr) {
-            console.error(`[CREATIVE_UPDATE] Error deleting old file ${existingCreative.fileUrl}:`, unlinkErr);
-          }
+        // Se havia um arquivo antigo e um novo foi enviado, delete o antigo
+        if (existingCreative.fileUrl) {
+          const oldFilePath = path.join(process.cwd(), existingCreative.fileUrl.replace(appBaseUrl, '').substring(1));
+          if (fs.existsSync(oldFilePath)) fs.unlinkSync(oldFilePath);
         }
-      } else if (req.body.fileUrl === "null" && existingCreative.fileUrl) {
-          try {
-            const oldFilePath = path.join(process.cwd(), existingCreative.fileUrl.startsWith('/') ? existingCreative.fileUrl.substring(1) : existingCreative.fileUrl);
-            if (fs.existsSync(oldFilePath)) {
-              fs.unlinkSync(oldFilePath);
-              console.log(`[CREATIVE_UPDATE] Existing file removed: ${oldFilePath}`);
-            }
-          } catch (unlinkErr) {
-            console.error(`[CREATIVE_UPDATE] Error deleting existing file ${existingCreative.fileUrl}:`, unlinkErr);
-          }
-          newFileUrl = null;
-      } else {
-        newFileUrl = existingCreative.fileUrl;
+      } else if (req.body.fileUrl === "null" || req.body.fileUrl === null) { // Usuário explicitamente removeu o arquivo
+        newFileUrl = null;
+        if (existingCreative.fileUrl) {
+          const oldFilePath = path.join(process.cwd(), existingCreative.fileUrl.replace(appBaseUrl, '').substring(1));
+           if (fs.existsSync(oldFilePath)) fs.unlinkSync(oldFilePath);
+        }
       }
+      // Se newFileUrl permanecer undefined, não o inclua no updateData, mantendo o fileUrl existente.
+      // Se for null, ele será setado para null. Se for uma nova string, será atualizado.
       if (newFileUrl !== undefined) {
         updateData.fileUrl = newFileUrl;
       }
+
+
       const updatedCreative = await storage.updateCreative(id, updateData, userId);
       if (!updatedCreative) {
-        return res.status(404).json({ error: 'Criativo não encontrado ou não pertence ao usuário.' });
+        if (req.file) fs.unlinkSync(req.file.path); // Remove o novo arquivo se o update falhou por outra razão
+        return res.status(404).json({ error: 'Falha ao atualizar criativo.' }); // Pode ser 500 também
       }
       res.json(updatedCreative);
     } catch (error) {
-      if (req.file) {
+      if (req.file) { // Se houve erro e um novo arquivo foi upado, remova-o
         fs.unlink(req.file.path, (unlinkErr) => {
-          if (unlinkErr) console.error("Erro ao deletar novo arquivo de criativo após falha:", unlinkErr);
+          if (unlinkErr) console.error("Erro ao deletar novo arquivo de criativo após falha no PUT:", unlinkErr);
         });
       }
       next(error);
     }
   });
 
-  // ... Rotas existentes para WhatsApp, Copies, Alerts, Budgets, Landing Pages, Assets, MCP, Chat ...
 
   app.get('/api/whatsapp/messages', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
@@ -424,8 +449,16 @@ export async function registerRoutes(app: Express): Promise<HttpServer> {
 
   app.get('/api/copies', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
-      const campaignId = req.query.campaignId ? parseInt(req.query.campaignId as string) : undefined;
-      if (req.query.campaignId && isNaN(campaignId!)) return res.status(400).json({ error: 'ID da campanha inválido.' });
+      const campaignIdQuery = req.query.campaignId as string | undefined;
+      let campaignId: number | null | undefined = undefined;
+      if (campaignIdQuery !== undefined) {
+        if (campaignIdQuery.toLowerCase() === 'null' || campaignIdQuery === '') {
+          campaignId = null;
+        } else {
+          campaignId = parseInt(campaignIdQuery);
+          if (isNaN(campaignId)) return res.status(400).json({ error: 'ID da campanha inválido.' });
+        }
+      }
       res.json(await storage.getCopies(req.user!.id, campaignId));
     } catch (error) { next(error); }
   });
@@ -450,15 +483,35 @@ export async function registerRoutes(app: Express): Promise<HttpServer> {
       if (!product || !audience || !objective || !tone) {
         return res.status(400).json({ error: "Campos obrigatórios ausentes." });
       }
+
       if (!genAI) {
         return res.status(500).json({ error: "Serviço de IA não disponível." });
       }
+
       const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
-      const prompts = [ /* ... (prompts existentes) ... */ ];
+      
+      const prompts = [
+        { type: 'headline', platform: 'Facebook', prompt: `Crie um headline persuasivo para Facebook sobre "${product}" direcionado para "${audience}" com objetivo de "${objective}" em tom "${tone}". Máximo 60 caracteres. Seja direto e impactante.`},
+        { type: 'cta', platform: 'Google', prompt: `Crie um call-to-action (CTA) convincente para Google Ads sobre "${product}" direcionado para "${audience}" com objetivo de "${objective}" em tom "${tone}". Máximo 30 palavras.`},
+        { type: 'description', platform: 'Instagram', prompt: `Crie uma descrição persuasiva para Instagram sobre "${product}" direcionado para "${audience}" com objetivo de "${objective}" em tom "${tone}". Máximo 125 caracteres.`}
+      ];
+
       const generatedCopies = [];
-      for (const promptData of prompts) { try { const result = await model.generateContent(promptData.prompt); const content = result.response.text().trim(); generatedCopies.push({ type: promptData.type, content: content, platform: promptData.platform }); } catch (error) { console.error(`[GEMINI] Erro ao gerar ${promptData.type}:`, error); generatedCopies.push({ type: promptData.type, content: `${promptData.type === 'headline' ? '🚀' : promptData.type === 'cta' ? 'Clique aqui e descubra como' : 'Solução perfeita para'} ${audience} ${promptData.type === 'headline' ? 'com nossa solução inovadora para' : promptData.type === 'cta' ? 'estão revolucionando seus resultados com' : 'que buscam'} ${objective.toLowerCase()}${promptData.type === 'headline' ? '!' : promptData.type === 'cta' ? '!' : '. Com nosso'} ${promptData.type !== 'headline' ? product + (promptData.type === 'description' ? ', você alcança resultados extraordinários em tempo recorde.' : '!') : product + '!'}`, platform: promptData.platform }); } }
+      for (const promptData of prompts) {
+        try {
+          const result = await model.generateContent(promptData.prompt);
+          const content = result.response.text().trim();
+          generatedCopies.push({ type: promptData.type, content: content, platform: promptData.platform });
+        } catch (error) {
+          console.error(`[GEMINI] Erro ao gerar ${promptData.type}:`, error);
+          generatedCopies.push({ type: promptData.type, content: `Fallback: ${promptData.type} para ${product}`, platform: promptData.platform });
+        }
+      }
       res.json(generatedCopies);
-    } catch (error) { console.error('[COPIES] Erro na geração:', error); next(error); }
+    } catch (error) { 
+      console.error('[COPIES] Erro na geração:', error);
+      next(error); 
+    }
   });
 
   app.get('/api/alerts', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
@@ -479,8 +532,16 @@ export async function registerRoutes(app: Express): Promise<HttpServer> {
 
   app.get('/api/budgets', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
-      const campaignId = req.query.campaignId ? parseInt(req.query.campaignId as string) : undefined;
-      if (req.query.campaignId && isNaN(campaignId!)) return res.status(400).json({ error: 'ID da campanha inválido.' });
+      const campaignIdQuery = req.query.campaignId as string | undefined;
+      let campaignId: number | null | undefined = undefined;
+      if (campaignIdQuery !== undefined) {
+        if (campaignIdQuery.toLowerCase() === 'null' || campaignIdQuery === '') {
+          campaignId = null;
+        } else {
+          campaignId = parseInt(campaignIdQuery);
+          if (isNaN(campaignId)) return res.status(400).json({ error: 'ID da campanha inválido.' });
+        }
+      }
       res.json(await storage.getBudgets(req.user!.id, campaignId));
     } catch (error) { next(error); }
   });
@@ -491,8 +552,21 @@ export async function registerRoutes(app: Express): Promise<HttpServer> {
     } catch (error) { next(error); }
   });
 
+  // Landing Pages
   app.get('/api/landingpages', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try { res.json(await storage.getLandingPages(req.user!.id)); } catch (error) { next(error); }
+  });
+  app.get('/api/landingpages/slug/:slug', async (req: Request, res: Response, next: NextFunction) => { // Rota pública
+    try {
+        const { slug } = req.params;
+        const landingPage = await storage.getLandingPageBySlug(slug);
+        if (!landingPage || landingPage.status !== 'published') {
+            return res.status(404).json({ error: 'Landing Page não encontrada ou não publicada.' });
+        }
+        res.json(landingPage);
+    } catch (error) {
+        next(error);
+    }
   });
   app.post('/api/landingpages', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
@@ -510,7 +584,7 @@ export async function registerRoutes(app: Express): Promise<HttpServer> {
       const { studioProjectId } = req.params;
       const landingPage = await storage.getLandingPageByStudioProjectId(studioProjectId, req.user!.id);
       if (!landingPage) return res.status(404).json({ error: 'Projeto de Landing Page não encontrado.' });
-      res.json({ project: landingPage.grapesJsData || {} });
+      res.json({ project: landingPage.grapesJsData || {} }); // Retorna o objeto esperado pelo SDK
     }
     catch (error) { next(error); }
   });
@@ -519,13 +593,21 @@ export async function registerRoutes(app: Express): Promise<HttpServer> {
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ error: 'ID da Landing Page inválido.' });
       const { userId: _, slug, grapesJsData, ...otherData } = req.body;
-      const lpDataToValidate = { ...otherData, grapesJsData: grapesJsData || {} };
-      const lpData = insertLandingPageSchema.partial().parse(lpDataToValidate);
-      if (slug) {
-        const existingSlugPage = await storage.getLandingPageBySlug(slug);
+      const lpDataToValidate: Partial<Omit<LandingPage, "id" | "userId" | "createdAt" | "updatedAt">> = { 
+        ...otherData, 
+        grapesJsData: grapesJsData || undefined // Manter como undefined se não enviado
+      };
+      
+      if (slug) { // Apenas valida e atualiza o slug se ele for fornecido
+        const validatedSlug = insertLandingPageSchema.shape.slug.parse(slug);
+        const existingSlugPage = await storage.getLandingPageBySlug(validatedSlug);
         if (existingSlugPage && existingSlugPage.id !== id) return res.status(409).json({ error: 'Este slug já está em uso.' });
-        (lpData as any).slug = slug;
+        lpDataToValidate.slug = validatedSlug;
       }
+
+      // Zod parseia apenas os campos presentes em lpDataToValidate
+      const lpData = insertLandingPageSchema.partial().parse(lpDataToValidate); 
+
       const updatedLandingPage = await storage.updateLandingPage(id, lpData, req.user!.id);
       if (!updatedLandingPage) return res.status(404).json({ error: 'Landing Page não encontrada.' });
       res.json(updatedLandingPage);
@@ -540,144 +622,319 @@ export async function registerRoutes(app: Express): Promise<HttpServer> {
       res.status(200).json({ message: 'Landing Page excluída com sucesso.' });
     } catch (error) { next(error); }
   });
+
+  // Assets para Landing Pages (GrapesJS Studio)
   app.post('/api/assets/lp-upload', authenticateToken, lpAssetUpload.single('file'), (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       if (!req.file) {
-        console.log('[ASSET_UPLOAD_LP] Nenhum arquivo recebido.');
         return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
       }
       const appBaseUrl = process.env.APP_BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
       const publicUrl = `${appBaseUrl}/${UPLOADS_ROOT_DIR}/lp-assets/${req.file.filename}`;
-      console.log(`[ASSET_UPLOAD_LP] Arquivo: ${req.file.originalname}, Salvo como: ${req.file.filename}, Campo: ${req.file.fieldname}, URL Pública: ${publicUrl}`);
-      res.status(200).json([{ src: publicUrl }]);
+      // GrapesJS Studio espera um array de objetos com 'src'
+      res.status(200).json([{ src: publicUrl, name: req.file.filename, type: req.file.mimetype }]);
     } catch(error) {
-      console.error('[ASSET_UPLOAD_LP] Erro no handler:', error);
       next(error);
     }
   });
+
   app.post('/api/assets/lp-delete', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
-      const { assets } = req.body;
+      const { assets } = req.body; // assets é esperado como [{ src: 'url1' }, { src: 'url2' }]
       if (!Array.isArray(assets) || assets.length === 0) return res.status(400).json({ error: 'Nenhum asset para exclusão.' });
-      console.log('[ASSET_DELETE_LP] Solicitado para deletar:', assets);
-      assets.forEach(asset => { /* ... (lógica de exclusão de assets) ... */ });
+      
+      const appBaseUrl = process.env.APP_BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
+
+      assets.forEach(asset => {
+        if (asset && typeof asset.src === 'string') {
+          try {
+            let relativePath = asset.src;
+            if (asset.src.startsWith(appBaseUrl)) {
+                relativePath = asset.src.substring(appBaseUrl.length);
+            }
+            if (relativePath.startsWith(`/${UPLOADS_ROOT_DIR}/lp-assets/`)) {
+              const filename = path.basename(relativePath);
+              if (filename.includes('..')) {
+                  console.warn(`[ASSET_DELETE_LP] Tentativa de path traversal: ${asset.src}`);
+                  return; 
+              }
+              const filePath = path.join(LP_ASSETS_DIR, filename);
+              if (fs.existsSync(filePath)) {
+                fs.unlink(filePath, (err) => {
+                  if (err) console.error(`[ASSET_DELETE_LP] Erro ao deletar: ${filePath}`, err);
+                  else console.log(`[ASSET_DELETE_LP] Deletado: ${filePath}`);
+                });
+              } else { console.warn(`[ASSET_DELETE_LP] Não encontrado: ${filePath}`); }
+            } else { console.warn(`[ASSET_DELETE_LP] Path inválido ou não pertence a lp-assets: ${relativePath}`); }
+          } catch (e) { console.warn(`[ASSET_DELETE_LP] URL inválida ou erro ao parsear: ${asset.src}`, e); }
+        }
+      });
       res.status(200).json({ message: 'Solicitação de exclusão de assets processada.' });
-    } catch (error) {
-      next(error);
-    }
+    } catch (error) { next(error); }
   });
+
+  // Chat / MCP
   app.post('/api/mcp/upload-attachment', authenticateToken, mcpAttachmentUpload.single('attachment'), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
-      const userId = req.user!.id;
-      if (!req.file) {
-        console.log('[MCP_ATTACHMENT_UPLOAD] Nenhum arquivo recebido.');
-        return res.status(400).json({ error: 'Nenhum arquivo de anexo enviado.' });
-      }
+      if (!req.file) { return res.status(400).json({ error: 'Nenhum arquivo de anexo enviado.' }); }
       const appBaseUrl = process.env.APP_BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
       const attachmentUrl = `${appBaseUrl}/${UPLOADS_ROOT_DIR}/mcp-attachments/${req.file.filename}`;
-      console.log(`[MCP_ATTACHMENT_UPLOAD] Arquivo: ${req.file.originalname}, Salvo como: ${req.file.filename}, URL Pública: ${attachmentUrl}`);
       res.status(200).json({ url: attachmentUrl });
+    } catch (error) { next(error); }
+  });
+
+  app.post('/api/mcp/converse', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const { message, sessionId, attachmentUrl } = req.body;
+      const userId = req.user!.id;
+
+      if (!message && !attachmentUrl) {
+        return res.status(400).json({ error: 'Mensagem ou anexo é obrigatório.' });
+      }
+
+      let currentSession: ChatSession | undefined;
+      if (sessionId) {
+        currentSession = await storage.getChatSession(sessionId, userId);
+        if (!currentSession) { // Sessão não encontrada ou não pertence ao usuário
+          console.warn(`[MCP_AGENT] Tentativa de usar sessão ${sessionId} inválida para usuário ${userId}. Criando nova.`);
+          currentSession = undefined; // Força criação de nova sessão
+        }
+      }
+      
+      if (!currentSession) {
+        const newSessionTitle = message ? `Conversa: ${message.substring(0,30)}...` : (attachmentUrl ? 'Conversa com Anexo' : 'Nova Conversa');
+        currentSession = await storage.createChatSession(userId, newSessionTitle);
+      }
+
+      await storage.addChatMessage({
+        sessionId: currentSession.id,
+        sender: 'user',
+        text: message || (attachmentUrl ? 'Anexo enviado.' : ''),
+        attachmentUrl: attachmentUrl || undefined, // Garante que seja undefined se não houver
+      });
+
+      let agentReplyText: string;
+      let actionResponse: { action?: string; payload?: string } = {};
+
+      if (genAI && message) { // Prioriza IA se houver mensagem de texto
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+        const messagesFromDb = await storage.getChatMessages(currentSession.id, userId);
+        const historyForGemini = messagesFromDb.map(msg => ({
+          role: msg.sender === 'user' ? 'user' : 'model',
+          parts: [{ text: msg.text || (msg.attachmentUrl ? `[usuário enviou anexo: ${msg.attachmentUrl}]` : '') }]
+        }));
+
+        // Tenta detectar intenção de navegação
+        const intentPrompt = `O usuário disse: "${message}". Ele está pedindo para navegar para alguma seção da plataforma (dashboard, campaigns, creatives, budget, landingpages, whatsapp, copy, funnel, metrics, alerts, export, integrations)? Se sim, responda APENAS com a rota exata (ex: /dashboard). Se não, responda "NÃO".`;
+        try {
+            const intentResult = await model.generateContent(intentPrompt);
+            const intentResponse = intentResult.response.text().trim();
+            const validRoutes = ["/dashboard", "/campaigns", "/creatives", "/budget", "/landingpages", "/whatsapp", "/copy", "/funnel", "/metrics", "/alerts", "/export", "/integrations"];
+            if (validRoutes.includes(intentResponse)) {
+                actionResponse = { action: "navigate", payload: intentResponse };
+                agentReplyText = `Claro! Navegando para ${intentResponse.replace('/', '') || 'o Dashboard'}...`;
+            } else {
+                 // Se não for navegação, gera resposta normal
+                const chat = model.startChat({ history: historyForGemini, generationConfig: { maxOutputTokens: 300, temperature: 0.7 }, safetySettings: [/*...*/] });
+                const result = await chat.sendMessage(message);
+                agentReplyText = result.response.text();
+            }
+        } catch (geminiError) {
+            console.error("[MCP_AGENT] Erro na API Gemini (intent ou chat):", geminiError);
+            agentReplyText = "Desculpe, estou com dificuldades para processar sua solicitação no momento. Tente mais tarde.";
+        }
+
+      } else if (attachmentUrl) {
+        agentReplyText = `Recebi seu anexo. No momento, não consigo processá-lo, mas ele foi registrado. Como posso ajudar com mais alguma coisa?`;
+      } else { // Sem mensagem de texto e sem anexo (não deveria acontecer devido à validação inicial) ou genAI indisponível
+        agentReplyText = `O serviço de IA não está configurado ou não houve mensagem.`;
+      }
+
+      await storage.addChatMessage({
+        sessionId: currentSession.id,
+        sender: 'agent',
+        text: agentReplyText,
+      });
+
+      return res.json({ reply: agentReplyText, sessionId: currentSession.id, ...actionResponse });
+
+    } catch (error) {
+      console.error('[MCP_AGENT] Erro detalhado no endpoint /api/mcp/converse:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
+      next(error);
+    }
+  });
+  
+  app.post('/api/chat/sessions', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const userId = req.user!.id;
+      // O Zod schema 'insertChatSessionSchema' espera 'userId', mas ele vem do token.
+      // Usamos .partial() para tornar todos os campos opcionais na validação do req.body,
+      // e então pegamos apenas o 'title', se existir.
+      const parsedBody = insertChatSessionSchema.partial().parse(req.body);
+      const title = parsedBody.title; // title pode ser undefined aqui
+  
+      const newSession = await storage.createChatSession(userId, title); // storage.createChatSession tem default para title
+      res.status(201).json(newSession);
     } catch (error) {
       next(error);
     }
   });
-  app.post('/api/mcp/converse', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => { /* ... (lógica do MCP converse) ... */ });
-  app.post('/api/chat/sessions', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => { /* ... (lógica das sessões de chat) ... */ });
-  app.get('/api/chat/sessions', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => { /* ... */ });
-  app.get('/api/chat/sessions/:sessionId/messages', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => { /* ... */ });
-  app.put('/api/chat/sessions/:sessionId/title', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => { /* ... */ });
-  app.delete('/api/chat/sessions/:sessionId', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => { /* ... */ });
 
-
-  // --- Novas Rotas para Funis ---
-  app.get('/api/funnels', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  app.get('/api/chat/sessions', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
-      const funnels = await storage.getFunnels(req.user!.id);
-      res.json(funnels);
-    } catch (error) { next(error); }
+      const userId = req.user!.id;
+      const sessions = await storage.getChatSessions(userId);
+      res.json(sessions);
+    }
+    catch (error) {
+      next(error);
+    }
   });
 
-  app.post('/api/funnels', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  app.get('/api/chat/sessions/:sessionId/messages', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
-      const funnelData = insertFunnelSchema.parse({ ...req.body, userId: req.user!.id });
-      const newFunnel = await storage.createFunnel(funnelData);
-      res.status(201).json(newFunnel);
-    } catch (error) { next(error); }
+      const sessionId = parseInt(req.params.sessionId);
+      if (isNaN(sessionId)) return res.status(400).json({ error: 'ID da sessão inválido.' });
+      const userId = req.user!.id;
+      const messages = await storage.getChatMessages(sessionId, userId); // userId é usado para checar propriedade da sessão
+      res.json(messages);
+    } catch (error) {
+      next(error);
+    }
   });
 
-  app.get('/api/funnels/:funnelId', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  app.put('/api/chat/sessions/:sessionId/title', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
-      const funnelId = parseInt(req.params.funnelId);
-      if (isNaN(funnelId)) return res.status(400).json({ error: 'ID do funil inválido.' });
-      const funnel = await storage.getFunnelWithStages(funnelId, req.user!.id);
-      if (!funnel) return res.status(404).json({ error: 'Funil não encontrado.' });
-      res.json(funnel);
-    } catch (error) { next(error); }
+      const sessionId = parseInt(req.params.sessionId);
+      if (isNaN(sessionId)) return res.status(400).json({ error: 'ID da sessão inválido.' });
+      const userId = req.user!.id;
+      const { title } = req.body; // Espera { "title": "Novo Título" }
+      if (!title || typeof title !== 'string' || title.trim() === '') {
+        return res.status(400).json({ error: 'Novo título inválido.' });
+      }
+      const updatedSession = await storage.updateChatSessionTitle(sessionId, userId, title.trim());
+      if (!updatedSession) return res.status(404).json({ error: 'Sessão não encontrada ou não pertence ao usuário.' });
+      res.json(updatedSession);
+    } catch (error) {
+      next(error);
+    }
   });
 
-  app.put('/api/funnels/:funnelId', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  app.delete('/api/chat/sessions/:sessionId', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
-      const funnelId = parseInt(req.params.funnelId);
-      if (isNaN(funnelId)) return res.status(400).json({ error: 'ID do funil inválido.' });
-      const funnelData = insertFunnelSchema.partial().parse(req.body); // O Zod vai pegar userId se enviado, mas storage.updateFunnel não usa
-      const updatedFunnel = await storage.updateFunnel(funnelId, funnelData, req.user!.id);
-      if (!updatedFunnel) return res.status(404).json({ error: 'Funil não encontrado ou não pertence ao usuário.' });
-      res.json(updatedFunnel);
-    } catch (error) { next(error); }
+      const sessionId = parseInt(req.params.sessionId);
+      if (isNaN(sessionId)) return res.status(400).json({ error: 'ID da sessão inválido.' });
+      const userId = req.user!.id;
+      const success = await storage.deleteChatSession(sessionId, userId);
+      if (!success) return res.status(404).json({ error: 'Sessão não encontrada ou não pode ser excluída.' });
+      res.status(200).json({ message: 'Sessão de chat excluída com sucesso.' });
+    } catch (error) {
+      next(error);
+    }
   });
 
-  app.delete('/api/funnels/:funnelId', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-    try {
-      const funnelId = parseInt(req.params.funnelId);
-      if (isNaN(funnelId)) return res.status(400).json({ error: 'ID do funil inválido.' });
-      const success = await storage.deleteFunnel(funnelId, req.user!.id);
-      if (!success) return res.status(404).json({ error: 'Funil não encontrado ou não pode ser excluído.' });
-      res.status(200).json({ message: 'Funil excluído com sucesso.' });
-    } catch (error) { next(error); }
-  });
+  // Rotas de Funis
+    app.get('/api/funnels', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+        try {
+            const campaignIdQuery = req.query.campaignId as string | undefined;
+            let campaignId: number | null | undefined = undefined;
+            if (campaignIdQuery !== undefined) {
+                if (campaignIdQuery.toLowerCase() === 'null' || campaignIdQuery === '') {
+                    campaignId = null;
+                } else {
+                    campaignId = parseInt(campaignIdQuery);
+                    if (isNaN(campaignId)) return res.status(400).json({ error: 'ID da campanha inválido.' });
+                }
+            }
+            res.json(await storage.getFunnels(req.user!.id, campaignId));
+        } catch (error) { next(error); }
+    });
 
-  // --- Novas Rotas para Etapas do Funil ---
-  app.post('/api/funnels/:funnelId/stages', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-    try {
-      const funnelId = parseInt(req.params.funnelId);
-      if (isNaN(funnelId)) return res.status(400).json({ error: 'ID do funil inválido.' });
-      
-      const stageData = insertFunnelStageSchema.parse({ ...req.body, funnelId });
-      // A validação de pertencimento do funil ao usuário é feita em storage.createFunnelStage
-      const newStage = await storage.createFunnelStage(stageData, req.user!.id);
-      if (!newStage) return res.status(400).json({ error: 'Não foi possível criar a etapa ou funil não pertence ao usuário.'})
-      res.status(201).json(newStage);
-    } catch (error) { next(error); }
-  });
+    app.post('/api/funnels', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+        try {
+            const funnelData = insertFunnelSchema.parse({ ...req.body, userId: req.user!.id });
+            res.status(201).json(await storage.createFunnel(funnelData));
+        } catch (error) { next(error); }
+    });
 
-  app.put('/api/funnels/:funnelId/stages/:stageId', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-    try {
-      const funnelId = parseInt(req.params.funnelId);
-      const stageId = parseInt(req.params.stageId);
-      if (isNaN(funnelId) || isNaN(stageId)) return res.status(400).json({ error: 'ID do funil ou da etapa inválido.' });
-      
-      const stageData = insertFunnelStageSchema.partial().parse(req.body);
-      // A validação de pertencimento do funil ao usuário é feita em storage.updateFunnelStage
-      const updatedStage = await storage.updateFunnelStage(stageId, stageData, req.user!.id);
-      if (!updatedStage) return res.status(404).json({ error: 'Etapa do funil não encontrada ou não pertence ao usuário.' });
-      res.json(updatedStage);
-    } catch (error) { next(error); }
-  });
+    app.get('/api/funnels/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+        try {
+            const id = parseInt(req.params.id);
+            if (isNaN(id)) return res.status(400).json({ error: 'ID do funil inválido.' });
+            const funnel = await storage.getFunnel(id, req.user!.id);
+            if (!funnel) return res.status(404).json({ error: 'Funil não encontrado.' });
+            res.json(funnel);
+        } catch (error) { next(error); }
+    });
+    
+    app.put('/api/funnels/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+        try {
+            const id = parseInt(req.params.id);
+            if (isNaN(id)) return res.status(400).json({ error: 'ID do funil inválido.' });
+            const { userId, ...updateData } = req.body;
+            const funnelData = insertFunnelSchema.partial().parse(updateData);
+            const funnel = await storage.updateFunnel(id, funnelData, req.user!.id);
+            if (!funnel) return res.status(404).json({ error: 'Funil não encontrado ou não pertence ao usuário.' });
+            res.json(funnel);
+        } catch (error) { next(error); }
+    });
 
-  app.delete('/api/funnels/:funnelId/stages/:stageId', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-    try {
-      const funnelId = parseInt(req.params.funnelId); // funnelId pode não ser estritamente necessário aqui se stageId for globalmente único e a permissão for checada de outra forma, mas é bom para consistência da rota.
-      const stageId = parseInt(req.params.stageId);
-      if (isNaN(funnelId) || isNaN(stageId)) return res.status(400).json({ error: 'ID do funil ou da etapa inválido.' });
-      
-      // A validação de pertencimento do funil ao usuário é feita em storage.deleteFunnelStage
-      const success = await storage.deleteFunnelStage(stageId, req.user!.id);
-      if (!success) return res.status(404).json({ error: 'Etapa do funil não encontrada ou não pode ser excluída.' });
-      res.status(200).json({ message: 'Etapa do funil excluída com sucesso.' });
-    } catch (error) { next(error); }
-  });
-  // --- Fim das Novas Rotas para Funis ---
+    app.delete('/api/funnels/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+        try {
+            const id = parseInt(req.params.id);
+            if (isNaN(id)) return res.status(400).json({ error: 'ID do funil inválido.' });
+            const success = await storage.deleteFunnel(id, req.user!.id);
+            if (!success) return res.status(404).json({ error: 'Funil não encontrado ou não pode ser excluído.' });
+            res.status(200).json({ message: 'Funil excluído com sucesso.' });
+        } catch (error) { next(error); }
+    });
 
+    // Rotas de Etapas de Funis
+    app.get('/api/funnels/:funnelId/stages', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+        try {
+            const funnelId = parseInt(req.params.funnelId);
+            if (isNaN(funnelId)) return res.status(400).json({ error: 'ID do funil inválido.' });
+            res.json(await storage.getFunnelStages(funnelId, req.user!.id));
+        } catch (error) { next(error); }
+    });
+
+    app.post('/api/funnels/:funnelId/stages', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+        try {
+            const funnelId = parseInt(req.params.funnelId);
+            if (isNaN(funnelId)) return res.status(400).json({ error: 'ID do funil inválido.' });
+            // Verificar se o funil pai pertence ao usuário antes de criar a etapa
+            const funnel = await storage.getFunnel(funnelId, req.user!.id);
+            if (!funnel) return res.status(404).json({ error: 'Funil pai não encontrado ou não pertence ao usuário.' });
+
+            const stageData = insertFunnelStageSchema.parse({ ...req.body, funnelId });
+            res.status(201).json(await storage.createFunnelStage(stageData));
+        } catch (error) { next(error); }
+    });
+    
+    app.put('/api/stages/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+        try {
+            const id = parseInt(req.params.id);
+            if (isNaN(id)) return res.status(400).json({ error: 'ID da etapa inválido.' });
+            const { funnelId, ...updateData } = req.body; // funnelId não deve ser atualizável por esta rota
+            const stageData = insertFunnelStageSchema.partial().parse(updateData);
+            const stage = await storage.updateFunnelStage(id, stageData, req.user!.id);
+            if (!stage) return res.status(404).json({ error: 'Etapa do funil não encontrada ou não pertence ao usuário.' });
+            res.json(stage);
+        } catch (error) { next(error); }
+    });
+
+    app.delete('/api/stages/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+        try {
+            const id = parseInt(req.params.id);
+            if (isNaN(id)) return res.status(400).json({ error: 'ID da etapa inválido.' });
+            const success = await storage.deleteFunnelStage(id, req.user!.id);
+            if (!success) return res.status(404).json({ error: 'Etapa do funil não encontrada ou não pode ser excluída.' });
+            res.status(200).json({ message: 'Etapa do funil excluída com sucesso.' });
+        } catch (error) { next(error); }
+    });
+
+
+  // Servir arquivos estáticos da pasta uploads (geral)
   app.use(`/${UPLOADS_ROOT_DIR}`, express.static(path.join(process.cwd(), UPLOADS_ROOT_DIR)));
 
   app.use(handleZodError);
