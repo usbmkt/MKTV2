@@ -20,7 +20,7 @@ import {
   MessageCircle,
   Download,
   LogOut,
-  Rocket, // <--- ROCKET RESTAURADO AQUI
+  Rocket, 
   Globe,
   ChevronLeft,
   ChevronRight,
@@ -44,7 +44,7 @@ const menuItems = [
   { path: '/metrics', label: 'Métricas', icon: TrendingUp },
   { path: '/alerts', label: 'Alertas', icon: Bell },
   { path: '/whatsapp', label: 'WhatsApp', icon: MessageCircle },
-  { path: '/integrations', label: 'Integrações', icon: Rocket }, // Rocket é usado aqui
+  { path: '/integrations', label: 'Integrações', icon: Rocket },
   { path: '/export', label: 'Exportar', icon: Download },
 ];
 
@@ -73,27 +73,16 @@ export default function Sidebar() {
   
   const getUserInitials = (username: string | undefined) => {
     if (!username) return 'U';
-    return username
-      .split(' ')
-      .map(name => name[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
+    return username.split(' ').map(name => name[0]).join('').toUpperCase().slice(0, 2);
   };
 
   return (
     <aside 
-      className={cn(
-        "neu-sidebar flex flex-col h-full",
-        isCollapsed ? "w-[72px]" : "w-60"
-      )}
+      className={cn("neu-sidebar flex flex-col h-full", isCollapsed ? "w-[72px]" : "w-60")}
     >
-      <div className={cn(
-          "p-4 flex items-center border-b border-sidebar-border shrink-0", 
-          isCollapsed ? "justify-center h-[72px]" : "justify-start h-[72px]"
-        )}
-      >
+      <div className={cn("p-4 flex items-center border-b border-sidebar-border shrink-0", isCollapsed ? "justify-center h-[72px]" : "justify-start h-[72px]")}>
         <Link href="/dashboard" className={cn("flex items-center gap-2 group", isCollapsed ? "" : "p-1")}>
+          <span className="flex items-center gap-2"> {/* MODIFICAÇÃO: Wrapper span */}
             <img 
               src="/logo-usbmkt.svg" 
               alt="USB MKT PRO Logo" 
@@ -104,6 +93,7 @@ export default function Sidebar() {
                 USB MKT
               </h1>
             )}
+          </span>
         </Link>
       </div>
 
@@ -113,24 +103,10 @@ export default function Sidebar() {
           const isActive = location === item.path || (location === '/' && item.path === '/dashboard');
           return (
             <Link key={item.path} href={item.path} title={isCollapsed ? item.label : undefined}>
-              <div 
-                className={cn(
-                  "sidebar-link group",
-                  isActive && "active",
-                  isCollapsed ? "justify-center aspect-square p-0" : "px-3 py-2.5 space-x-2.5"
-                )}
-              >
-                <Icon className={cn(
-                    "sidebar-link-icon w-[18px] h-[18px] shrink-0",
-                     isActive ? "text-sidebar-accent-foreground icon-neon-glow" : "text-sidebar-foreground/70 group-hover:text-sidebar-accent-foreground group-hover:icon-neon-glow"
-                    )} 
-                />
-                {!isCollapsed && (
-                  <span className={cn("sidebar-link-text text-xs font-medium truncate", isActive && "text-neon-glow")}>{item.label}</span>
-                )}
-                {!isCollapsed && item.path === '/alerts' && user && alertCount > 0 && (
-                  <span className="alert-badge">{alertCount > 9 ? '9+' : alertCount}</span>
-                )}
+              <div className={cn("sidebar-link group", isActive && "active", isCollapsed ? "justify-center aspect-square p-0" : "px-3 py-2.5 space-x-2.5")}>
+                <Icon className={cn("sidebar-link-icon w-[18px] h-[18px] shrink-0", isActive ? "text-sidebar-accent-foreground icon-neon-glow" : "text-sidebar-foreground/70 group-hover:text-sidebar-accent-foreground group-hover:icon-neon-glow")} />
+                {!isCollapsed && (<span className={cn("sidebar-link-text text-xs font-medium truncate", isActive && "text-neon-glow")}>{item.label}</span>)}
+                {!isCollapsed && item.path === '/alerts' && user && alertCount > 0 && (<span className="alert-badge">{alertCount > 9 ? '9+' : alertCount}</span>)}
               </div>
             </Link>
           );
