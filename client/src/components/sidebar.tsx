@@ -91,23 +91,20 @@ export default function Sidebar() {
     >
       <div className={cn(
           "p-3 flex items-center border-b border-sidebar-border shrink-0", 
-          isCollapsed ? "justify-center h-[72px]" : "justify-start h-[72px]"
+          isCollapsed ? "justify-center h-[72px]" : "justify-start h-[72px]" // Altura mantida
         )}
       >
-        <Link href="/dashboard" className={cn("flex items-center gap-2 group outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar-background rounded-md", isCollapsed ? "p-1" : "neu-card p-2")}>
+        <Link href="/dashboard" className={cn("flex items-center gap-2 group outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar-background rounded-md", isCollapsed ? "p-1" : "p-2")}> {/* Ajuste no padding quando não colapsado se necessário */}
             <img 
               src={LogoPng} 
               alt="USB MKT Logo" 
               className={cn(
                 "transition-all duration-300 ease-in-out",
-                isCollapsed ? "w-8 h-8" : "w-7 h-7" 
-              )} 
+                isCollapsed ? "w-9 h-9" : "w-8 h-8" // Ajuste de tamanho para sidebar
+              )}
+              style={{ filter: 'drop-shadow(0 0 6px hsl(var(--primary)/0.6)) drop-shadow(0 0 12px hsl(var(--primary)/0.4))' }}
             />
-            {!isCollapsed && (
-              <h1 className="text-sm font-bold text-foreground gradient-primary bg-clip-text text-transparent group-hover:text-neon-glow">
-                USB MKT PRO
-              </h1>
-            )}
+            {/* O texto "USB MKT PRO" foi removido conforme solicitado */}
         </Link>
       </div>
 
