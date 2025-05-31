@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { 
   Send, X, RotateCcw, MoreVertical, Plus, History, Trash, Edit, Mic, 
-  StopCircle, Paperclip, Loader2 // ADICIONADO Loader2 AQUI
+  StopCircle, Paperclip, Loader2, Trash2 // <--- ADICIONADO Trash2 AQUI, mantido Trash caso seja usado em outro lugar
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -287,7 +287,7 @@ export const ChatPanel: React.FC = () => {
                 <RotateCcw className="mr-2 h-4 w-4" /> Reiniciar Conversa Atual
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => { if(currentSessionId) handleDeleteSession(currentSessionId); }} disabled={currentSessionId === null} className="text-destructive focus:text-destructive">
-                <Trash className="mr-2 h-4 w-4" /> Excluir Conversa Atual
+                <Trash2 className="mr-2 h-4 w-4" /> {/* USANDO Trash2 AQUI */}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -324,7 +324,7 @@ export const ChatPanel: React.FC = () => {
           {isLoading && (
             <div className="flex items-center justify-start p-3">
               <div className="bg-muted text-muted-foreground rounded-lg p-3 inline-flex items-center space-x-2 rounded-bl-none">
-                <Loader2 className="h-4 w-4 animate-spin" /> {/* USANDO Loader2 */}
+                <Loader2 className="h-4 w-4 animate-spin" /> 
                 <span>Digitando...</span>
               </div>
             </div>
@@ -391,7 +391,7 @@ export const ChatPanel: React.FC = () => {
                         </p>
                     </div>
                     <Button variant="ghost" size="icon" className="ml-auto flex-shrink-0 w-7 h-7" onClick={(e) => { e.stopPropagation(); handleDeleteSession(session.id); }} title="Excluir Conversa">
-                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                        <Trash2 className="h-3.5 w-3.5 text-destructive" /> {/* USANDO Trash2 AQUI */}
                     </Button>
                     </div>
                 ))
@@ -423,7 +423,7 @@ export const ChatPanel: React.FC = () => {
               name="newTitle"
               value={newTitle}
               onChange={(e) => setNewTitle(e.target.value)}
-              className="col-span-3"
+              className="col-span-3" // Mantido, embora não haja grid aqui, não prejudica.
             />
           </div>
           <DialogFooter>
