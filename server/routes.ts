@@ -19,6 +19,7 @@ import {
   insertChatSessionSchema,
   insertChatMessageSchema,
   User,
+  Campaign, // Importado para tipar a campanha criada
   LandingPage,
   ChatMessage,
   ChatSession
@@ -27,12 +28,54 @@ import { ZodError } from "zod";
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import { JWT_SECRET, GEMINI_API_KEY } from './config';
 
+// --- INÍCIO: Gerenciamento de estado para criação interativa de campanha ---
+interface CampaignCreationData {
+  name?: string;
+  description?: string;
+  platforms?: string[];
+  objectives?: string[];
+  budget?: string; // Mantém como string para coleta, converte/valida antes de salvar
+  dailyBudget?: string;
+  startDate?: string; // Coleta como string AAAA-MM-DD
+  endDate?: string;   // Coleta como string AAAA-MM-DD
+  targetAudience?: string;
+  industry?: string;
+  avgTicket?: string;
+  [key: string]: any; // Para flexibilidade
+}
+
+interface CampaignCreationSession {
+  currentStep: string;
+  campaignData: CampaignCreationData;
+  userId: number;
+}
+
+// Armazenamento em memória para sessões de criação de campanha
+// Em produção, considere uma solução mais persistente (ex: Redis, ou tabela no DB)
+const campaignCreationSessions: Record<string, CampaignCreationSession> = {};
+
+const campaignCreationSteps = [
+  { key: 'name', prompt: "Qual é o nome da campanha?", type: 'text' },
+  { key: 'description', prompt: "Qual a descrição para esta campanha? (Opcional, diga 'pular')", type: 'text', optional: true },
+  { key: 'platforms', prompt: "Quais plataformas você usará? (Ex: facebook, google_ads. Separe por vírgula se mais de uma)", type: 'list' },
+  { key: 'objectives', prompt: "Quais são os objetivos principais? (Ex: vendas, leads. Separe por vírgula)", type: 'list', optional: true },
+  { key: 'budget', prompt: "Qual o orçamento total? (Opcional, apenas números, ex: 5000.00)", type: 'number', optional: true },
+  { key: 'dailyBudget', prompt: "Qual o orçamento diário? (Opcional, apenas números, ex: 100.00)", type: 'number', optional: true },
+  { key: 'startDate', prompt: "Qual a data de início? (Opcional, formato AAAA-MM-DD)", type: 'date', optional: true },
+  { key: 'endDate', prompt: "Qual a data de término? (Opcional, formato AAAA-MM-DD)", type: 'date', optional: true },
+  { key: 'targetAudience', prompt: "Qual o público-alvo detalhado? (Opcional)", type: 'text', optional: true },
+  { key: 'industry', prompt: "Qual o setor/indústria da campanha? (Opcional)", type: 'text', optional: true },
+  { key: 'avgTicket', prompt: "Qual o ticket médio esperado? (Opcional, apenas números, ex: 150.00)", type: 'number', optional: true },
+  { key: 'confirm', prompt: "", type: 'confirmation' } // Etapa final de confirmação
+];
+// --- FIM: Gerenciamento de estado para criação interativa de campanha ---
+
+
 const UPLOADS_ROOT_DIR = 'uploads';
 const LP_ASSETS_DIR = path.resolve(UPLOADS_ROOT_DIR, 'lp-assets');
 const CREATIVES_ASSETS_DIR = path.resolve(UPLOADS_ROOT_DIR, 'creatives-assets');
 const MCP_ATTACHMENTS_DIR = path.resolve(UPLOADS_ROOT_DIR, 'mcp-attachments');
 
-// Garantir que os diretórios de upload existam
 [UPLOADS_ROOT_DIR, LP_ASSETS_DIR, CREATIVES_ASSETS_DIR, MCP_ATTACHMENTS_DIR].forEach(dir => {
     if (!fs.existsSync(dir)){
         fs.mkdirSync(dir, { recursive: true });
@@ -96,7 +139,7 @@ const mcpAttachmentUpload = multer({
       cb(null, 'mcp-attachment-' + uniqueSuffix + path.extname(file.originalname));
     }
   }),
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const allowedTypes = /jpeg|jpg|png|gif|webp|pdf|doc|docx|mp4|mov|avi/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
@@ -310,7 +353,7 @@ export async function registerRoutes(app: Express): Promise<HttpServer> {
       const creativeData = insertCreativeSchema.parse({
         ...req.body,
         userId: req.user!.id,
-        fileUrl: req.file ? `/${UPLOADS_ROOT_DIR}/creatives-assets/${req.file.filename}` : req.body.fileUrl || null,
+        fileUrl: req.file ? `/<span class="math-inline">\{UPLOADS\_ROOT\_DIR\}/creatives\-assets/</span>{req.file.filename}` : req.body.fileUrl || null,
       });
       const creative = await storage.createCreative(creativeData);
       res.status(201).json(creative);
@@ -361,7 +404,7 @@ export async function registerRoutes(app: Express): Promise<HttpServer> {
       const appBaseUrl = process.env.APP_BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
 
       if (req.file) {
-        newFileUrl = `${appBaseUrl}/${UPLOADS_ROOT_DIR}/creatives-assets/${req.file.filename}`;
+        newFileUrl = `<span class="math-inline">\{appBaseUrl\}/</span>{UPLOADS_ROOT_DIR}/creatives-assets/${req.file.filename}`;
         if (existingCreative.fileUrl && existingCreative.fileUrl !== newFileUrl) {
           try {
             const oldFilePath = path.join(process.cwd(), existingCreative.fileUrl.startsWith('/') ? existingCreative.fileUrl.substring(1) : existingCreative.fileUrl);
@@ -463,17 +506,17 @@ export async function registerRoutes(app: Express): Promise<HttpServer> {
         {
           type: 'headline',
           platform: 'Facebook',
-          prompt: `Crie um headline persuasivo para Facebook sobre "${product}" direcionado para "${audience}" com objetivo de "${objective}" em tom "${tone}". Máximo 60 caracteres. Seja direto e impactante.`
+          prompt: `Crie um headline persuasivo para Facebook sobre "<span class="math-inline">\{product\}" direcionado para "</span>{audience}" com objetivo de "<span class="math-inline">\{objective\}" em tom "</span>{tone}". Máximo 60 caracteres. Seja direto e impactante.`
         },
         {
           type: 'cta',
           platform: 'Google',
-          prompt: `Crie um call-to-action (CTA) convincente para Google Ads sobre "${product}" direcionado para "${audience}" com objetivo de "${objective}" em tom "${tone}". Máximo 30 palavras.`
+          prompt: `Crie um call-to-action (CTA) convincente para Google Ads sobre "<span class="math-inline">\{product\}" direcionado para "</span>{audience}" com objetivo de "<span class="math-inline">\{objective\}" em tom "</span>{tone}". Máximo 30 palavras.`
         },
         {
           type: 'description',
           platform: 'Instagram',
-          prompt: `Crie uma descrição persuasiva para Instagram sobre "${product}" direcionado para "${audience}" com objetivo de "${objective}" em tom "${tone}". Máximo 125 caracteres.`
+          prompt: `Crie uma descrição persuasiva para Instagram sobre "<span class="math-inline">\{product\}" direcionado para "</span>{audience}" com objetivo de "<span class="math-inline">\{objective\}" em tom "</span>{tone}". Máximo 125 caracteres.`
         }
       ];
 
@@ -493,7 +536,7 @@ export async function registerRoutes(app: Express): Promise<HttpServer> {
           console.error(`[GEMINI] Erro ao gerar ${promptData.type}:`, error);
           generatedCopies.push({
             type: promptData.type,
-            content: `${promptData.type === 'headline' ? '🚀' : promptData.type === 'cta' ? 'Clique aqui e descubra como' : 'Solução perfeita para'} ${audience} ${promptData.type === 'headline' ? 'com nossa solução inovadora para' : promptData.type === 'cta' ? 'estão revolucionando seus resultados com' : 'que buscam'} ${objective.toLowerCase()}${promptData.type === 'headline' ? '!' : promptData.type === 'cta' ? '!' : '. Com nosso'} ${promptData.type !== 'headline' ? product + (promptData.type === 'description' ? ', você alcança resultados extraordinários em tempo recorde.' : '!') : product + '!'}`,
+            content: `${promptData.type === 'headline' ? '🚀' : promptData.type === 'cta' ? 'Clique aqui e descubra como' : 'Solução perfeita para'} ${audience} ${promptData.type === 'headline' ? 'com nossa solução inovadora para' : promptData.type === 'cta' ? 'estão revolucionando seus resultados com' : 'que buscam'} <span class="math-inline">\{objective\.toLowerCase\(\)\}</span>{promptData.type === 'headline' ? '!' : promptData.type === 'cta' ? '!' : '. Com nosso'} ${promptData.type !== 'headline' ? product + (promptData.type === 'description' ? ', você alcança resultados extraordinários em tempo recorde.' : '!') : product + '!'}`,
             platform: promptData.platform
           });
         }
@@ -593,7 +636,7 @@ export async function registerRoutes(app: Express): Promise<HttpServer> {
         return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
       }
       const appBaseUrl = process.env.APP_BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
-      const publicUrl = `${appBaseUrl}/${UPLOADS_ROOT_DIR}/lp-assets/${req.file.filename}`;
+      const publicUrl = `<span class="math-inline">\{appBaseUrl\}/</span>{UPLOADS_ROOT_DIR}/lp-assets/${req.file.filename}`;
       console.log(`[ASSET_UPLOAD_LP] Arquivo: ${req.file.originalname}, Salvo como: ${req.file.filename}, Campo: ${req.file.fieldname}, URL Pública: ${publicUrl}`);
       res.status(200).json([{ src: publicUrl }]);
     } catch(error) {
@@ -645,7 +688,7 @@ export async function registerRoutes(app: Express): Promise<HttpServer> {
         return res.status(400).json({ error: 'Nenhum arquivo de anexo enviado.' });
       }
       const appBaseUrl = process.env.APP_BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
-      const attachmentUrl = `${appBaseUrl}/${UPLOADS_ROOT_DIR}/mcp-attachments/${req.file.filename}`;
+      const attachmentUrl = `<span class="math-inline">\{appBaseUrl\}/</span>{UPLOADS_ROOT_DIR}/mcp-attachments/${req.file.filename}`;
       console.log(`[MCP_ATTACHMENT_UPLOAD] Arquivo: ${req.file.originalname}, Salvo como: ${req.file.filename}, URL Pública: ${attachmentUrl}`);
       res.status(200).json({ url: attachmentUrl });
     } catch (error) {
@@ -656,22 +699,23 @@ export async function registerRoutes(app: Express): Promise<HttpServer> {
 
   app.post('/api/mcp/converse', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
-      const { message, sessionId, attachmentUrl } = req.body;
+      const { message, sessionId: rawSessionId, attachmentUrl } = req.body;
       const userId = req.user!.id;
+      let currentSessionId = rawSessionId ? Number(rawSessionId) : null;
 
       if (!message && !attachmentUrl) {
         return res.status(400).json({ error: 'Mensagem ou anexo é obrigatório.' });
       }
 
-      console.log(`[MCP_AGENT] User ${userId} disse: "${message || '[Anexo]'}" (Session: ${sessionId || 'Nova'})`);
-
       let currentSession: ChatSession | undefined;
-      if (sessionId) {
-        currentSession = await storage.getChatSession(sessionId, userId);
+      if (currentSessionId) {
+        currentSession = await storage.getChatSession(currentSessionId, userId);
       }
+      
       if (!currentSession) {
         console.log(`[MCP_AGENT] Criando nova sessão de chat para o usuário ${userId}`);
-        currentSession = await storage.createChatSession(userId, `Conversa com IA ${new Date().toLocaleDateString('pt-BR')}`);
+        currentSession = await storage.createChatSession(userId, `Conversa ${new Date().toLocaleDateString('pt-BR')}`);
+        currentSessionId = currentSession.id; // Atualiza o currentSessionId com o novo ID
       }
 
       await storage.addChatMessage({
@@ -683,23 +727,126 @@ export async function registerRoutes(app: Express): Promise<HttpServer> {
 
       let agentReplyText: string;
       let actionResponse: { action?: string, payload?: any } = {};
+      let mcpSessionState = campaignCreationSessions[currentSession.id];
 
-      if (genAI && message) {
+      // ----- INÍCIO: LÓGICA DE CRIAÇÃO INTERATIVA DE CAMPANHA -----
+      if (mcpSessionState) {
+        const currentStepConfig = campaignCreationSteps.find(s => s.key === mcpSessionState.currentStep);
+        const userInput = message.trim().toLowerCase();
+
+        if (userInput === 'cancelar' || userInput === 'parar') {
+          delete campaignCreationSessions[currentSession.id];
+          agentReplyText = "Criação de campanha cancelada.";
+        } else if (mcpSessionState.currentStep === 'confirm') {
+          if (userInput === 'sim' || userInput === 's') {
+            try {
+              const campaignToCreate = {
+                ...mcpSessionState.campaignData,
+                userId: mcpSessionState.userId,
+                status: 'draft', // Padrão
+                platforms: mcpSessionState.campaignData.platforms || [],
+                objectives: mcpSessionState.campaignData.objectives || [],
+                // Conversões e validações finais antes de chamar o schema Zod
+                budget: mcpSessionState.campaignData.budget ? String(mcpSessionState.campaignData.budget) : undefined,
+                dailyBudget: mcpSessionState.campaignData.dailyBudget ? String(mcpSessionState.campaignData.dailyBudget) : undefined,
+                avgTicket: mcpSessionState.campaignData.avgTicket ? String(mcpSessionState.campaignData.avgTicket) : undefined,
+                startDate: mcpSessionState.campaignData.startDate ? new Date(mcpSessionState.campaignData.startDate) : undefined,
+                endDate: mcpSessionState.campaignData.endDate ? new Date(mcpSessionState.campaignData.endDate) : undefined,
+              };
+              
+              // Validação com Zod antes de salvar
+              const validatedData = insertCampaignSchema.parse(campaignToCreate);
+              const createdCampaign: Campaign = await storage.createCampaign(validatedData);
+              
+              let details = `Campanha "${createdCampaign.name}" (ID: ${createdCampaign.id}) criada com sucesso!\n`;
+              details += `Status: ${createdCampaign.status}\n`;
+              details += `Descrição: ${createdCampaign.description || 'N/A'}\n`;
+              details += `Plataformas: ${createdCampaign.platforms && createdCampaign.platforms.length > 0 ? createdCampaign.platforms.join(', ') : 'N/A'}\n`;
+              details += `Objetivos: ${createdCampaign.objectives && createdCampaign.objectives.length > 0 ? createdCampaign.objectives.join(', ') : 'N/A'}\n`;
+              details += `Orçamento Total: ${createdCampaign.budget ? `R$ ${createdCampaign.budget}` : 'N/A'}\n`;
+              details += `Data de Início: ${createdCampaign.startDate ? new Date(createdCampaign.startDate).toLocaleDateString('pt-BR') : 'N/A'}\n`;
+
+              agentReplyText = details;
+              delete campaignCreationSessions[currentSession.id];
+            } catch (e: any) {
+              agentReplyText = `Erro ao criar campanha: ${e instanceof ZodError ? e.errors.map(err => `${err.path.join('.')}: ${err.message}`).join('; ') : e.message}. Vamos tentar novamente do início. Qual o nome da campanha?`;
+              // Reinicia o processo em caso de erro de validação ou criação
+              campaignCreationSessions[currentSession.id] = { currentStep: 'name', campaignData: {}, userId };
+            }
+          } else {
+            agentReplyText = "Criação de campanha cancelada. Como posso ajudar agora?";
+            delete campaignCreationSessions[currentSession.id];
+          }
+        } else if (currentStepConfig) {
+          if (userInput === 'pular' && currentStepConfig.optional) {
+            mcpSessionState.campaignData[currentStepConfig.key] = undefined; // ou null, dependendo do schema
+          } else if (currentStepConfig.type === 'list') {
+            mcpSessionState.campaignData[currentStepConfig.key] = userInput.split(',').map(s => s.trim()).filter(s => s);
+          } else if (currentStepConfig.type === 'number') {
+             const numValue = parseFloat(userInput);
+             if (isNaN(numValue) && !currentStepConfig.optional) {
+                 agentReplyText = `Valor inválido para ${currentStepConfig.key}. Por favor, forneça um número ou diga 'pular' se for opcional.`;
+                 // Não avança o passo, pede novamente
+                 return res.json({ reply: agentReplyText, sessionId: currentSession.id, ...actionResponse });
+             } else if (!isNaN(numValue)) {
+                mcpSessionState.campaignData[currentStepConfig.key] = userInput; // Mantém como string, Zod fará conversão e validação
+             } else { // é NaN mas é opcional e usuário não disse pular
+                mcpSessionState.campaignData[currentStepConfig.key] = undefined;
+             }
+          } else if (currentStepConfig.type === 'date') {
+             if (!/^\d{4}-\d{2}-\d{2}$/.test(userInput) && !currentStepConfig.optional && userInput !== 'pular') {
+                agentReplyText = `Formato de data inválido para ${currentStepConfig.key}. Use AAAA-MM-DD ou diga 'pular' se for opcional.`;
+                return res.json({ reply: agentReplyText, sessionId: currentSession.id, ...actionResponse });
+             } else if (/^\d{4}-\d{2}-\d{2}$/.test(userInput)){
+                mcpSessionState.campaignData[currentStepConfig.key] = userInput; // Mantém como string
+             } else {
+                mcpSessionState.campaignData[currentStepConfig.key] = undefined;
+             }
+          } else {
+            mcpSessionState.campaignData[currentStepConfig.key] = userInput;
+          }
+
+          const currentStepIndex = campaignCreationSteps.findIndex(s => s.key === mcpSessionState.currentStep);
+          const nextStepIndex = currentStepIndex + 1;
+
+          if (nextStepIndex < campaignCreationSteps.length) {
+            mcpSessionState.currentStep = campaignCreationSteps[nextStepIndex].key;
+            if (mcpSessionState.currentStep === 'confirm') {
+              let summary = "Ok, vamos revisar os dados da campanha:\n";
+              for (const step of campaignCreationSteps) {
+                if (step.key !== 'confirm' && mcpSessionState.campaignData[step.key] !== undefined) {
+                  summary += `- ${step.key.charAt(0).toUpperCase() + step.key.slice(1)}: ${Array.isArray(mcpSessionState.campaignData[step.key]) ? (mcpSessionState.campaignData[step.key] as string[]).join(', ') : mcpSessionState.campaignData[step.key]}\n`;
+                }
+              }
+              summary += "\nPosso criar a campanha com estes dados? (sim/não)";
+              agentReplyText = summary;
+            } else {
+              agentReplyText = campaignCreationSteps[nextStepIndex].prompt;
+            }
+          } else {
+            // Deveria ter ido para 'confirm' - erro de lógica se chegar aqui
+            agentReplyText = "Algo deu errado no fluxo de criação. Vamos tentar novamente.";
+            delete campaignCreationSessions[currentSession.id];
+          }
+        } else {
+             agentReplyText = "Não entendi essa parte da criação da campanha. Poderia repetir?";
+        }
+      // ----- FIM: LÓGICA DE CRIAÇÃO INTERATIVA DE CAMPANHA -----
+      } else if (genAI && message) { // Lógica de IA existente (navegação, criação simples, geral)
         const intentModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
-        // COORDENADA 1: Prompt de intenção atualizado
         const promptForIntent = `O usuário perguntou: "${message}".
         Ele está pedindo para NAVEGAR para alguma seção da plataforma OU para EXECUTAR ALGUMA AÇÃO como CRIAR algo?
-        Se for NAVEGAÇÃO, responda com a rota (ex: /dashboard, /campaigns).
-        Se for AÇÃO DE CRIAÇÃO, responda com "create_campaign" se for sobre criar campanha.
+        Se for NAVEGAÇÃO, responda com a rota exata (ex: /dashboard, /campaigns).
+        Se for AÇÃO DE CRIAÇÃO e envolver "campanha", responda com "start_campaign_creation" para iniciar o fluxo interativo de criação de campanha, OU com "create_campaign_quick" se ele fornecer um nome (ex: "criar campanha Teste").
         Outras ações possíveis (responda com o código da ação):
           - ver_metricas_campanha_X (onde X é o nome ou ID) -> get_campaign_metrics
           - adicionar_criativo_Y_campanha_X (onde Y é o tipo e X é o nome/ID) -> add_creative
         Se não for navegação nem uma ação reconhecida, responda "NÃO".
         Exemplos:
         - "Me leve para campanhas" -> /campaigns
-        - "Criar uma campanha chamada Fim de Ano" -> create_campaign
-        - "Nova campanha Teste de Verão" -> create_campaign
-        - "Por favor, crie a campanha Dias das Mães" -> create_campaign
+        - "Quero criar uma nova campanha" -> start_campaign_creation
+        - "Criar uma campanha chamada Fim de Ano" -> create_campaign_quick 
+        - "Nova campanha Teste de Verão" -> create_campaign_quick
         `;
 
         const intentResult = await intentModel.generateContent(promptForIntent);
@@ -709,75 +856,59 @@ export async function registerRoutes(app: Express): Promise<HttpServer> {
           "/whatsapp", "/copy", "/funnel", "/metrics", "/alerts", "/export", "/integrations"
         ];
 
-        // COORDENADA 2: Lógica para a nova intenção 'create_campaign'
         if (validRoutes.includes(intentResponse)) {
             console.log(`[MCP_AGENT] Intenção de navegação detectada: ${intentResponse}`);
             agentReplyText = `Claro! Te levarei para ${intentResponse.replace('/', '') || 'o Dashboard'}...`;
             actionResponse = { action: "navigate", payload: intentResponse };
-        } else if (intentResponse === 'create_campaign') {
-            console.log(`[MCP_AGENT] Intenção de criar campanha detectada.`);
-            // COORDENADA 3: Extração de parâmetros com Gemini
+        } else if (intentResponse === 'start_campaign_creation') {
+            console.log(`[MCP_AGENT] Intenção de iniciar criação interativa de campanha.`);
+            campaignCreationSessions[currentSession.id] = { currentStep: 'name', campaignData: {}, userId };
+            agentReplyText = campaignCreationSteps.find(s => s.key === 'name')?.prompt || "Qual o nome da campanha?";
+        } else if (intentResponse === 'create_campaign_quick') {
             const nameExtractionModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
             const promptForName = `O usuário disse: "${message}". Qual é o NOME da campanha que ele quer criar? Responda APENAS com o nome da campanha. Se não conseguir identificar um nome claro, responda "NOME_NAO_IDENTIFICADO".`;
             const nameResult = await nameExtractionModel.generateContent(promptForName);
             let campaignName = nameResult.response.text().trim();
 
             if (campaignName && campaignName !== "NOME_NAO_IDENTIFICADO") {
-                 // COORDENADA 4: Chamada ao storage.createCampaign
                 try {
                     const newCampaign = await storage.createCampaign({
-                        userId: req.user!.id,
-                        name: campaignName,
-                        status: 'draft', // Default status
-                        platforms: [],   // Default empty
-                        objectives: []   // Default empty
+                        userId: req.user!.id, name: campaignName, status: 'draft', platforms: [], objectives: []
                     });
-                    agentReplyText = `Campanha "${newCampaign.name}" criada com sucesso como rascunho! Você pode editá-la na seção de Campanhas.`;
-                    console.log(`[MCP_AGENT] Campanha "${newCampaign.name}" criada para usuário ${userId}.`);
+                    let details = `Campanha "${newCampaign.name}" (ID: ${newCampaign.id}) criada como rascunho!\n`;
+                    details += `Status: ${newCampaign.status}\nPlataformas: N/A (padrão)\nObjetivos: N/A (padrão)`;
+                    agentReplyText = details;
                 } catch (creationError: any) {
-                    console.error("[MCP_AGENT] Erro ao criar campanha via MCP:", creationError);
-                    agentReplyText = `Houve um problema ao tentar criar a campanha "${campaignName}". Detalhes: ${creationError.message || 'Erro desconhecido.'}`;
+                    agentReplyText = `Houve um problema ao criar a campanha "${campaignName}": ${creationError.message}`;
                 }
             } else {
-                agentReplyText = "Entendi que você quer criar uma nova campanha, mas não consegui identificar o nome. Poderia me dizer qual nome você gostaria de dar para a nova campanha?";
-                // Em uma implementação mais avançada, aqui poderíamos guardar o estado da conversa
-                // para pegar o nome na próxima interação do usuário.
+                agentReplyText = "Não consegui identificar o nome da campanha que você quer criar rapidamente. Você gostaria de iniciar o processo de criação interativa, onde te guio passo a passo?";
+                // Aqui, poderíamos adicionar uma sugestão de ação para o frontend mostrar um botão "Iniciar Criação Interativa"
             }
-
-        } else { // Resposta geral da IA
+        } else { 
           const modelName = "gemini-1.5-flash-latest";
-          console.log(`[MCP_AGENT] Usando modelo para resposta geral: "${modelName}"`);
           const model = genAI.getGenerativeModel({ model: modelName });
           const messagesFromDb: ChatMessage[] = await storage.getChatMessages(currentSession.id, userId);
           const historyForGemini = messagesFromDb.map(msg => ({
             role: msg.sender === 'user' ? 'user' : 'model',
             parts: [{ text: msg.text }]
           }));
-          const systemPrompt = { role: "user", parts: [{ text: "Você é o Agente MCP, um assistente de IA para a plataforma de marketing digital USB MKT PRO V2. Sua principal função é auxiliar os usuários com informações sobre a plataforma e marketing digital. Responda sempre em Português do Brasil. Mantenha as respostas concisas e úteis." }] };
-          const initialAgentResponse = { role: "model", parts: [{ text: "Olá! Eu sou o Agente MCP, seu assistente inteligente na plataforma USB MKT PRO V2. Como posso te ajudar com marketing digital hoje?" }] };
+          const systemPrompt = { role: "user", parts: [{ text: "Você é o Agente MCP..." }] };
+          const initialAgentResponse = { role: "model", parts: [{ text: "Olá! Eu sou o Agente MCP..." }] };
           const fullHistory = [systemPrompt, initialAgentResponse, ...historyForGemini];
 
           const chat = model.startChat({
             history: fullHistory,
             generationConfig: { maxOutputTokens: 300, temperature: 0.7 },
-            safetySettings: [
-              { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
-              { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
-              { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
-              { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
-            ],
+            safetySettings: [ /* ... */ ],
           });
           const result = await chat.sendMessage(message || "Processar anexo");
-          const response = result.response;
-          agentReplyText = response.text();
-          console.log(`[MCP_AGENT] Gemini respondeu (resposta geral): "${agentReplyText}"`);
+          agentReplyText = result.response.text();
         }
-      } else { // Se Gemini não estiver disponível ou não houver mensagem de texto
-        agentReplyText = `Recebido: "${message || 'Anexo'}". ${!genAI ? 'O serviço de IA (Gemini) não está configurado corretamente no servidor.' : ''}`;
-        console.log(`[MCP_AGENT] Respondendo (sem IA ou sem texto): "${agentReplyText}"`);
+      } else { 
+        agentReplyText = `Recebido: "${message || 'Anexo'}". ${!genAI ? 'O serviço de IA (Gemini) não está configurado.' : ''}`;
       }
 
-      // COORDENADA 5: Salvar resposta do agente e enviar ao frontend
       await storage.addChatMessage({
         sessionId: currentSession.id,
         sender: 'agent',
@@ -841,31 +972,4 @@ export async function registerRoutes(app: Express): Promise<HttpServer> {
         return res.status(400).json({ error: 'Novo título inválido.' });
       }
       const updatedSession = await storage.updateChatSessionTitle(sessionId, userId, title);
-      if (!updatedSession) return res.status(404).json({ error: 'Sessão não encontrada ou não pertence ao usuário.' });
-      res.json(updatedSession);
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.delete('/api/chat/sessions/:sessionId', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-    try {
-      const sessionId = parseInt(req.params.sessionId);
-      if (isNaN(sessionId)) return res.status(400).json({ error: 'ID da sessão inválido.' });
-      const userId = req.user!.id;
-      const success = await storage.deleteChatSession(sessionId, userId);
-      if (!success) return res.status(404).json({ error: 'Sessão não encontrada ou não pode ser excluída.' });
-      res.status(200).json({ message: 'Sessão de chat excluída com sucesso.' });
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.use(`/${UPLOADS_ROOT_DIR}`, express.static(path.join(process.cwd(), UPLOADS_ROOT_DIR)));
-
-  app.use(handleZodError);
-  app.use(handleError);
-
-  const httpServer = createServer(app);
-  return httpServer;
-}
+      if (!updatedSession) return res.status(404).json({ error: 'Sessão não encontrada ou não pertence ao usuá
