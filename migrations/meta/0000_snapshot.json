@@ -1,5 +1,5 @@
 {
-  "id": "3fb38a96-3398-44e8-bcff-7c0909a2769d",
+  "id": "f394a996-a60c-4202-b9b1-0264cb8c3279",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -118,13 +118,13 @@
         },
         "total_budget": {
           "name": "total_budget",
-          "type": "text",
+          "type": "numeric(10, 2)",
           "primaryKey": false,
           "notNull": true
         },
         "spent_amount": {
           "name": "spent_amount",
-          "type": "text",
+          "type": "numeric(10, 2)",
           "primaryKey": false,
           "notNull": true,
           "default": "'0'"
@@ -242,13 +242,13 @@
         },
         "budget": {
           "name": "budget",
-          "type": "text",
+          "type": "numeric(10, 2)",
           "primaryKey": false,
           "notNull": false
         },
         "daily_budget": {
           "name": "daily_budget",
-          "type": "text",
+          "type": "numeric(10, 2)",
           "primaryKey": false,
           "notNull": false
         },
@@ -278,7 +278,7 @@
         },
         "avg_ticket": {
           "name": "avg_ticket",
-          "type": "text",
+          "type": "numeric(10, 2)",
           "primaryKey": false,
           "notNull": false
         },
@@ -681,7 +681,14 @@
           "name": "order",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "default": 0
+        },
+        "config": {
+          "name": "config",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",
