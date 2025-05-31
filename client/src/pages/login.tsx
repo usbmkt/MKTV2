@@ -1,6 +1,4 @@
 // client/src/pages/login.tsx
-// Abaixo, indicar o caminho completo da pasta de destino.
-// client/src/pages/login.tsx
 import { useState } from 'react';
 import { useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
@@ -10,17 +8,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthStore } from '@/lib/auth';
-import { Rocket, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
+import LogoPng from '@/assets/img/logo.png'; // Importando o logo PNG
 
 export default function Login() {
   const [, navigate] = useLocation();
-  // Obtém login, register, isLoading (renomeado para authLoading) e error (renomeado para authError) do store
   const { login, register, isLoading: authLoading, error: authError, clearError } = useAuthStore(); 
   const { toast } = useToast();
 
   const [loginForm, setLoginForm] = useState({
-    email: 'admin@usbmkt.com', // Pré-preenchido para facilitar o teste
-    password: 'admin123', // Pré-preenchido para facilitar o teste
+    email: 'admin@usbmkt.com', 
+    password: 'admin123', 
   });
 
   const [registerForm, setRegisterForm] = useState({
@@ -31,35 +29,29 @@ export default function Login() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    clearError(); // Limpa erros anteriores do store antes de uma nova tentativa
+    clearError(); 
 
-    // Chama a função login do store e captura o resultado booleano
     const success = await login(loginForm.email, loginForm.password); 
 
     if (success) {
-      // Se o login foi bem-sucedido (retornou true)
       toast({
         title: 'Login realizado com sucesso!',
         description: 'Bem-vindo ao USB MKT PRO V2',
       });
       navigate('/dashboard');
     } else {
-      // Se o login falhou (retornou false)
       toast({
         title: 'Erro no login',
-        // Usa a mensagem de erro que veio do store (authError), ou uma genérica se não houver
         description: authError || 'Verifique suas credenciais e tente novamente.',
         variant: 'destructive',
       });
     }
-    // O estado de carregamento (authLoading) é gerenciado diretamente pelo useAuthStore
   };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    clearError(); // Limpa erros anteriores
+    clearError(); 
 
-    // Chama a função register do store e captura o resultado booleano
     const success = await register(registerForm.username, registerForm.email, registerForm.password); 
 
     if (success) {
@@ -75,29 +67,28 @@ export default function Login() {
         variant: 'destructive',
       });
     }
-    // O estado de carregamento (authLoading) é gerenciado diretamente pelo useAuthStore
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/5 flex items-center justify-center p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center space-y-4">
-          <div className="mx-auto w-12 h-12 bg-primary rounded-lg flex items-center justify-center">
-            <Rocket className="w-6 h-6 text-primary-foreground" />
+      <Card className="w-full max-w-md neu-card">
+        <CardHeader className="text-center space-y-4 pt-8">
+          <div className="mx-auto w-20 h-20 mb-3"> 
+            <img src={LogoPng} alt="USB MKT PRO V2 Logo" className="w-full h-full object-contain" />
           </div>
           <div>
-            <CardTitle className="text-2xl">USB MKT PRO V2</CardTitle>
-            <CardDescription>
+            <CardTitle className="text-2xl font-bold">USB MKT PRO V2</CardTitle> 
+            <CardDescription className="text-muted-foreground">
               Plataforma completa de marketing digital
             </CardDescription>
           </div>
         </CardHeader>
         
-        <CardContent>
+        <CardContent className="px-6 pb-8">
           <Tabs defaultValue="login" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="login">Login</TabsTrigger>
-              <TabsTrigger value="register">Registrar</TabsTrigger>
+            <TabsList className="grid w-full grid-cols-2 neu-card-inset p-1">
+              <TabsTrigger value="login" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md rounded-md">Login</TabsTrigger>
+              <TabsTrigger value="register" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md rounded-md">Registrar</TabsTrigger>
             </TabsList>
             
             <TabsContent value="login">
@@ -111,6 +102,7 @@ export default function Login() {
                     value={loginForm.email}
                     onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
                     required
+                    className="neu-input" 
                   />
                 </div>
                 <div>
@@ -122,10 +114,11 @@ export default function Login() {
                     value={loginForm.password}
                     onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
                     required
+                    className="neu-input"
                   />
                 </div>
-                <Button type="submit" className="w-full" disabled={authLoading}> {/* Usa o estado de carregamento do store */}
-                  {authLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} {/* Exibe loader se estiver carregando */}
+                <Button type="submit" className="w-full neu-button-primary" disabled={authLoading}>
+                  {authLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Entrar
                 </Button>
               </form>
@@ -142,6 +135,7 @@ export default function Login() {
                     value={registerForm.username}
                     onChange={(e) => setRegisterForm({ ...registerForm, username: e.target.value })}
                     required
+                    className="neu-input"
                   />
                 </div>
                 <div>
@@ -153,6 +147,7 @@ export default function Login() {
                     value={registerForm.email}
                     onChange={(e) => setRegisterForm({ ...registerForm, email: e.target.value })}
                     required
+                    className="neu-input"
                   />
                 </div>
                 <div>
@@ -164,10 +159,11 @@ export default function Login() {
                     value={registerForm.password}
                     onChange={(e) => setRegisterForm({ ...registerForm, password: e.target.value })}
                     required
+                    className="neu-input"
                   />
                 </div>
-                <Button type="submit" className="w-full" disabled={authLoading}> {/* Usa o estado de carregamento do store */}
-                  {authLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} {/* Exibe loader se estiver carregando */}
+                <Button type="submit" className="w-full neu-button-primary" disabled={authLoading}>
+                  {authLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Criar conta
                 </Button>
               </form>
