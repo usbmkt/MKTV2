@@ -1,73 +1,90 @@
 import dotenv from "dotenv";
-// Não é estritamente necessário carregar dotenv aqui se já está no index.ts ou no migrate-deploy.ts,
-// mas não causa problema.
 dotenv.config();
 
-import { db } from './db'; // Assumindo que db.ts existe e exporta a instância de drizzle
+import { db } from './db'; 
 import {
   users, campaigns, creatives, metrics, whatsappMessages, copies, alerts, budgets, landingPages,
-  chatSessions, chatMessages, funnels, funnelStages, // Adicionado funnels e funnelStages
+  chatSessions, chatMessages,
   type User, type InsertUser, type Campaign, type InsertCampaign,
   type Creative, type InsertCreative, type Metric, type InsertMetric,
   type WhatsappMessage, type InsertWhatsappMessage, type Copy, type InsertCopy,
   type Alert, type InsertAlert, type Budget, type InsertBudget,
   type LandingPage, type InsertLandingPage,
-  type ChatSession, type InsertChatSession, type ChatMessage, type InsertChatMessage,
-  type Funnel, type InsertFunnel, type FunnelStage, type InsertFunnelStage // Adicionado tipos de Funil
-} from '../shared/schema';
+  type ChatSession, type InsertChatSession, type ChatMessage, type InsertChatMessage
+} from '../shared/schema'; 
 
-import { eq, count, sum, sql, desc, and, or, asc } from 'drizzle-orm';
+import { eq, count, sum, sql, desc, and, or } from 'drizzle-orm'; 
 
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcrypt'; 
 import jwt from 'jsonwebtoken';
-import { JWT_SECRET } from './config';
+import { JWT_SECRET } from './config'; 
 
-function convertBudgetData(data: any): any {
-  const converted = { ...data };
-  if (typeof converted.totalBudget === 'number') {
-    converted.totalBudget = String(converted.totalBudget);
-  }
-  if (typeof converted.spentAmount === 'number') {
-    converted.spentAmount = String(converted.spentAmount);
-  }
-  if (typeof converted.budget === 'number') {
-    converted.budget = String(converted.budget);
-  }
-  if (typeof converted.dailyBudget === 'number') {
-    converted.dailyBudget = String(converted.dailyBudget);
-  }
-  if (typeof converted.avgTicket === 'number') {
-    converted.avgTicket = String(converted.avgTicket);
-  }
-  return converted;
-}
+// // Função auxiliar convertBudgetData não é mais necessária com os tipos corretos no schema
+// function convertBudgetData(data: any): any {
+//   const converted = { ...data };
+//   if (typeof converted.totalBudget === 'number') {
+//     converted.totalBudget = String(converted.totalBudget);
+//   }
+//   if (typeof converted.spentAmount === 'number') {
+//     converted.spentAmount = String(converted.spentAmount);
+//   }
+//   if (typeof converted.budget === 'number') {
+//     converted.budget = String(converted.budget);
+//   }
+//   if (typeof converted.dailyBudget === 'number') {
+//     converted.dailyBudget = String(converted.dailyBudget);
+//   }
+//   if (typeof converted.avgTicket === 'number') {
+//     converted.avgTicket = String(converted.avgTicket);
+//   }
+//   return converted;
+// }
 
 const chartColors = {
   palette: [
-    'rgba(75, 192, 192, 1)', 'rgba(255, 99, 132, 1)', 'rgba(54, 162, 235, 1)',
-    'rgba(255, 206, 86, 1)', 'rgba(153, 102, 255, 1)', 'rgba(255, 159, 64, 1)',
-    'rgba(200, 200, 200, 1)'
+    'rgba(75, 192, 192, 1)', 
+    'rgba(255, 99, 132, 1)', 
+    'rgba(54, 162, 235, 1)', 
+    'rgba(255, 206, 86, 1)', 
+    'rgba(153, 102, 255, 1)',
+    'rgba(255, 159, 64, 1)', 
+    'rgba(200, 200, 200, 1)' 
   ],
   background: [
-    'rgba(75, 192, 192, 0.2)', 'rgba(255, 99, 132, 0.2)', 'rgba(54, 162, 235, 0.2)',
-    'rgba(255, 206, 86, 0.2)', 'rgba(153, 102, 255, 0.2)', 'rgba(255, 159, 64, 0.2)',
+    'rgba(75, 192, 192, 0.2)',
+    'rgba(255, 99, 132, 0.2)',
+    'rgba(54, 162, 235, 0.2)',
+    'rgba(255, 206, 86, 0.2)',
+    'rgba(153, 102, 255, 0.2)',
+    'rgba(255, 159, 64, 0.2)',
     'rgba(200, 200, 200, 0.2)'
   ]
 };
 
-function generateSimulatedLineChartData(label: string, startValue: number, count: number, maxFluctuation: number, color: string): { labels: string[], datasets: { label: string, data: number[], borderColor: string, backgroundColor: string, fill: boolean, tension: number }[] } {
+function generateSimulatedLineChartData(label: string, startValue: number, countNum: number, maxFluctuation: number, color: string): { labels: string[], datasets: { label: string, data: number[], borderColor: string, backgroundColor: string, fill: boolean, tension: number }[] } {
   const data = [];
   const labels = [];
   let currentValue = startValue;
-  for (let i = 0; i < count; i++) {
-    labels.push(`Dia ${i + 1}`);
+
+  for (let i = 0; i < countNum; i++) {
+    labels.push(`Dia ${i + 1}`); 
     data.push(Math.round(currentValue));
     currentValue += (Math.random() * maxFluctuation * 2) - maxFluctuation;
-    if (currentValue < 0) currentValue = 0;
+    if (currentValue < 0) currentValue = 0; 
   }
+
   return {
     labels: labels,
-    datasets: [{ label: label, data: data, borderColor: color, backgroundColor: color.replace('1)', '0.2)'), fill: true, tension: 0.4 }],
+    datasets: [
+      {
+        label: label,
+        data: data,
+        borderColor: color,
+        backgroundColor: color.replace('1)', '0.2)'), 
+        fill: true,
+        tension: 0.4,
+      },
+    ],
   };
 }
 
@@ -75,7 +92,13 @@ function generateSimulatedBarChartData(label: string, categories: string[], base
   const data = categories.map(() => Math.round(baseValue + (Math.random() * maxFluctuation * 2) - maxFluctuation));
   return {
     labels: categories,
-    datasets: [{ label: label, data: data, backgroundColor: colors }],
+    datasets: [
+      {
+        label: label,
+        data: data,
+        backgroundColor: colors,
+      },
+    ],
   };
 }
 
@@ -83,9 +106,16 @@ function generateSimulatedDoughnutChartData(labels: string[], baseValue: number,
   const data = labels.map(() => Math.round(baseValue + (Math.random() * maxFluctuation * 2) - maxFluctuation));
   return {
     labels: labels,
-    datasets: [{ data: data, backgroundColor: colors.map(color => color.replace('1)', '0.8)')), borderWidth: 0 }],
+    datasets: [
+      {
+        data: data,
+        backgroundColor: colors.map(color => color.replace('1)', '0.8)')), 
+        borderWidth: 0,
+      },
+    ],
   };
 }
+
 
 export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
@@ -116,7 +146,7 @@ export interface IStorage {
 
   getCopies(userId: number, campaignId?: number): Promise<Copy[]>;
   createCopy(copy: InsertCopy): Promise<Copy>;
-  deleteCopy(id: number, userId: number): Promise<boolean>;
+  deleteCopy(id: number, userId: number): Promise<boolean>; 
   updateCopy(id: number, copyData: Partial<Omit<InsertCopy, 'userId' | 'campaignId'>>, userId: number): Promise<Copy | undefined>;
 
   getAlerts(userId: number, onlyUnread?: boolean): Promise<Alert[]>;
@@ -130,7 +160,7 @@ export interface IStorage {
   getLandingPages(userId: number): Promise<LandingPage[]>;
   getLandingPage(id: number, userId: number): Promise<LandingPage | undefined>;
   getLandingPageBySlug(slug: string): Promise<LandingPage | undefined>;
-  getLandingPageByStudioProjectId(studioProjectId: string, userId: number): Promise<LandingPage | undefined>;
+  getLandingPageByStudioProjectId(studioProjectId: string, userId: number): Promise<LandingPage | undefined>; 
   createLandingPage(lpData: InsertLandingPage): Promise<LandingPage>;
   updateLandingPage(id: number, lpData: Partial<Omit<InsertLandingPage, 'userId'>>, userId: number): Promise<LandingPage | undefined>;
   deleteLandingPage(id: number, userId: number): Promise<boolean>;
@@ -143,20 +173,7 @@ export interface IStorage {
   addChatMessage(messageData: InsertChatMessage): Promise<ChatMessage>;
   getChatMessages(sessionId: number, userId: number): Promise<ChatMessage[]>;
   
-  getDashboardData(userId: number, timeRange: string): Promise<any>;
-
-  // Métodos para Funis
-  createFunnel(funnelData: InsertFunnel): Promise<Funnel>;
-  getFunnels(userId: number): Promise<Funnel[]>;
-  getFunnelWithStages(funnelId: number, userId: number): Promise<(Funnel & { stages: FunnelStage[] }) | undefined>;
-  updateFunnel(funnelId: number, funnelData: Partial<InsertFunnel>, userId: number): Promise<Funnel | undefined>;
-  deleteFunnel(funnelId: number, userId: number): Promise<boolean>;
-  
-  // Métodos para Etapas do Funil
-  createFunnelStage(stageData: InsertFunnelStage, userId: number): Promise<FunnelStage | undefined>; // userId para verificar permissão no funil pai
-  getFunnelStages(funnelId: number, userId: number): Promise<FunnelStage[]>;
-  updateFunnelStage(stageId: number, stageData: Partial<InsertFunnelStage>, userId: number): Promise<FunnelStage | undefined>;
-  deleteFunnelStage(stageId: number, userId: number): Promise<boolean>;
+  getDashboardData(userId: number, timeRange: string): Promise<any>; 
 }
 
 export class DatabaseStorage implements IStorage {
@@ -207,16 +224,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createCampaign(campaignData: InsertCampaign): Promise<Campaign> {
-    const convertedData = convertBudgetData(campaignData);
-    const [newCampaign] = await db.insert(campaigns).values(convertedData).returning();
+    // const convertedData = convertBudgetData(campaignData); // Não mais necessário se Zod/frontend envia número
+    const [newCampaign] = await db.insert(campaigns).values(campaignData).returning();
     if (!newCampaign) throw new Error("Falha ao criar campanha.");
     return newCampaign;
   }
 
   async updateCampaign(id: number, campaignData: Partial<Omit<InsertCampaign, 'userId'>>, userId: number): Promise<Campaign | undefined> {
-    const convertedData = convertBudgetData(campaignData);
+    // const convertedData = convertBudgetData(campaignData); // Não mais necessário
     const [updatedCampaign] = await db.update(campaigns)
-      .set({ ...convertedData, updatedAt: new Date() })
+      .set({ ...campaignData, updatedAt: new Date() })
       .where(and(eq(campaigns.id, id), eq(campaigns.userId, userId)))
       .returning();
     return updatedCampaign;
@@ -387,8 +404,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createBudget(budgetData: InsertBudget): Promise<Budget> {
-    const convertedData = convertBudgetData(budgetData);
-    const [newBudget] = await db.insert(budgets).values(convertedData).returning();
+    // const convertedData = convertBudgetData(budgetData); // Não mais necessário
+    const [newBudget] = await db.insert(budgets).values(budgetData).returning();
     if (!newBudget) throw new Error("Falha ao criar orçamento.");
     return newBudget;
   }
@@ -398,9 +415,9 @@ export class DatabaseStorage implements IStorage {
     if(!existingBudget || existingBudget.length === 0) {
         return undefined;
     }
-    const convertedData = convertBudgetData(budgetData);
+    // const convertedData = convertBudgetData(budgetData); // Não mais necessário
     const [updatedBudget] = await db.update(budgets)
-      .set(convertedData)
+      .set(budgetData)
       .where(and(eq(budgets.id, id), eq(budgets.userId, userId)))
       .returning();
     return updatedBudget;
@@ -428,7 +445,7 @@ export class DatabaseStorage implements IStorage {
 
   async getLandingPageByStudioProjectId(studioProjectId: string, userId: number): Promise<LandingPage | undefined> {
     const [lp] = await db.select().from(landingPages)
-      .where(and(eq(landingPages.studioProjectId, studioProjectId), eq(landingPages.userId, userId)))
+      .where(and(eq(landingPages.studioProjectId, studioProjectId), eq(landingPages.userId, userId))) 
       .limit(1);
     return lp;
   }
@@ -492,7 +509,7 @@ export class DatabaseStorage implements IStorage {
     }
     return db.select().from(chatMessages).where(eq(chatMessages.sessionId, sessionId)).orderBy(chatMessages.timestamp);
   }
-  
+
   async getDashboardData(userId: number, timeRange: string = '30d') {
     const now = new Date();
     let startDate = new Date();
@@ -504,20 +521,25 @@ export class DatabaseStorage implements IStorage {
 
     const metricsTimeCondition = and(
         eq(metrics.userId, userId),
-        sql`${metrics.date} >= ${startDate}`
+        sql`${metrics.date} >= ${startDate}` 
     );
+
     const budgetsUserCondition = eq(budgets.userId, userId);
 
     const activeCampaignsResult = await db.select({ count: count() }).from(campaigns)
       .where(and(eq(campaigns.userId, userId), eq(campaigns.status, 'active')));
     const activeCampaigns = activeCampaignsResult[0]?.count || 0;
 
+    // CORREÇÃO: sum(budgets.spentAmount) agora deve funcionar porque o schema define spentAmount como decimal
     const totalSpentResult = await db.select({
-        total: sum(sql<number>`CAST(${budgets.spentAmount} AS DECIMAL)`)
+        total: sum(budgets.spentAmount) 
     })
       .from(budgets)
       .where(budgetsUserCondition);
-    const totalSpent = parseFloat(totalSpentResult[0]?.total || '0') || 0;
+    // O resultado de sum(decimal) já é um tipo numérico que o JS pode entender.
+    // O Drizzle retorna como string, então parseFloat ainda é bom.
+    const totalSpent = parseFloat(totalSpentResult[0]?.total || "0") || 0;
+
 
     const totalConversionsResult = await db.select({ total: sum(metrics.conversions) })
       .from(metrics)
@@ -526,7 +548,7 @@ export class DatabaseStorage implements IStorage {
 
     const totalRevenueResult = await db.select({ total: sum(metrics.revenue) })
       .from(metrics)
-      .where(metricsTimeCondition);
+      .where(metricsTimeCondition); 
     const totalRevenue = parseFloat(totalRevenueResult[0]?.total || '0') || 0;
 
     const totalCostResult = await db.select({ total: sum(metrics.cost) })
@@ -538,12 +560,12 @@ export class DatabaseStorage implements IStorage {
 
     const totalImpressionsResult = await db.select({ total: sum(metrics.impressions) })
       .from(metrics)
-      .where(metricsTimeCondition);
+      .where(metricsTimeCondition); 
     const impressions = parseFloat(totalImpressionsResult[0]?.total || '0') || 0;
 
     const totalClicksResult = await db.select({ total: sum(metrics.clicks) })
       .from(metrics)
-      .where(metricsTimeCondition);
+      .where(metricsTimeCondition); 
     const clicks = parseFloat(totalClicksResult[0]?.total || '0') || 0;
 
     const ctr = clicks > 0 && impressions > 0 ? parseFloat(((clicks / impressions) * 100).toFixed(2)) : 0;
@@ -562,10 +584,15 @@ export class DatabaseStorage implements IStorage {
 
     const campaignsChange = parseFloat((Math.random() * 20 - 10).toFixed(1)); 
     const spentChange = parseFloat((Math.random() * 20 - 10).toFixed(1)); 
-    const conversionsChange = parseFloat((Math.random() * 30 - 15).toFixed(1));
+    const conversionsChange = parseFloat((Math.random() * 30 - 15).toFixed(1)); 
     const roiChange = parseFloat((Math.random() * 10 - 5).toFixed(1)); 
 
-    const trends = { campaignsChange, spentChange, conversionsChange, roiChange };
+    const trends = {
+      campaignsChange,
+      spentChange,
+      conversionsChange,
+      roiChange,
+    };
 
     const recentCampaignsRaw = await db.select().from(campaigns)
       .where(eq(campaigns.userId, userId))
@@ -577,10 +604,10 @@ export class DatabaseStorage implements IStorage {
       name: c.name,
       description: c.description || 'Nenhuma descrição',
       status: c.status,
-      platforms: c.platforms || [], 
-      budget: parseFloat(c.budget || '0') || 0,
-      spent: parseFloat(c.dailyBudget || '0') || 0, 
-      performance: Math.floor(Math.random() * (95 - 60 + 1)) + 60
+      platforms: c.platforms || [],
+      budget: parseFloat(String(c.budget) || '0') || 0, // Convertendo o decimal (que pode vir como string do DB via Drizzle) para número
+      spent: parseFloat(String(c.dailyBudget) || '0') || 0, // Idem
+      performance: Math.floor(Math.random() * (95 - 60 + 1)) + 60 
     }));
 
     const timeSeriesData = generateSimulatedLineChartData('Desempenho Geral', 1000, timeRange === '30d' ? 30 : 7, 50, chartColors.palette[0]);
@@ -598,117 +625,6 @@ export class DatabaseStorage implements IStorage {
       conversionData: conversionData,
       roiData: roiData,
     };
-  }
-
-  // --- Métodos para Funis ---
-  async createFunnel(funnelData: InsertFunnel): Promise<Funnel> {
-    const [newFunnel] = await db.insert(funnels).values(funnelData).returning();
-    if (!newFunnel) throw new Error("Falha ao criar funil.");
-    return newFunnel;
-  }
-
-  async getFunnels(userId: number): Promise<Funnel[]> {
-    return db.select().from(funnels).where(eq(funnels.userId, userId)).orderBy(desc(funnels.createdAt));
-  }
-
-  async getFunnelWithStages(funnelId: number, userId: number): Promise<(Funnel & { stages: FunnelStage[] }) | undefined> {
-    const [funnelResult] = await db.select().from(funnels)
-      .where(and(eq(funnels.id, funnelId), eq(funnels.userId, userId)))
-      .limit(1);
-
-    if (!funnelResult) return undefined;
-
-    const stagesResult = await db.select().from(funnelStages)
-      .where(eq(funnelStages.funnelId, funnelId))
-      .orderBy(asc(funnelStages.order)); // Ordenar etapas pela coluna 'order'
-
-    return { ...funnelResult, stages: stagesResult };
-  }
-  
-  async updateFunnel(funnelId: number, funnelData: Partial<InsertFunnel>, userId: number): Promise<Funnel | undefined> {
-    const [updatedFunnel] = await db.update(funnels)
-      .set({ ...funnelData, updatedAt: new Date() })
-      .where(and(eq(funnels.id, funnelId), eq(funnels.userId, userId)))
-      .returning();
-    return updatedFunnel;
-  }
-
-  async deleteFunnel(funnelId: number, userId: number): Promise<boolean> {
-    const result = await db.delete(funnels)
-      .where(and(eq(funnels.id, funnelId), eq(funnels.userId, userId)));
-    return (result.rowCount ?? 0) > 0;
-  }
-
-  // --- Métodos para Etapas do Funil ---
-  async createFunnelStage(stageData: InsertFunnelStage, userId: number): Promise<FunnelStage | undefined> {
-    // Verificar se o funil pai pertence ao usuário
-    const funnel = await db.select({ id: funnels.id, userId: funnels.userId }).from(funnels)
-        .where(eq(funnels.id, stageData.funnelId!)) // funnelId é notNull na tabela, mas opcional em InsertFunnelStage por agora
-        .limit(1);
-    if (!funnel[0] || funnel[0].userId !== userId) {
-      throw new Error("Funil não encontrado ou não pertence ao usuário.");
-    }
-
-    const [newStage] = await db.insert(funnelStages).values(stageData).returning();
-    if (!newStage) throw new Error("Falha ao criar etapa do funil.");
-    return newStage;
-  }
-
-  async getFunnelStages(funnelId: number, userId: number): Promise<FunnelStage[]> {
-    const funnel = await db.select({ id: funnels.id, userId: funnels.userId }).from(funnels)
-      .where(and(eq(funnels.id, funnelId), eq(funnels.userId, userId)))
-      .limit(1);
-    if (!funnel[0]) {
-      throw new Error("Funil não encontrado ou não pertence ao usuário.");
-    }
-    return db.select().from(funnelStages)
-      .where(eq(funnelStages.funnelId, funnelId))
-      .orderBy(asc(funnelStages.order));
-  }
-
-  async updateFunnelStage(stageId: number, stageData: Partial<InsertFunnelStage>, userId: number): Promise<FunnelStage | undefined> {
-    // Para atualizar, primeiro pegamos a etapa para verificar o funil pai
-    const [existingStage] = await db.select({ funnelId: funnelStages.funnelId }).from(funnelStages)
-      .where(eq(funnelStages.id, stageId))
-      .limit(1);
-
-    if (!existingStage) throw new Error("Etapa do funil não encontrada.");
-
-    // Verificar permissão no funil pai
-    const funnel = await db.select({ id: funnels.id, userId: funnels.userId }).from(funnels)
-      .where(and(eq(funnels.id, existingStage.funnelId), eq(funnels.userId, userId)))
-      .limit(1);
-    if (!funnel[0]) {
-      throw new Error("Você não tem permissão para atualizar esta etapa do funil.");
-    }
-    
-    const [updatedStage] = await db.update(funnelStages)
-      .set({ ...stageData, updatedAt: new Date() })
-      .where(eq(funnelStages.id, stageId))
-      .returning();
-    return updatedStage;
-  }
-
-  async deleteFunnelStage(stageId: number, userId: number): Promise<boolean> {
-     // Para deletar, primeiro pegamos a etapa para verificar o funil pai
-    const [existingStage] = await db.select({ funnelId: funnelStages.funnelId }).from(funnelStages)
-      .where(eq(funnelStages.id, stageId))
-      .limit(1);
-
-    if (!existingStage) return false; // Ou throw new Error("Etapa do funil não encontrada.");
-
-    // Verificar permissão no funil pai
-    const funnel = await db.select({ id: funnels.id, userId: funnels.userId }).from(funnels)
-      .where(and(eq(funnels.id, existingStage.funnelId), eq(funnels.userId, userId)))
-      .limit(1);
-
-    if (!funnel[0]) {
-      throw new Error("Você não tem permissão para excluir esta etapa do funil.");
-    }
-
-    const result = await db.delete(funnelStages)
-      .where(eq(funnelStages.id, stageId));
-    return (result.rowCount ?? 0) > 0;
   }
 }
 
