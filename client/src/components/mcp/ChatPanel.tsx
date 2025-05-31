@@ -1,6 +1,4 @@
 // client/src/components/mcp/ChatPanel.tsx
-// Abaixo, indicar o caminho completo da pasta de destino.
-// client/src/components/mcp/ChatPanel.tsx
 import React, { useState, useRef, useEffect } from 'react';
 import { useMCPStore, sendMessageToMCP, ChatSession } from '@/lib/mcpStore';
 import { Button } from '@/components/ui/button';
@@ -13,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Label } from '@/components/ui/label';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import UbiePng from '@/img/ubie.png'; // Importando ubie.png
 
 declare global {
   interface Window {
@@ -30,7 +29,6 @@ export const ChatPanel: React.FC = () => {
     setCurrentInput,
     clearCurrentInput,
     isLoading,
-    // resetChat, // Comentado pois o reset agora é mais focado na sessão
     currentSessionId,
     chatSessions,
     loadChatSessions,
@@ -39,7 +37,7 @@ export const ChatPanel: React.FC = () => {
     updateCurrentSessionTitle,
     deleteChatSession,
     isSessionsLoading,
-    addMessage, // Adicionado para feedback de erro do microfone
+    addMessage,
   } = useMCPStore();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -94,7 +92,7 @@ export const ChatPanel: React.FC = () => {
         }
       }
     }
-  }, [messages, isLoading]); // Adicionado isLoading para scroll quando "Digitando..." aparece
+  }, [messages, isLoading]); 
 
   const handleStartNewChat = async () => {
     await startNewChat();
@@ -113,7 +111,7 @@ export const ChatPanel: React.FC = () => {
   };
 
   const handleSaveTitle = async () => {
-    if (newTitle.trim() && currentSessionId) { // Garante que currentSessionId não é null
+    if (newTitle.trim() && currentSessionId) { 
       await updateCurrentSessionTitle(newTitle.trim());
       setIsEditTitleModalOpen(false);
     }
@@ -123,12 +121,9 @@ export const ChatPanel: React.FC = () => {
     if (window.confirm('Tem certeza que deseja excluir esta conversa?')) {
       await deleteChatSession(sessionId);
       if (currentSessionId === sessionId) {
-        await startNewChat(); // Inicia uma nova conversa se a atual foi deletada
+        await startNewChat(); 
       }
-      // Não precisa fechar o modal aqui, pois a lista de sessões será atualizada
-      // e o modal de histórico pode permanecer aberto se o usuário quiser.
-      // Se desejar fechar: setIsHistoryModalOpen(false);
-      await loadChatSessions(); // Recarrega as sessões para refletir a exclusão
+      await loadChatSessions(); 
     }
   };
 
@@ -171,11 +166,7 @@ export const ChatPanel: React.FC = () => {
 
             if (finalTranscript.trim()) {
                 console.log("Transcrição final recebida:", finalTranscript);
-                recognitionRef.current.stop(); // Para explicitamente após resultado final
-                // Não envia automaticamente, permite ao usuário revisar e apertar "Send"
-                // Se quiser enviar automaticamente, descomente a linha abaixo e ajuste a lógica
-                // sendMessageToMCP(finalTranscript.trim()); 
-                // clearCurrentInput(); // Limpa o input após o envio automático
+                recognitionRef.current.stop(); 
             }
         };
 
@@ -199,16 +190,15 @@ export const ChatPanel: React.FC = () => {
                 timestamp: new Date(),
             });
             setIsListening(false);
-            setCurrentInput(''); // Limpa o input em caso de erro
+            setCurrentInput('');
         };
 
         recognitionRef.current.onend = () => {
             setIsListening(false);
             console.log("Reconhecimento de voz finalizado.");
-            if (currentInput === 'Ouvindo...') { // Se parou sem capturar nada
+            if (currentInput === 'Ouvindo...') { 
                 setCurrentInput('');
             }
-            // Foca no input para que o usuário possa editar ou enviar manualmente
             inputRef.current?.focus(); 
         };
     }
@@ -232,7 +222,6 @@ export const ChatPanel: React.FC = () => {
     }
   };
 
-
   if (!isPanelOpen) {
     return null;
   }
@@ -251,15 +240,18 @@ export const ChatPanel: React.FC = () => {
       aria-modal="true"
       aria-labelledby="mcp-chat-panel-title"
     >
-      <header className="flex items-center justify-between p-4 border-b border-border">
-        <h3 id="mcp-chat-panel-title" className="font-semibold text-lg text-foreground truncate max-w-[calc(100%-100px)]">
-            Agente MCP: {currentChatTitle}
-        </h3>
+      <header className="flex items-center justify-between p-3 border-b border-border"> {/* Padding ajustado */}
         <div className="flex items-center gap-2">
+          <img src={UbiePng} alt="Ubie" className="w-8 h-8 rounded-full object-contain" /> {/* Logo Ubie adicionado */}
+          <h3 id="mcp-chat-panel-title" className="font-semibold text-md text-foreground truncate max-w-[calc(100%-110px)]"> {/* Text-md e max-width ajustado */}
+              Agente Ubie: {currentChatTitle}
+          </h3>
+        </div>
+        <div className="flex items-center gap-1"> {/* Gap reduzido */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" title="Opções da Conversa" aria-label="Opções da Conversa">
-                <MoreVertical className="h-5 w-5" />
+              <Button variant="ghost" size="icon" className="w-8 h-8" title="Opções da Conversa" aria-label="Opções da Conversa">
+                <MoreVertical className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="z-[101]"> 
@@ -274,12 +266,11 @@ export const ChatPanel: React.FC = () => {
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => {
-                if (currentSessionId) { // Só reinicia se houver sessão
+                if (currentSessionId) { 
                     useMCPStore.setState({ messages: [
                       { id: 'reset-agent-message', text: 'Conversa reiniciada. Como posso ajudar?', sender: 'agent', timestamp: new Date(), sessionId: currentSessionId }
                     ]});
                 } else {
-                    // Se não há sessão, inicia uma nova e então mostra a mensagem de reinício
                     handleStartNewChat().then(() => {
                         const newSessionId = useMCPStore.getState().currentSessionId;
                         if (newSessionId) {
@@ -289,16 +280,16 @@ export const ChatPanel: React.FC = () => {
                         }
                     });
                 }
-              }} /*disabled={currentSessionId === null} // Pode ser habilitado mesmo sem sessão, para iniciar uma nova*/ >
+              }} >
                 <RotateCcw className="mr-2 h-4 w-4" /> Reiniciar Conversa Atual
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => { if(currentSessionId) handleDeleteSession(currentSessionId); }} disabled={currentSessionId === null}>
+              <DropdownMenuItem onClick={() => { if(currentSessionId) handleDeleteSession(currentSessionId); }} disabled={currentSessionId === null} className="text-destructive focus:text-destructive">
                 <Trash className="mr-2 h-4 w-4" /> Excluir Conversa Atual
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button variant="ghost" size="icon" onClick={togglePanel} title="Fechar Painel" aria-label="Fechar painel do Agente MCP">
-            <X className="h-5 w-5" />
+          <Button variant="ghost" size="icon" className="w-8 h-8" onClick={togglePanel} title="Fechar Painel" aria-label="Fechar painel do Agente Ubie">
+            <X className="h-4 w-4" />
           </Button>
         </div>
       </header>
@@ -312,7 +303,7 @@ export const ChatPanel: React.FC = () => {
                 "flex flex-col p-3 rounded-lg max-w-[80%]",
                 msg.sender === 'user' ? 'bg-primary text-primary-foreground self-end rounded-br-none' :
                 msg.sender === 'agent' ? 'bg-muted text-muted-foreground self-start rounded-bl-none' :
-                'bg-transparent text-xs text-muted-foreground self-center text-center w-full py-1' // Ajuste para mensagens do sistema
+                'bg-transparent text-xs text-muted-foreground self-center text-center w-full py-1' 
               )}
             >
               <p className={cn("text-sm whitespace-pre-wrap", msg.sender === 'system' ? 'italic' : '')}>{msg.text}</p>
@@ -330,7 +321,7 @@ export const ChatPanel: React.FC = () => {
           {isLoading && (
             <div className="flex items-center justify-start p-3">
               <div className="bg-muted text-muted-foreground rounded-lg p-3 inline-flex items-center space-x-2 rounded-bl-none">
-                <RotateCcw className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin" />
                 <span>Digitando...</span>
               </div>
             </div>
@@ -340,8 +331,8 @@ export const ChatPanel: React.FC = () => {
 
       <form onSubmit={handleSendMessage} className="p-4 border-t border-border">
         <div className="flex items-center gap-2">
-          <Button type="button" variant="ghost" size="icon" title="Anexar arquivo" aria-label="Anexar arquivo" disabled={isLoading}>
-            <Paperclip className="h-5 w-5" />
+          <Button type="button" variant="ghost" size="icon" className="w-9 h-9" title="Anexar arquivo" aria-label="Anexar arquivo" disabled={isLoading}>
+            <Paperclip className="h-4 w-4" />
           </Button>
 
           <Input
@@ -352,7 +343,7 @@ export const ChatPanel: React.FC = () => {
             placeholder={isListening ? "Ouvindo..." : "Digite sua mensagem..."}
             value={currentInput}
             onChange={handleInputChange}
-            className="flex-grow"
+            className="flex-grow h-9 text-sm"
             disabled={isLoading} 
           />
           <Button 
@@ -360,43 +351,44 @@ export const ChatPanel: React.FC = () => {
             variant="ghost" 
             size="icon" 
             onClick={handleVoiceInput} 
+            className="w-9 h-9"
             title={isListening ? "Parar de ouvir" : "Ativar entrada de voz"} 
             aria-label={isListening ? "Parar de ouvir" : "Ativar entrada de voz"} 
-            disabled={isLoading || !speechRecognitionAvailable} // Desabilita se a API não estiver disponível
+            disabled={isLoading || !speechRecognitionAvailable} 
           >
             {isListening ? <StopCircle className="h-5 w-5 text-destructive animate-pulse" /> : <Mic className="h-5 w-5" />}
           </Button>
-          <Button type="submit" size="icon" disabled={isLoading || !currentInput.trim()} aria-label="Enviar mensagem">
-            <Send className="h-5 w-5" />
+          <Button type="submit" size="icon" className="w-9 h-9" disabled={isLoading || !currentInput.trim()} aria-label="Enviar mensagem">
+            <Send className="h-4 w-4" />
           </Button>
         </div>
       </form>
 
       <Dialog open={isHistoryModalOpen} onOpenChange={setIsHistoryModalOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-md"> {/* Ajustado para sm:max-w-md */}
           <DialogHeader>
             <DialogTitle>Conversas Antigas</DialogTitle>
             <DialogDescription>
               Selecione uma conversa para carregar o histórico.
             </DialogDescription>
           </DialogHeader>
-          <ScrollArea className="max-h-[400px] py-4">
-            <div className="grid gap-4">
+          <ScrollArea className="max-h-[calc(70vh-150px)] py-4"> {/* Altura ajustada */}
+            <div className="grid gap-3">
                 {isSessionsLoading ? (
-                <div className="text-center text-muted-foreground">Carregando conversas...</div>
+                <div className="text-center text-muted-foreground p-4">Carregando conversas... <Loader2 className="inline-block animate-spin h-4 w-4 ml-2"/></div>
                 ) : chatSessions.length === 0 ? (
-                <div className="text-center text-muted-foreground">Nenhuma conversa salva ainda.</div>
+                <div className="text-center text-muted-foreground p-4">Nenhuma conversa salva ainda.</div>
                 ) : (
                 chatSessions.map((session) => (
-                    <div key={session.id} className="flex items-center justify-between p-2 border rounded-md hover:bg-muted">
-                    <div onClick={() => handleLoadSession(session)} className="flex-grow cursor-pointer pr-2">
-                        <h4 className="font-medium text-sm truncate">{session.title}</h4>
+                    <div key={session.id} className="flex items-center justify-between p-3 border rounded-md hover:bg-muted/50 transition-colors">
+                    <div onClick={() => handleLoadSession(session)} className="flex-grow cursor-pointer pr-2 space-y-0.5">
+                        <h4 className="font-medium text-sm truncate" title={session.title}>{session.title}</h4>
                         <p className="text-xs text-muted-foreground">
-                        Última atualização: {format(new Date(session.updatedAt), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
+                        {format(new Date(session.updatedAt), 'dd/MM/yy HH:mm', { locale: ptBR })}
                         </p>
                     </div>
-                    <Button variant="ghost" size="icon" className="ml-auto flex-shrink-0" onClick={(e) => { e.stopPropagation(); handleDeleteSession(session.id); }} title="Excluir Conversa">
-                        <Trash className="h-4 w-4 text-destructive" />
+                    <Button variant="ghost" size="icon" className="ml-auto flex-shrink-0 w-7 h-7" onClick={(e) => { e.stopPropagation(); handleDeleteSession(session.id); }} title="Excluir Conversa">
+                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
                     </Button>
                     </div>
                 ))
@@ -404,7 +396,7 @@ export const ChatPanel: React.FC = () => {
             </div>
           </ScrollArea>
           <DialogFooter>
-            <Button onClick={handleStartNewChat}>
+            <Button onClick={handleStartNewChat} className="w-full sm:w-auto">
               <Plus className="mr-2 h-4 w-4" /> Iniciar Nova Conversa
             </Button>
           </DialogFooter>
@@ -412,7 +404,7 @@ export const ChatPanel: React.FC = () => {
       </Dialog>
 
       <Dialog open={isEditTitleModalOpen} onOpenChange={setIsEditTitleModalOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Renomear Conversa</DialogTitle>
             <DialogDescription>
@@ -420,7 +412,7 @@ export const ChatPanel: React.FC = () => {
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
-            <Label htmlFor="newTitle"> 
+            <Label htmlFor="newTitle" className="text-left"> 
               Novo Título
             </Label>
             <Input
