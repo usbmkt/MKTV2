@@ -30,6 +30,7 @@ export const userRelations = relations(users, ({ many }) => ({
   budgets: many(budgets),
   landingPages: many(landingPages),
   chatSessions: many(chatSessions),
+  funnels: many(funnels), // Adicionado relacionamento com funis
 }));
 
 export const campaigns = pgTable("campaigns", {
@@ -40,13 +41,13 @@ export const campaigns = pgTable("campaigns", {
   status: campaignStatusEnum("status").default("draft").notNull(),
   platforms: jsonb("platforms").$type<string[]>().default([]).notNull(),
   objectives: jsonb("objectives").$type<string[]>().default([]),
-  budget: decimal("budget", { precision: 10, scale: 2 }), // CORRIGIDO de text para decimal
-  dailyBudget: decimal("daily_budget", { precision: 10, scale: 2 }), // CORRIGIDO de text para decimal
+  budget: decimal("budget", { precision: 10, scale: 2 }),
+  dailyBudget: decimal("daily_budget", { precision: 10, scale: 2 }),
   startDate: timestamp("start_date", { withTimezone: true }),
   endDate: timestamp("end_date", { withTimezone: true }),
   targetAudience: text("target_audience"),
   industry: text("industry"),
-  avgTicket: decimal("avg_ticket", { precision: 10, scale: 2 }), // CORRIGIDO de text para decimal
+  avgTicket: decimal("avg_ticket", { precision: 10, scale: 2 }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
@@ -61,6 +62,7 @@ export const campaignRelations = relations(campaigns, ({ one, many }) => ({
   copies: many(copies),
   alerts: many(alerts),
   budgets: many(budgets),
+  funnels: many(funnels), // Adicionado relacionamento com funis
 }));
 
 export const creatives = pgTable("creatives", {
@@ -153,8 +155,8 @@ export const budgets = pgTable("budgets", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   campaignId: integer("campaign_id").references(() => campaigns.id, { onDelete: 'cascade' }),
-  totalBudget: decimal("total_budget", { precision: 10, scale: 2 }).notNull(), // CORRIGIDO de text para decimal
-  spentAmount: decimal("spent_amount", { precision: 10, scale: 2 }).default("0").notNull(), // CORRIGIDO de text para decimal
+  totalBudget: decimal("total_budget", { precision: 10, scale: 2 }).notNull(),
+  spentAmount: decimal("spent_amount", { precision: 10, scale: 2 }).default("0").notNull(),
   period: text("period", { enum: ["daily", "weekly", "monthly", "total"] }).notNull(),
   startDate: timestamp("start_date", { withTimezone: true }).notNull(),
   endDate: timestamp("end_date", { withTimezone: true }),
@@ -214,6 +216,39 @@ export const chatMessageRelations = relations(chatMessages, ({ one }) => ({
   session: one(chatSessions, { fields: [chatMessages.sessionId], references: [chatSessions.id] }),
 }));
 
+// Definição da tabela 'funnels'
+export const funnels = pgTable("funnels", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  campaignId: integer("campaign_id").references(() => campaigns.id, { onDelete: 'set null' }),
+  name: text("name").notNull(),
+  description: text("description"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const funnelRelations = relations(funnels, ({ one, many }) => ({
+  user: one(users, { fields: [funnels.userId], references: [users.id] }),
+  campaign: one(campaigns, { fields: [funnels.campaignId], references: [campaigns.id] }),
+  stages: many(funnelStages),
+}));
+
+// Definição da tabela 'funnel_stages'
+export const funnelStages = pgTable("funnel_stages", {
+  id: serial("id").primaryKey(),
+  funnelId: integer("funnel_id").notNull().references(() => funnels.id, { onDelete: 'cascade' }),
+  name: text("name").notNull(),
+  description: text("description"),
+  order: integer("order").notNull().default(0),
+  config: jsonb("config").$type<Record<string, any>>(), // Para configurações flexíveis da etapa
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const funnelStageRelations = relations(funnelStages, ({ one }) => ({
+  funnel: one(funnels, { fields: [funnelStages.funnelId], references: [funnels.id] }),
+}));
+
 
 // ========================================================================
 // Schemas de Inserção e Tipos
@@ -232,7 +267,6 @@ export const insertUserSchema = createInsertSchema(users, {
 export const insertCampaignSchema = createInsertSchema(campaigns, {
   name: z.string().min(1, "Nome da campanha é obrigatório."),
   budget: z.preprocess(
-    // Aceita string ou número, converte para número se for string válida, senão undefined
     (val) => (typeof val === 'string' && val.trim() !== '' ? parseFloat(val) : (typeof val === 'number' ? val : undefined)),
     z.number({ invalid_type_error: "Orçamento deve ser um número" }).nullable().optional()
   ),
@@ -332,12 +366,12 @@ export const insertAlertSchema = createInsertSchema(alerts, {
 });
 
 export const insertBudgetSchema = createInsertSchema(budgets, {
-  totalBudget: z.preprocess( // Aceita string ou número, converte para número
+  totalBudget: z.preprocess( 
     (val) => (typeof val === 'string' && val.trim() !== '' ? parseFloat(val) : (typeof val === 'number' ? val : undefined)),
     z.number({ required_error: "Orçamento total é obrigatório.", invalid_type_error: "Orçamento total deve ser um número." })
   ),
-  spentAmount: z.preprocess( // Aceita string ou número, converte para número
-    (val) => (val === "" || val === null || val === undefined ? 0 : (typeof val === 'string' ? parseFloat(val) : val)), // Default to 0 if empty/null/undefined before parsing
+  spentAmount: z.preprocess( 
+    (val) => (val === "" || val === null || val === undefined ? 0 : (typeof val === 'string' ? parseFloat(val) : val)), 
     z.number({ invalid_type_error: "Valor gasto deve ser um número." }).default(0)
   ),
   startDate: z.preprocess(
@@ -382,6 +416,39 @@ export const insertChatMessageSchema = createInsertSchema(chatMessages).omit({
   timestamp: true,
 });
 
+// Schemas de inserção para Funis
+export const insertFunnelSchema = createInsertSchema(funnels, {
+  name: z.string().min(1, "Nome do funil é obrigatório."),
+  campaignId: z.preprocess( // Mesmo pré-processamento do campaignId em creatives
+    (val) => {
+      if (val === "null" || val === "") return null;
+      if (typeof val === 'number' || val === null) return val;
+      if (typeof val === 'string') {
+        const parsed = parseInt(val);
+        return isNaN(parsed) ? undefined : parsed;
+      }
+      return undefined;
+    },
+    z.number().nullable().optional()
+  ),
+}).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertFunnelStageSchema = createInsertSchema(funnelStages, {
+  name: z.string().min(1, "Nome da etapa é obrigatório."),
+  order: z.number().int().min(0, "Ordem deve ser um inteiro não negativo."),
+  config: z.record(z.any()).optional().nullable(),
+}).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+
+// Tipos para as tabelas (mantendo seu padrão)
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type InsertCampaign = z.infer<typeof insertCampaignSchema>;
@@ -404,3 +471,9 @@ export type InsertChatSession = z.infer<typeof insertChatSessionSchema>;
 export type ChatSession = typeof chatSessions.$inferSelect;
 export type InsertChatMessage = z.infer<typeof insertChatMessageSchema>;
 export type ChatMessage = typeof chatMessages.$inferSelect;
+
+// Novos tipos para Funis
+export type InsertFunnel = z.infer<typeof insertFunnelSchema>;
+export type Funnel = typeof funnels.$inferSelect;
+export type InsertFunnelStage = z.infer<typeof insertFunnelStageSchema>;
+export type FunnelStage = typeof funnelStages.$inferSelect;
