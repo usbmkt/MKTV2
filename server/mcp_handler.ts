@@ -3,6 +3,8 @@ import { storage } from "./storage";
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import { GEMINI_API_KEY } from './config';
 import { InsertCampaign, ChatMessage, ChatSession, User, Campaign } from "../shared/schema";
+import { ZodError } from "zod";
+
 
 let genAI: GoogleGenerativeAI | null = null;
 if (GEMINI_API_KEY) {
@@ -17,13 +19,18 @@ if (GEMINI_API_KEY) {
   console.warn("[MCP_HANDLER_GEMINI] Chave da API do Gemini (GEMINI_API_KEY) não configurada.");
 }
 
+interface MCPContext {
+  lastCreatedCampaignId?: number | null;
+  lastMentionedCampaignId?: number | null; // Para quando o usuário consulta detalhes
+  // Outros estados de conversa podem ser adicionados aqui
+}
+
 interface MCPResponsePayload {
   reply: string;
   sessionId: number;
   action?: string;
   payload?: any;
-  // Poderíamos adicionar um campo para contexto da conversa se quisermos reter informações entre chamadas
-  // mcpContext?: Record<string, any>; 
+  mcpContextForNextTurn?: MCPContext | null; // Contexto para ser armazenado no cliente
 }
 
 async function getCampaignNameFromMessage(message: string): Promise<string | null> {
@@ -33,7 +40,7 @@ async function getCampaignNameFromMessage(message: string): Promise<string | nul
     const promptForName = `O usuário disse: "${message}". Qual é o NOME da campanha que ele quer criar? Responda APENAS com o nome da campanha. Se não conseguir identificar um nome claro, responda "NOME_NAO_IDENTIFICADO".`;
     const result = await model.generateContent(promptForName);
     const campaignName = result.response.text().trim();
-    if (campaignName && campaignName !== "NOME_NAO_IDENTIFICADO" && campaignName.length > 0) {
+    if (campaignName && campaignName !== "NOME_NAO_IDENTIFICADO" && campaignName.length > 0 && campaignName.length < 256) { // Limitar tamanho do nome
       return campaignName;
     }
     return null;
@@ -43,20 +50,17 @@ async function getCampaignNameFromMessage(message: string): Promise<string | nul
   }
 }
 
-// COORDENADA 2: Função para extrair ID da campanha da mensagem
 async function getCampaignIdFromMessage(message: string): Promise<string | null> {
   if (!genAI) return null;
+  // Tentativa de Regex simples primeiro para IDs numéricos diretos
+  const idRegex = /(?:id|ID|número|numero)\s*[:=\s]*#?(\d+)/i;
+  const match = message.match(idRegex);
+  if (match && match[1]) {
+    return match[1];
+  }
   try {
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
-    // Tentativa de Regex simples primeiro para IDs numéricos diretos
-    const idRegex = /(?:id|ID|número)\s*[:=\s]*#?(\d+)/i;
-    const match = message.match(idRegex);
-    if (match && match[1]) {
-      return match[1];
-    }
-
-    // Se não encontrar por regex, tenta com Gemini
-    const promptForId = `O usuário disse: "${message}". Ele mencionou um ID ou número de campanha? Se sim, responda APENAS com o número do ID. Se não, responda "ID_NAO_IDENTIFICADO".`;
+    const promptForId = `O usuário disse: "${message}". Ele mencionou um ID ou NÚMERO de campanha? Se sim, responda APENAS com o número do ID. Se não, responda "ID_NAO_IDENTIFICADO".`;
     const result = await model.generateContent(promptForId);
     const campaignIdStr = result.response.text().trim();
     if (campaignIdStr && campaignIdStr !== "ID_NAO_IDENTIFICADO" && /^\d+$/.test(campaignIdStr)) {
@@ -69,8 +73,7 @@ async function getCampaignIdFromMessage(message: string): Promise<string | null>
   }
 }
 
-
-function formatCampaignDetailsForChat(campaign: Campaign): string { // Alterado para aceitar Campaign
+function formatCampaignDetailsForChat(campaign: Campaign): string {
   let details = `Detalhes da Campanha:
   - ID: ${campaign.id}
   - Nome: ${campaign.name}
@@ -81,15 +84,14 @@ function formatCampaignDetailsForChat(campaign: Campaign): string { // Alterado 
   return details;
 }
 
-
 export async function handleMCPConversation(
   userId: number,
   message: string,
   currentSessionId: number | null | undefined,
-  attachmentUrl?: string | null
-  // mcpPrevContext?: Record<string, any> // Contexto da conversa anterior, se quisermos persistir
+  attachmentUrl?: string | null,
+  mcpContextFromClient?: MCPContext | null // Contexto recebido do cliente
 ): Promise<MCPResponsePayload> {
-  console.log(`[MCP_HANDLER] User ${userId} disse: "${message || '[Anexo]'}" (Session: ${currentSessionId || 'Nova'})`);
+  console.log(`[MCP_HANDLER] User ${userId} disse: "${message || '[Anexo]'}" (Session: ${currentSessionId || 'Nova'}, Contexto Cliente: ${JSON.stringify(mcpContextFromClient)})`);
 
   let activeSession: ChatSession | undefined;
   if (currentSessionId) {
@@ -110,24 +112,35 @@ export async function handleMCPConversation(
 
   let agentReplyText: string;
   const responsePayload: Partial<MCPResponsePayload> = { sessionId: activeSession.id };
-  // let newMcpContext = { ...mcpPrevContext }; // Para gerenciar contexto entre turnos
+  let nextTurnContext: MCPContext | null = null; // Contexto a ser enviado de volta para o cliente
 
   if (genAI && message) {
     const intentModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
-    // COORDENADA 1: Prompt de intenção atualizado
-    const promptForIntent = `O usuário perguntou: "${message}".
-    Ele está pedindo para NAVEGAR para alguma seção da plataforma, para DETALHES de um item específico (como campanha por ID), OU para EXECUTAR ALGUMA AÇÃO como CRIAR algo?
-    Responda com um dos seguintes códigos de intenção:
-    - Rota de navegação geral (ex: /dashboard, /campaigns, /creatives)
-    - "navigate_to_campaign_detail" (se pedir para ver detalhes de uma campanha específica por nome ou ID)
-    - "create_campaign" (se for sobre criar campanha)
-    - "NÃO" (se não for nenhuma das anteriores).
+    
+    const contextHint = mcpContextFromClient?.lastCreatedCampaignId 
+        ? `Contexto: A última campanha criada/mencionada foi ID ${mcpContextFromClient.lastCreatedCampaignId}.` 
+        : mcpContextFromClient?.lastMentionedCampaignId
+        ? `Contexto: A última campanha visualizada/mencionada foi ID ${mcpContextFromClient.lastMentionedCampaignId}.`
+        : 'Contexto: Nenhum item específico em foco recente.';
+
+    const promptForIntent = `Considerando o seguinte:
+    Usuário disse: "${message}"
+    ${contextHint}
+    Qual a intenção principal? Responda APENAS com um dos seguintes códigos:
+    - Rota de navegação geral (ex: /dashboard, /campaigns)
+    - "navigate_to_campaign_detail_from_context" (se o usuário disser "me leve até lá", "abra ela", "veja essa campanha" E o contexto indicar um ID de campanha relevante)
+    - "navigate_to_campaign_detail_by_identifier" (se o usuário pedir detalhes de uma campanha específica por nome ou ID na mensagem ATUAL)
+    - "create_campaign"
+    - "NÃO" (para outros casos, incluindo perguntas genéricas)
+
     Exemplos:
-    - "Me leve para campanhas" -> /campaigns
-    - "Criar uma campanha chamada Fim de Ano" -> create_campaign
-    - "Quero ver os detalhes da campanha com ID 123" -> navigate_to_campaign_detail
-    - "Mostrar informações da campanha Marketing de Verão" -> navigate_to_campaign_detail
-    - "me leve ate la" OU "navegue ate la" -> NÃO (a menos que o contexto anterior seja claro, por enquanto trate como NÃO)
+    - (Contexto: Campanha ID 4 criada) Usuário disse: "me leve ate la" -> navigate_to_campaign_detail_from_context
+    - (Contexto: Campanha ID 5 visualizada) Usuário disse: "abra ela" -> navigate_to_campaign_detail_from_context
+    - (Contexto: Nenhum) Usuário disse: "me leve ate la" -> NÃO
+    - "Ver detalhes da campanha 5" -> navigate_to_campaign_detail_by_identifier
+    - "Mostrar informações da campanha Marketing de Verão" -> navigate_to_campaign_detail_by_identifier
+    - "Nova campanha Super Vendas" -> create_campaign
+    - "Ir para criativos" -> /creatives
     `;
 
     const intentResult = await intentModel.generateContent(promptForIntent);
@@ -138,34 +151,34 @@ export async function handleMCPConversation(
     ];
 
     if (validRoutes.includes(intentResponse)) {
-      console.log(`[MCP_HANDLER] Intenção de navegação GERAL detectada: ${intentResponse}`);
       agentReplyText = `Claro! Navegando para ${intentResponse.replace('/', '') || 'o Dashboard'}...`;
       responsePayload.action = "navigate";
       responsePayload.payload = intentResponse;
+      nextTurnContext = null; // Limpa contexto após navegação geral
     } else if (intentResponse === 'create_campaign') {
-      console.log(`[MCP_HANDLER] Intenção de CRIAR CAMPANHA detectada.`);
       const campaignName = await getCampaignNameFromMessage(message);
       if (campaignName) {
         try {
-          const newCampaignData: InsertCampaign = {
-            userId: userId, name: campaignName, status: 'draft', platforms: [], objectives: [],
-          };
+          const newCampaignData: InsertCampaign = { userId, name: campaignName, status: 'draft', platforms: [], objectives: [] };
           const createdCampaign = await storage.createCampaign(newCampaignData);
-          // delete newMcpContext?.lastAction; // Limpa contexto após ação
-          // newMcpContext = { ...newMcpContext, lastCreatedCampaignId: createdCampaign.id };
           agentReplyText = `Campanha "${createdCampaign.name}" (ID: ${createdCampaign.id}) criada com sucesso como rascunho!`;
           const campaignDetailsMessage = formatCampaignDetailsForChat(createdCampaign);
           await storage.addChatMessage({ sessionId: activeSession.id, sender: 'agent', text: agentReplyText });
           agentReplyText += `\n\n${campaignDetailsMessage}`;
+          nextTurnContext = { lastCreatedCampaignId: createdCampaign.id, lastMentionedCampaignId: createdCampaign.id };
         } catch (creationError: any) {
           agentReplyText = `Houve um problema ao tentar criar a campanha "${campaignName}". Detalhes: ${creationError.message || 'Erro desconhecido.'}`;
+          if (creationError instanceof ZodError) {
+             agentReplyText += ` Detalhes: ${creationError.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`;
+          }
+          nextTurnContext = null;
         }
       } else {
         agentReplyText = "Entendi que você quer criar uma nova campanha, mas não consegui identificar o nome. Poderia me dizer qual nome você gostaria de dar para a nova campanha?";
-        // newMcpContext = { ...newMcpContext, lastAction: 'prompt_campaign_name_for_creation' };
+        // Poderia setar um contexto para esperar o nome: nextTurnContext = { awaiting: 'campaign_name_for_creation' };
+        nextTurnContext = null; // Por ora, simplificamos.
       }
-    } else if (intentResponse === 'navigate_to_campaign_detail') { // COORDENADA 3: Lógica para navigate_to_campaign_detail
-      console.log(`[MCP_HANDLER] Intenção de NAVEGAR PARA DETALHES DA CAMPANHA detectada.`);
+    } else if (intentResponse === 'navigate_to_campaign_detail_by_identifier') {
       const campaignIdStr = await getCampaignIdFromMessage(message);
       if (campaignIdStr) {
         const campaignIdNum = parseInt(campaignIdStr);
@@ -173,49 +186,58 @@ export async function handleMCPConversation(
         if (campaign) {
           agentReplyText = `Ok, mostrando detalhes da campanha "${campaign.name}" (ID: ${campaign.id})...`;
           responsePayload.action = "navigate";
-          responsePayload.payload = `/campaigns/${campaign.id}`; // Assumindo que essa rota existirá no frontend
-          
-                          // Adicionar detalhes da campanha na resposta do chat também
+          responsePayload.payload = `/campaigns/${campaign.id}`;
           const campaignDetailsMessage = formatCampaignDetailsForChat(campaign);
           await storage.addChatMessage({ sessionId: activeSession.id, sender: 'agent', text: agentReplyText });
           agentReplyText += `\n\n${campaignDetailsMessage}`;
-
+          nextTurnContext = { lastMentionedCampaignId: campaign.id };
         } else {
           agentReplyText = `Não encontrei uma campanha com o ID "${campaignIdStr}" associada a você.`;
+          nextTurnContext = null;
         }
       } else {
-        // Se não conseguiu ID, poderia tentar extrair nome e buscar, mas por agora pede ID.
-        agentReplyText = "Não consegui identificar o ID da campanha. Por favor, forneça o ID numérico da campanha que você gostaria de ver.";
-        // newMcpContext = { ...newMcpContext, lastAction: 'prompt_campaign_id_for_navigation' };
+        agentReplyText = "Não consegui identificar o ID da campanha na sua mensagem. Por favor, forneça o ID numérico da campanha que você gostaria de ver.";
+        nextTurnContext = null;
       }
-    } else { // Resposta geral da IA
-      console.log(`[MCP_HANDLER] Nenhuma ação específica ou rota detectada ("${intentResponse}"). Usando IA geral.`);
-      // delete newMcpContext?.lastAction; 
+    } else if (intentResponse === 'navigate_to_campaign_detail_from_context') {
+      const campaignIdToNavigate = mcpContextFromClient?.lastCreatedCampaignId || mcpContextFromClient?.lastMentionedCampaignId;
+      if (campaignIdToNavigate) {
+        const campaign = await storage.getCampaign(campaignIdToNavigate, userId);
+        if(campaign) {
+            agentReplyText = `Entendido! Navegando para a campanha "${campaign.name}" (ID: ${campaignIdToNavigate})...`;
+            responsePayload.action = "navigate";
+            responsePayload.payload = `/campaigns/${campaignIdToNavigate}`;
+            nextTurnContext = { lastMentionedCampaignId: campaignIdToNavigate }; // Mantém como lastMentioned
+        } else {
+            agentReplyText = `Hmm, eu tinha um ID de campanha (${campaignIdToNavigate}) em mente, mas não consigo encontrá-la agora. Poderia especificar novamente?`;
+            nextTurnContext = null; // Limpa contexto se não encontrar
+        }
+      } else {
+        agentReplyText = "Desculpe, não entendi a qual campanha 'lá' você se refere. Poderia especificar o nome ou ID?";
+        nextTurnContext = null;
+      }
+    } else { // NÃO ou outra resposta não tratada -> Resposta geral da IA
+      console.log(`[MCP_HANDLER] Intenção não reconhecida ou "NÃO" ("${intentResponse}"). Usando IA geral.`);
+      nextTurnContext = null; // Limpa contexto para respostas gerais
       const model = genAI!.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
       const messagesFromDb: ChatMessage[] = await storage.getChatMessages(activeSession.id, userId);
       const historyForGemini = messagesFromDb.map(msg => ({
         role: msg.sender === 'user' ? 'user' : 'model',
         parts: [{ text: msg.text }]
       }));
-      const systemPrompt = { role: "user", parts: [{ text: "Você é o Agente MCP. Responda em Português do Brasil, de forma concisa e amigável." }] };
+      const systemPrompt = { role: "user", parts: [{ text: "Você é o Agente MCP. Responda em Português do Brasil, de forma concisa e amigável, ajudando com marketing digital e a plataforma." }] };
       const chat = model.startChat({
         history: [systemPrompt, ...historyForGemini.slice(0, -1)],
-         safetySettings: [
-            { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
-            // ...outras configurações de segurança
-          ],
+         safetySettings: [ /* ... */ ],
       });
       const result = await chat.sendMessage(message);
       agentReplyText = result.response.text();
     }
-  } else { // Sem Gemini ou sem mensagem de texto
-    agentReplyText = `Recebido: "${message || 'Anexo'}". ${!genAI ? 'O serviço de IA não está configurado.' : 'Por favor, envie uma mensagem de texto para interagir com as funcionalidades avançadas.'}`;
-    // delete newMcpContext?.lastAction;
+  } else {
+    agentReplyText = `Recebido: "${message || 'Anexo'}". ${!genAI ? 'O serviço de IA não está configurado.' : 'Por favor, envie uma mensagem de texto para interagir.'}`;
+    nextTurnContext = null;
   }
 
-  // Salva a resposta final do agente
-  // Se a resposta já foi parcialmente salva (ex: confirmação + detalhes), esta mensagem pode ser apenas a parte final ou a mensagem inteira.
-  // A lógica de formatCampaignDetailsForChat e como ela é adicionada a agentReplyText garante que os detalhes sejam incluídos.
   await storage.addChatMessage({
     sessionId: activeSession.id,
     sender: 'agent',
@@ -223,6 +245,6 @@ export async function handleMCPConversation(
   });
 
   responsePayload.reply = agentReplyText;
-  // responsePayload.mcpContext = newMcpContext; // Se estivéssemos retornando contexto para o cliente
+  responsePayload.mcpContextForNextTurn = nextTurnContext;
   return responsePayload as MCPResponsePayload;
 }
