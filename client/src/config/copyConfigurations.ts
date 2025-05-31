@@ -1,7 +1,6 @@
 // client/src/config/copyConfigurations.ts
 
 // Definição do tipo BaseGeneratorFormState para referência
-// Em um projeto maior, isso poderia vir de um arquivo de tipos compartilhado.
 export interface BaseGeneratorFormState {
   product: string;
   audience: string;
@@ -33,13 +32,6 @@ export interface CopyPurposeConfig {
   description?: string; // Descrição da finalidade da copy
   promptEnhancer?: (basePrompt: string, details: Record<string, any>, baseForm: BaseGeneratorFormState) => string;
 }
-
-// Campos placeholder para serem usados em finalidades não detalhadas ainda
-const placeholderFields: FieldDefinition[] = [
-  { name: 'mainPoint', label: 'Ponto Principal*', type: 'textarea', placeholder: 'Qual a mensagem chave para esta copy?', tooltip: 'Descreva o cerne da copy.', required: true },
-  { name: 'secondaryDetail', label: 'Detalhe Secundário', type: 'text', placeholder: 'Alguma informação complementar importante?', tooltip: 'Adicione um detalhe que enriqueça a copy.' },
-  { name: 'specificCTA', label: 'Chamada para Ação Específica', type: 'text', placeholder: 'Ex: "Saiba Mais Agora Mesmo!"', tooltip: 'Qual ação o usuário deve tomar ao final desta copy?', defaultValue: 'Veja Mais' }
-];
 
 export const allCopyPurposesConfig: CopyPurposeConfig[] = [
   // --- PRÉ-LANÇAMENTO ---
@@ -78,6 +70,20 @@ export const allCopyPurposesConfig: CopyPurposeConfig[] = [
     ],
   },
   {
+    key: 'prelaunch_ad_waitlist_vip',
+    label: 'Anúncio: Lista de Espera/VIP',
+    phase: 'pre_launch',
+    category: 'Anúncios (Pré-Lançamento)',
+    description: 'Crie anúncios para construir uma lista de espera ou grupo VIP, gerando antecipação para seu lançamento.',
+    fields: [
+      { name: 'productOrOfferNameVip', label: 'Nome do Produto/Oferta da Lista VIP *', type: 'text', placeholder: 'Ex: Acesso Antecipado ao Curso X', tooltip: 'Sobre qual produto/serviço é a lista de espera/VIP?', required: true },
+      { name: 'vipBenefits', label: 'Principais Benefícios de Entrar na Lista VIP (1 por linha) *', type: 'textarea', placeholder: 'Ex:\n- Desconto exclusivo no lançamento\n- Acesso a bônus secretos\n- Ser o primeiro a saber das novidades', tooltip: 'Quais vantagens os inscritos terão?', required: true },
+      { name: 'whatToExpectVip', label: 'O que os Membros VIP Receberão/Saberão Primeiro?', type: 'textarea', placeholder: 'Ex: Detalhes completos do curso, data oficial de lançamento, link de compra antecipada.', tooltip: 'Informe o que será comunicado ou oferecido primeiro aos membros.' },
+      { name: 'ctaForVipList', label: 'Chamada para Ação do Anúncio para Lista VIP *', type: 'text', placeholder: 'Ex: "Entre para a Lista VIP!" ou "Quero Acesso Antecipado!"', tooltip: 'Qual o CTA para o anúncio da lista?', required: true, defaultValue: 'Quero Ser VIP!' },
+      { name: 'senseOfExclusivity', label: 'Elemento de Exclusividade/Escassez (Opcional)', type: 'text', placeholder: 'Ex: Apenas 100 vagas no grupo VIP, Acesso limitado por 48h.', tooltip: 'Como criar um senso de oportunidade única?' },
+    ],
+  },
+  {
     key: 'prelaunch_email_welcome_confirmation',
     label: 'E-mail: Boas-vindas e Confirmação',
     phase: 'pre_launch',
@@ -93,8 +99,22 @@ export const allCopyPurposesConfig: CopyPurposeConfig[] = [
     ],
   },
   {
+    key: 'prelaunch_email_value_nurturing',
+    label: 'E-mail: Conteúdo de Valor (Aquecimento)',
+    phase: 'pre_launch',
+    category: 'E-mails (Pré-Lançamento)',
+    description: 'Escreva e-mails que entregam valor, educam e aquecem sua lista para o lançamento.',
+    fields: [
+      { name: 'emailSubject', label: 'Assunto do E-mail *', type: 'text', placeholder: 'Ex: O Segredo Nº1 para [Resolver Dor]', tooltip: 'Crie um assunto que gere curiosidade e abertura.', required: true },
+      { name: 'mainProblemAddressed', label: 'Principal Problema/Dor Abordado no E-mail *', type: 'text', placeholder: 'Ex: Falta de tempo para estudar, Dificuldade em economizar', tooltip: 'Qual dor específica este e-mail vai tocar?', required: true },
+      { name: 'coreContentValue', label: 'Conteúdo de Valor Principal do E-mail (Resumo) *', type: 'textarea', placeholder: 'Ex: Uma dica prática sobre X, Um insight sobre Y, Uma breve história que ensina Z.', tooltip: 'Qual a principal mensagem de valor que será entregue?', required: true },
+      { name: 'connectionToLaunch', label: 'Como este Conteúdo se Conecta ao Próximo Lançamento? (Opcional)', type: 'textarea', placeholder: 'Ex: Este é um dos pilares do nosso novo curso...', tooltip: 'Faça uma ponte sutil para o que está por vir, se aplicável.' },
+      { name: 'emailCTA', label: 'Chamada para Ação do E-mail (Opcional)', type: 'text', placeholder: 'Ex: "Responda este e-mail com sua dúvida", "Leia o artigo completo aqui"', tooltip: 'Qual ação você quer que o leitor tome após ler este e-mail de valor?' },
+    ],
+  },
+  {
     key: 'prelaunch_social_post_value_engagement',
-    label: 'Post Social: Conteúdo de Valor',
+    label: 'Post Social: Conteúdo de Valor (Educação/Engajamento)',
     phase: 'pre_launch',
     category: 'Posts Redes Sociais (Pré-Lançamento)',
     description: 'Elabore posts para redes sociais que eduquem e engajem sua audiência antes do lançamento.',
@@ -102,10 +122,38 @@ export const allCopyPurposesConfig: CopyPurposeConfig[] = [
       { name: 'postTopic', label: 'Tópico Central do Post *', type: 'text', placeholder: 'Ex: 3 Mitos sobre Investimentos', tooltip: 'Sobre qual assunto específico será o post?', required: true },
       { name: 'postFormatSuggestion', label: 'Formato Sugerido', type: 'select', options: [{value: 'carrossel', label: 'Carrossel'}, {value: 'reels_script', label: 'Roteiro Reels/TikTok'}, {value: 'imagem_unica_texto', label: 'Imagem Única com Texto Longo'}, {value: 'enquete_story', label: 'Enquete para Story'}], tooltip: 'Qual formato visual/de conteúdo é mais adequado?', defaultValue: 'carrossel'},
       { name: 'mainTeachingPoint', label: 'Principal Ensinamento/Dica *', type: 'textarea', placeholder: 'Ex: A importância de começar pequeno.', tooltip: 'Qual a mensagem chave ou lição que o público deve tirar?', required: true},
-      { name: 'supportingPoints', label: 'Pontos de Suporte (1 por linha)', type: 'textarea', placeholder: 'Ex:\n- Dica prática 1...\n- Exemplo real...', tooltip: 'Detalhes, exemplos ou passos que sustentam o ensinamento principal.'},
+      { name: 'supportingPoints', label: 'Pontos de Suporte/Detalhes (1 por linha)', type: 'textarea', placeholder: 'Ex:\n- Dica prática 1...\n- Exemplo real...', tooltip: 'Detalhes, exemplos ou passos que sustentam o ensinamento principal.'},
       { name: 'engagementPrompt', label: 'Chamada para Engajamento *', type: 'text', placeholder: 'Ex: "Qual sua maior dificuldade sobre X? Comenta aqui!"', tooltip: 'Como incentivar comentários, salvamentos, compartilhamentos?', required: true},
       { name: 'relevantHashtags', label: 'Hashtags Relevantes (,)', type: 'text', placeholder: '#dicasfinanceiras, #produtividade', tooltip: 'Sugestões de hashtags.'}
     ]
+  },
+  {
+    key: 'prelaunch_social_post_anticipation',
+    label: 'Post Social: Curiosidade/Antecipação',
+    phase: 'pre_launch',
+    category: 'Posts Redes Sociais (Pré-Lançamento)',
+    description: 'Gere expectativa com posts que aguçam a curiosidade sobre o que está por vir.',
+    fields: [
+      { name: 'teaserTopic', label: 'Tópico do Teaser/Antecipação *', type: 'text', placeholder: 'Ex: Algo novo chegando, Uma solução para X', tooltip: 'Sobre o que você quer gerar curiosidade?', required: true },
+      { name: 'curiosityHook', label: 'Gancho de Curiosidade Principal *', type: 'textarea', placeholder: 'Ex: "Você já imaginou se...? Em breve, uma novidade que vai mudar tudo."', tooltip: 'Qual frase ou pergunta vai prender a atenção e gerar especulação?', required: true },
+      { name: 'hintWithoutRevealing', label: 'Dica Sutil (Sem Revelar Tudo)', type: 'text', placeholder: 'Ex: "Prepare-se para simplificar Y", "Tem a ver com Z"', tooltip: 'Uma pequena pista do que se trata, mas sem entregar o jogo.' },
+      { name: 'anticipationCTA', label: 'Chamada para Ação de Antecipação', type: 'text', placeholder: 'Ex: "Fique de olho nos nossos stories!", "Ative as notificações!"', tooltip: 'O que você quer que o público faça para não perder a novidade?' },
+      { name: 'visualSuggestion', label: 'Sugestão de Imagem/Vídeo para o Post', type: 'text', placeholder: 'Ex: Imagem misteriosa com data, GIF animado com contagem regressiva', tooltip: 'Que tipo de visual acompanharia bem este post de antecipação?' },
+    ],
+  },
+  {
+    key: 'prelaunch_landing_page_title',
+    label: 'Página de Captura: Título Principal',
+    phase: 'pre_launch',
+    category: 'Página de Captura',
+    description: 'Desenvolva títulos (headlines) magnéticos para suas páginas de captura de leads.',
+    fields: [
+      { name: 'leadMagnetOrEventName', label: 'Nome da Isca Digital ou Evento da Página *', type: 'text', placeholder: 'Ex: E-book Gratuito, Webinar Exclusivo', tooltip: 'O que está sendo oferecido na página de captura?', required: true },
+      { name: 'mainBenefitForLead', label: 'Principal Benefício para o Lead ao se Inscrever *', type: 'textarea', placeholder: 'Ex: Descubra como triplicar suas vendas, Aprenda a investir do zero', tooltip: 'Qual a maior vantagem que o lead terá ao fornecer os dados?', required: true },
+      { name: 'targetAudienceFocusLp', label: 'Foco no Público-Alvo da Landing Page', type: 'text', placeholder: 'Ex: Para quem está cansado de X, Se você é Y...', tooltip: 'Como o título pode se conectar diretamente com o público-alvo?' },
+      { name: 'urgencyOrScarcityLp', label: 'Elemento de Urgência/Escassez (Opcional)', type: 'text', placeholder: 'Ex: Vagas limitadas, Bônus por tempo limitado', tooltip: 'Algum motivo para o lead se inscrever agora?' },
+      { name: 'keywordForSeoLp', label: 'Palavra-chave Principal (Opcional)', type: 'text', placeholder: 'Ex: "curso de marketing digital"', tooltip: 'Se houver uma palavra-chave importante para SEO, mencione-a.' },
+    ],
   },
   // --- LANÇAMENTO ---
   {
@@ -153,6 +201,41 @@ export const allCopyPurposesConfig: CopyPurposeConfig[] = [
       { name: 'senderSignature', label: 'Assinatura do E-mail *', type: 'text', placeholder: 'Ex: Abraços, João Silva', required: true},
     ]
   },
+  { key: 'launch_email_testimonial_proof', label: 'E-mail: Prova Social/Depoimentos', phase: 'launch', category: 'E-mails (Lançamento)', description: 'Use o poder da prova social com e-mails que destacam depoimentos de clientes.', fields: [
+      { name: 'productNameProof', label: 'Nome do Produto/Oferta *', type: 'text', required: true, tooltip: 'Qual produto/serviço os depoimentos se referem?' },
+      { name: 'testimonialHighlight', label: 'Destaque Principal do Depoimento *', type: 'textarea', placeholder: 'Ex: "Transformou minha forma de ver X", "Resultados em Y semanas"', tooltip: 'Qual a parte mais impactante do depoimento a ser usada?', required: true },
+      { name: 'customerNameOrProfile', label: 'Nome/Perfil do Cliente (Opcional)', type: 'text', placeholder: 'Ex: Maria S., Empreendedora Digital', tooltip: 'Como identificar quem deu o depoimento?' },
+      { name: 'linkToMoreTestimonials', label: 'Link para Mais Depoimentos (Opcional)', type: 'text', placeholder: 'Ex: Veja mais histórias de sucesso aqui...', tooltip: 'Se tiver uma página com mais provas sociais.' },
+  ]},
+  { key: 'launch_email_objection_handling', label: 'E-mail: Quebra de Objeções', phase: 'launch', category: 'E-mails (Lançamento)', description: 'Antecipe e responda às principais objeções dos seus leads por e-mail.', fields: [
+      { name: 'commonObjection', label: 'Objeção Comum a ser Quebrada *', type: 'text', placeholder: 'Ex: "Não tenho tempo", "É muito caro", "Será que funciona para mim?"', tooltip: 'Qual dúvida ou receio comum seu público tem?', required: true },
+      { name: 'counterArgumentSolution', label: 'Contra-argumento/Solução para a Objeção *', type: 'textarea', placeholder: 'Ex: "Nosso método economiza seu tempo...", "Compare o investimento com o retorno...", "Veja casos de sucesso de pessoas como você..."', tooltip: 'Como você pode tranquilizar o lead e mostrar o valor?', required: true },
+      { name: 'reiterateBenefit', label: 'Reafirmar Principal Benefício da Oferta', type: 'text', placeholder: 'Ex: Lembre-se, você vai alcançar X...', tooltip: 'Reforce a principal transformação ou resultado.' },
+  ]},
+  { key: 'launch_email_last_chance_24h', label: 'E-mail: Última Chance (24h)', phase: 'launch', category: 'E-mails (Lançamento)', description: 'Crie e-mails de urgência para as últimas 24 horas da sua oferta.', fields: [
+      { name: 'productNameLastChance', label: 'Nome do Produto/Oferta *', type: 'text', required: true, tooltip: 'Qual produto/serviço está com as inscrições encerrando?' },
+      { name: 'urgencyReason', label: 'Motivo da Urgência (Últimas 24h) *', type: 'text', placeholder: 'Ex: Carrinho fecha HOJE à meia-noite!', tooltip: 'Deixe claro que o tempo está acabando.', required: true },
+      { name: 'whatTheyWillLose', label: 'O que Perderão se Não Agirem Agora (FOMO) *', type: 'textarea', placeholder: 'Ex: Bônus exclusivos, Desconto especial de lançamento, A oportunidade de transformar X...', tooltip: 'Crie o medo de perder a oportunidade (Fear Of Missing Out).', required: true },
+      { name: 'finalCTA', label: 'Chamada para Ação Final e Direta *', type: 'text', placeholder: 'Ex: "Garanta sua vaga AGORA!", "Última chance de entrar!"', tooltip: 'Seja direto e incentive a ação imediata.', required: true },
+  ]},
+  { key: 'launch_email_cart_closing_soon', label: 'E-mail: Carrinho Fechando em Breve', phase: 'launch', category: 'E-mails (Lançamento)', description: 'Alerte sua lista que o carrinho de compras está prestes a fechar (ex: últimas horas).', fields: [
+      { name: 'productNameClosing', label: 'Nome do Produto/Oferta *', type: 'text', required: true, tooltip: 'Qual produto/serviço está com as inscrições quase encerrando?' },
+      { name: 'closingTimeframe', label: 'Tempo Restante Exato *', type: 'text', placeholder: 'Ex: "ÚLTIMAS 3 HORAS!", "Fecha em menos de 1 hora!"', tooltip: 'Especifique o tempo exato restante.', required: true },
+      { name: 'summaryOfOffer', label: 'Breve Resumo da Oferta e Benefício Principal', type: 'textarea', placeholder: 'Ex: Não perca a chance de [Benefício Principal] com o [Produto].', tooltip: 'Relembre rapidamente o valor da oferta.' },
+      { name: 'directLinkToPurchase', label: 'Link Direto para Compra/Inscrição *', type: 'text', placeholder: 'https://...', tooltip: 'Facilite o acesso final à página de checkout.', required: true },
+  ]},
+  { key: 'launch_social_post_product_demo', label: 'Post Social: Demonstração do Produto', phase: 'launch', category: 'Posts Redes Sociais (Lançamento)', description: 'Mostre seu produto em ação com posts de demonstração para redes sociais.', fields: [
+      { name: 'featureDemonstrated', label: 'Funcionalidade/Aspecto Demonstrado *', type: 'text', placeholder: 'Ex: Como usar o módulo X, Resultado da técnica Y', tooltip: 'O que especificamente será mostrado no post?', required: true },
+      { name: 'benefitOfFeature', label: 'Benefício Direto da Funcionalidade Demonstrada *', type: 'text', placeholder: 'Ex: Economize horas de trabalho, Crie Z em minutos', tooltip: 'Como isso ajuda o usuário na prática?', required: true },
+      { name: 'demoCTA', label: 'Chamada para Ação do Post de Demo', type: 'text', placeholder: 'Ex: "Veja como é fácil!", "Experimente você também!"', tooltip: 'O que você quer que o público sinta ou faça?' },
+      { name: 'visualSuggestionDemo', label: 'Sugestão de Visual (Vídeo Curto, GIF, Carrossel)', type: 'text', placeholder: 'Ex: Vídeo de tela mostrando o passo a passo.', tooltip: 'Qual formato visual seria ideal para esta demonstração?' },
+  ]},
+  { key: 'launch_social_post_live_qa', label: 'Post Social: Sessão de Q&A Ao Vivo', phase: 'launch', category: 'Posts Redes Sociais (Lançamento)', description: 'Promova e convide para sessões de Perguntas e Respostas ao vivo.', fields: [
+      { name: 'liveQATopic', label: 'Tópico Principal da Live de Q&A *', type: 'text', placeholder: 'Ex: Tirando todas as dúvidas sobre o Curso X', tooltip: 'Qual será o foco da sessão ao vivo?', required: true },
+      { name: 'liveDateTime', label: 'Data e Hora da Live *', type: 'text', placeholder: 'Ex: Amanhã, às 19h, no nosso Instagram', tooltip: 'Quando e onde acontecerá a live?', required: true },
+      { name: 'guestSpeaker', label: 'Convidado Especial (se houver)', type: 'text', placeholder: 'Ex: Com a participação de [Nome do Especialista]', tooltip: 'Haverá algum convidado na live?' },
+      { name: 'liveCTA', label: 'Chamada para Ação para a Live', type: 'text', placeholder: 'Ex: "Defina o lembrete!", "Envie suas perguntas antecipadamente!"', tooltip: 'O que você quer que o público faça?' },
+  ]},
   // --- PÓS-LANÇAMENTO ---
   {
     key: 'postlaunch_email_thank_you_non_buyers',
@@ -168,20 +251,26 @@ export const allCopyPurposesConfig: CopyPurposeConfig[] = [
       { name: 'feedbackRequestLink', label: 'Link para Pesquisa de Feedback (Opcional)', type: 'text', placeholder: 'Ex: https://forms.gle/suapesquisa', tooltip: 'Se for pedir feedback, coloque o link aqui.'},
     ],
   },
-  // Placeholders para outras finalidades - COMPLETE OS CAMPOS 'fields'
-  { key: 'prelaunch_ad_waitlist_vip', label: 'Anúncio: Lista de Espera/VIP', phase: 'pre_launch', category: 'Anúncios (Pré-Lançamento)', description: 'Crie anúncios para construir uma lista de espera ou grupo VIP antes do lançamento.', fields: placeholderFields },
-  { key: 'prelaunch_social_post_anticipation', label: 'Post Social: Curiosidade/Antecipação', phase: 'pre_launch', category: 'Posts Redes Sociais (Pré-Lançamento)', description: 'Gere expectativa com posts que aguçam a curiosidade sobre o que está por vir.', fields: placeholderFields },
-  { key: 'prelaunch_landing_page_title', label: 'Página de Captura: Título Principal', phase: 'pre_launch', category: 'Página de Captura', description: 'Desenvolva títulos magnéticos para suas páginas de captura de leads.', fields: placeholderFields },
-  { key: 'prelaunch_email_value_nurturing', label: 'E-mail: Conteúdo de Valor (Aquecimento)', phase: 'pre_launch', category: 'E-mails (Pré-Lançamento)', description: 'Escreva e-mails que entregam valor e aquecem sua lista para o lançamento.', fields: placeholderFields },
-  { key: 'launch_email_testimonial_proof', label: 'E-mail: Prova Social/Depoimentos', phase: 'launch', category: 'E-mails (Lançamento)', description: 'Use o poder da prova social com e-mails que destacam depoimentos de clientes.', fields: placeholderFields },
-  { key: 'launch_email_objection_handling', label: 'E-mail: Quebra de Objeções', phase: 'launch', category: 'E-mails (Lançamento)', description: 'Antecipe e responda às principais objeções dos seus leads por e-mail.', fields: placeholderFields },
-  { key: 'launch_email_last_chance_24h', label: 'E-mail: Última Chance (24h)', phase: 'launch', category: 'E-mails (Lançamento)', description: 'Crie e-mails de urgência para as últimas 24 horas da sua oferta.', fields: placeholderFields },
-  { key: 'launch_email_cart_closing_soon', label: 'E-mail: Carrinho Fechando em Breve', phase: 'launch', category: 'E-mails (Lançamento)', description: 'Alerte sua lista que o carrinho de compras está prestes a fechar.', fields: placeholderFields },
-  { key: 'launch_social_post_product_demo', label: 'Post Social: Demonstração do Produto', phase: 'launch', category: 'Posts Redes Sociais (Lançamento)', description: 'Mostre seu produto em ação com posts de demonstração para redes sociais.', fields: placeholderFields },
-  { key: 'launch_social_post_live_qa', label: 'Post Social: Sessão de Q&A Ao Vivo', phase: 'launch', category: 'Posts Redes Sociais (Lançamento)', description: 'Promova e convide para sessões de Perguntas e Respostas ao vivo.', fields: placeholderFields },
-  { key: 'postlaunch_email_survey_buyers', label: 'E-mail: Pesquisa de Satisfação (Compradores)', phase: 'post_launch', category: 'E-mails (Pós-Lançamento)', description: 'Colete feedback valioso dos seus novos clientes através de e-mails de pesquisa.', fields: placeholderFields },
-  { key: 'postlaunch_email_upsell_cross_sell', label: 'E-mail: Upsell/Cross-sell para Compradores', phase: 'post_launch', category: 'E-mails (Pós-Lançamento)', description: 'Apresente ofertas complementares para quem já comprou de você.', fields: placeholderFields },
-  { key: 'postlaunch_social_post_student_results', label: 'Post Social: Resultados de Alunos/Clientes', phase: 'post_launch', category: 'Posts Redes Sociais (Pós-Lançamento)', description: 'Compartilhe o sucesso dos seus clientes com posts de resultados e depoimentos.', fields: placeholderFields }
+  { key: 'postlaunch_email_survey_buyers', label: 'E-mail: Pesquisa de Satisfação (Compradores)', phase: 'post_launch', category: 'E-mails (Pós-Lançamento)', description: 'Colete feedback valioso dos seus novos clientes através de e-mails de pesquisa.', fields: [
+      { name: 'productPurchased', label: 'Produto/Serviço Comprado *', type: 'text', required: true, tooltip: 'Qual produto o cliente adquiriu?' },
+      { name: 'surveyPurpose', label: 'Principal Objetivo da Pesquisa *', type: 'text', placeholder: 'Ex: Melhorar o produto, Entender a experiência do cliente', tooltip: 'O que você quer descobrir com esta pesquisa?', required: true },
+      { name: 'linkToSurvey', label: 'Link para a Pesquisa *', type: 'text', placeholder: 'Ex: https://forms.gle/suapesquisa', tooltip: 'Onde o cliente pode responder?', required: true },
+      { name: 'incentiveForCompletion', label: 'Incentivo para Completar (Opcional)', type: 'text', placeholder: 'Ex: Concorra a um brinde, Cupom de desconto na próxima compra', tooltip: 'Algum benefício por responder?' },
+  ]},
+  { key: 'postlaunch_email_upsell_cross_sell', label: 'E-mail: Upsell/Cross-sell para Compradores', phase: 'post_launch', category: 'E-mails (Pós-Lançamento)', description: 'Apresente ofertas complementares para quem já comprou de você.', fields: [
+      { name: 'originalProductPurchased', label: 'Produto Original Comprado *', type: 'text', required: true, tooltip: 'Qual produto o cliente já comprou?' },
+      { name: 'upsellProductName', label: 'Nome do Produto de Upsell/Cross-sell *', type: 'text', required: true, tooltip: 'Qual o próximo produto a ser oferecido?' },
+      { name: 'upsellBenefitConnection', label: 'Benefício do Upsell e Conexão com Compra Anterior *', type: 'textarea', placeholder: 'Ex: "Como você adorou X, vai amar Y que complementa...", "Leve seus resultados para o próximo nível com Z"', tooltip: 'Como o novo produto melhora ou complementa a experiência anterior?', required: true },
+      { name: 'upsellSpecialOffer', label: 'Oferta Especial para o Upsell (Opcional)', type: 'text', placeholder: 'Ex: Desconto exclusivo para clientes, Bônus adicional', tooltip: 'Alguma condição especial para esta oferta?' },
+      { name: 'linkToUpsellOffer', label: 'Link para a Oferta de Upsell *', type: 'text', placeholder: 'https://...', tooltip: 'Onde o cliente pode ver e adquirir a nova oferta?', required: true },
+  ]},
+  { key: 'postlaunch_social_post_student_results', label: 'Post Social: Resultados de Alunos/Clientes', phase: 'post_launch', category: 'Posts Redes Sociais (Pós-Lançamento)', description: 'Compartilhe o sucesso dos seus clientes com posts de resultados e depoimentos.', fields: [
+      { name: 'customerNameOrInitials', label: 'Nome/Iniciais do Cliente (com permissão) *', type: 'text', placeholder: 'Ex: Maria S., J.P.', tooltip: 'Identificação do cliente que obteve o resultado.', required: true },
+      { name: 'resultAchieved', label: 'Principal Resultado Alcançado pelo Cliente *', type: 'textarea', placeholder: 'Ex: "Aumentou as vendas em 50%", "Conseguiu economizar R$500 por mês"', tooltip: 'Qual foi a conquista específica do cliente?', required: true },
+      { name: 'productUsed', label: 'Produto/Serviço Utilizado para Alcançar o Resultado', type: 'text', placeholder: 'Ex: Curso de Finanças Pessoais', tooltip: 'Qual dos seus produtos/serviços ajudou o cliente?' },
+      { name: 'testimonialQuote', label: 'Citação Curta do Depoimento (Opcional)', type: 'text', placeholder: 'Ex: "Este curso mudou minha vida!"', tooltip: 'Uma frase impactante do cliente.' },
+      { name: 'callToActionRelated', label: 'Chamada para Ação Relacionada', type: 'text', placeholder: 'Ex: "Quer resultados assim? Conheça nosso método!", "Inspire-se e comece sua jornada!"', tooltip: 'Como conectar este resultado a uma ação do público?' },
+  ]}
 ];
 
 // Schemas da IA (se não forem importados de outro lugar)
