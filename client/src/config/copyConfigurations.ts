@@ -1,7 +1,6 @@
 // client/src/config/copyConfigurations.ts
-import type { BaseGeneratorFormState, SpecificPurposeData } from '@/pages/CopyPage'; // Supondo que CopyPage exporte estes tipos ou eles sejam movidos para cá/shared
+import type { BaseGeneratorFormState } from '@/pages/CopyPage'; // Ajuste o caminho se BaseGeneratorFormState for exportado de CopyPage
 
-// Tipos definidos conforme sua especificação
 export type LaunchPhase = 'pre_launch' | 'launch' | 'post_launch';
 
 export interface FieldDefinition {
@@ -14,7 +13,7 @@ export interface FieldDefinition {
   options?: Array<{ value: string; label: string }>;
   defaultValue?: string | number | boolean;
   dependsOn?: string;
-  showIf?: (formData: Record<string, any>, baseData: BaseGeneratorFormState) => boolean;
+  showIf?: (formData: Record<string, any>, baseData?: BaseGeneratorFormState) => boolean;
 }
 
 export interface CopyPurposeConfig {
@@ -23,10 +22,19 @@ export interface CopyPurposeConfig {
   phase: LaunchPhase;
   fields: FieldDefinition[];
   category: string;
-  promptEnhancer?: (basePrompt: string, details: SpecificPurposeData, baseForm: BaseGeneratorFormState) => string;
+  // promptEnhancer pode ser usado no backend se você quiser customizar prompts lá
+  promptEnhancer?: (basePrompt: string, details: Record<string, any>, baseForm: BaseGeneratorFormState) => string;
 }
 
-// Definição da configuração (use a lista completa que você forneceu)
+// Definição da configuração (use a lista completa que você forneceu em seu prompt anterior)
+// Incluí os exemplos que você detalhou e placeholders para os demais.
+// VOCÊ DEVE COMPLETAR OS CAMPOS 'fields' PARA CADA 'placeholderFields'.
+const placeholderFields: FieldDefinition[] = [
+  { name: 'mainPoint', label: 'Ponto Principal*', type: 'textarea', placeholder: 'Qual a mensagem chave para esta copy?', tooltip: 'Descreva o cerne da copy.', required: true },
+  { name: 'secondaryDetail', label: 'Detalhe Secundário', type: 'text', placeholder: 'Alguma informação complementar importante?', tooltip: 'Adicione um detalhe que enriqueça a copy.' },
+  { name: 'specificCTA', label: 'Chamada para Ação Específica', type: 'text', placeholder: 'Ex: "Clique e descubra!"', tooltip: 'Qual ação o usuário deve tomar ao final desta copy?', defaultValue: 'Saiba Mais' }
+];
+
 export const allCopyPurposesConfig: CopyPurposeConfig[] = [
   // --- PRÉ-LANÇAMENTO ---
   {
@@ -55,9 +63,9 @@ export const allCopyPurposesConfig: CopyPurposeConfig[] = [
     fields: [
       { name: 'leadMagnetTitle', label: 'Título do Material Rico *', type: 'text', placeholder: 'Ex: Guia Completo: 5 Passos Para Organizar Suas Finanças', tooltip: 'O nome chamativo do seu e-book, checklist, template, etc.', required: true },
       { name: 'leadMagnetFormat', label: 'Formato do Material Rico', type: 'text', placeholder: 'Ex: E-book em PDF com 30 páginas', tooltip: 'Qual o formato prático do material?', defaultValue: 'E-book PDF' },
-      { name: 'leadMagnetBenefit', label: 'Principal Benefício/Problema que Resolve *', type: 'textarea', placeholder: 'Ex: Aprenda a sair das dívidas e começar a investir em 30 dias.', tooltip: 'Qual a grande vantagem ou solução que o material oferece?', required: true },
-      { name: 'leadMagnetContentTeaser', label: 'Conteúdo Resumido/Destaques (1 por linha)', type: 'textarea', placeholder: 'Ex:\n- Checklist para controle de gastos\n- Planilha de orçamento mensal', tooltip: 'O que a pessoa encontrará de mais valioso dentro do material?'},
-      { name: 'targetAudienceForMagnet', label: 'Público Ideal para este Material', type: 'text', placeholder: 'Ex: Pessoas que se sentem perdidas com suas finanças.', tooltip: 'Para quem este material é mais indicado?'},
+      { name: 'leadMagnetBenefit', label: 'Principal Benefício/Problema que Resolve *', type: 'textarea', placeholder: 'Ex: Aprenda a sair das dívidas e começar a investir em 30 dias com este guia prático.', tooltip: 'Qual a grande vantagem ou solução que o material oferece?', required: true },
+      { name: 'leadMagnetContentTeaser', label: 'Conteúdo Resumido/Destaques (1 por linha)', type: 'textarea', placeholder: 'Ex:\n- Checklist para controle de gastos\n- Planilha de orçamento mensal pronta para usar', tooltip: 'O que a pessoa encontrará de mais valioso dentro do material?'},
+      { name: 'targetAudienceForMagnet', label: 'Público Ideal para este Material', type: 'text', placeholder: 'Ex: Pessoas que se sentem perdidas com suas finanças pessoais.', tooltip: 'Para quem este material é mais indicado?'},
       { name: 'leadMagnetCTA', label: 'Chamada para Ação do Anúncio *', type: 'text', placeholder: 'Ex: "Baixe seu guia gratuito agora!"', tooltip: 'O que você quer que a pessoa faça?', required: true, defaultValue: 'Download Gratuito!' },
     ],
   },
@@ -146,12 +154,24 @@ export const allCopyPurposesConfig: CopyPurposeConfig[] = [
       { name: 'feedbackRequestLink', label: 'Link para Pesquisa de Feedback (Opcional)', type: 'text', placeholder: 'Ex: https://forms.gle/suapesquisa', tooltip: 'Se for pedir feedback, coloque o link aqui.'},
     ],
   },
-  // Placeholder para outras finalidades que você mencionou.
-  // VOCÊ DEVE COMPLETAR OS CAMPOS ('fields') PARA CADA UM DESTES!
-  { key: 'prelaunch_ad_waitlist_vip', label: 'Anúncio: Lista de Espera/VIP', phase: 'pre_launch', category: 'Anúncios (Pré-Lançamento)', fields: [ { name: 'productName', label: 'Nome do Produto/Serviço Futuro*', type: 'text', tooltip: 'Qual produto ou serviço será lançado?', required: true}, { name: 'mainBenefitVip', label: 'Principal Benefício de Entrar na Lista VIP*', type: 'textarea', tooltip: 'Ex: Acesso antecipado, desconto especial, bônus exclusivo.', required: true}, { name: 'ctaVip', label: 'CTA para Lista VIP*', type: 'text', defaultValue: 'Entre para a Lista VIP', tooltip: 'Chamada para ação.', required: true} ] },
-  { key: 'prelaunch_social_post_anticipation', label: 'Post Social: Curiosidade/Antecipação', phase: 'pre_launch', category: 'Posts Redes Sociais (Pré-Lançamento)', fields: [ { name: 'teaserSubject', label: 'Assunto do Teaser*', type: 'text', tooltip: 'Sobre o que é a antecipação (sem revelar tudo)?', required: true}, { name: 'curiosityHook', label: 'Gancho de Curiosidade*', type: 'textarea', tooltip: 'Uma pergunta ou afirmação que instigue a curiosidade.', required: true}, { name: 'revealHint', label: 'Dica do que está por vir (opcional)', type: 'text', tooltip: 'Ex: "Algo grande chega semana que vem!"'}, { name: 'engagementQuestion', label: 'Pergunta para Engajamento*', type: 'text', tooltip: 'Ex: "O que você acha que é?"', required: true} ] },
-  { key: 'prelaunch_landing_page_title', label: 'Página de Captura: Título Principal', phase: 'pre_launch', category: 'Página de Captura', fields: [ { name: 'mainOffer', label: 'Oferta Principal da Página (Evento/Material) *', type: 'text', tooltip: 'Ex: Webinar Gratuito, E-book Exclusivo', required: true}, { name: 'targetAudiencePainSpecific', label: 'Dor Específica que a Oferta Resolve*', type: 'text', tooltip: 'Qual problema pontual do público a oferta resolve?', required: true}, { name: 'bigPromise', label: 'Grande Promessa do Título*', type: 'textarea', tooltip: 'O resultado mais impactante prometido no título.', required: true} ] },
-  { key: 'prelaunch_email_value_nurturing', label: 'E-mail: Conteúdo de Valor (Aquecimento)', phase: 'pre_launch', category: 'E-mails (Pré-Lançamento)', fields: [ { name: 'contentTopic', label: 'Tópico do Conteúdo de Valor*', type: 'text', tooltip: 'Sobre qual assunto útil você vai falar?', required: true}, { name: 'keyInsight', label: 'Principal Insight/Dica do E-mail*', type: 'textarea', tooltip: 'Qual a informação mais valiosa que o lead vai aprender?', required: true}, { name: 'connectionToLaunch', label: 'Conexão com o Próximo Lançamento/Evento (sutil)', type: 'text', tooltip: 'Como este conteúdo se conecta com o que está por vir?'}, { name: 'softCTA', label: 'Chamada para Ação Suave (opcional)', type: 'text', placeholder: 'Ex: Responda este email com sua dúvida', tooltip: 'Ex: Responder ao email, ler um artigo.'} ] },
-  { key: 'launch_email_testimonial_proof', label: 'E-mail: Prova Social/Depoimentos', phase: 'launch', category: 'E-mails (Lançamento)', fields: [ { name: 'productNameForTestimonial', label: 'Nome do Produto/Oferta *', type: 'text', tooltip: 'Produto que está sendo vendido.', required: true}, { name: 'testimonialSource1', label: 'Fonte do Depoimento 1 (Nome, @)', type: 'text', tooltip: 'Quem deu o depoimento?'}, { name: 'testimonialText1', label: 'Texto do Depoimento 1*', type: 'textarea', tooltip: 'O depoimento em si.', required: true}, { name: 'testimonialSource2', label: 'Fonte do Depoimento 2 (Opcional)', type: 'text'}, { name: 'testimonialText2', label: 'Texto do Depoimento 2 (Opcional)', type: 'textarea'} ] },
-  // ... e assim por diante para todas as outras finalidades.
+  // Exemplos de placeholders - VOCÊ PRECISA COMPLETAR OS 'fields'
+  { key: 'prelaunch_ad_waitlist_vip', label: 'Anúncio: Lista de Espera/VIP', phase: 'pre_launch', category: 'Anúncios (Pré-Lançamento)', fields: placeholderFields },
+  { key: 'prelaunch_social_post_anticipation', label: 'Post Social: Curiosidade/Antecipação', phase: 'pre_launch', category: 'Posts Redes Sociais (Pré-Lançamento)', fields: placeholderFields },
+  { key: 'prelaunch_landing_page_title', label: 'Página de Captura: Título Principal', phase: 'pre_launch', category: 'Página de Captura', fields: placeholderFields },
+  { key: 'prelaunch_email_value_nurturing', label: 'E-mail: Conteúdo de Valor (Aquecimento)', phase: 'pre_launch', category: 'E-mails (Pré-Lançamento)', fields: placeholderFields },
+  { key: 'launch_email_testimonial_proof', label: 'E-mail: Prova Social/Depoimentos', phase: 'launch', category: 'E-mails (Lançamento)', fields: placeholderFields },
+  { key: 'launch_email_objection_handling', label: 'E-mail: Quebra de Objeções', phase: 'launch', category: 'E-mails (Lançamento)', fields: placeholderFields },
+  { key: 'launch_email_last_chance_24h', label: 'E-mail: Última Chance (24h)', phase: 'launch', category: 'E-mails (Lançamento)', fields: placeholderFields },
+  { key: 'launch_email_cart_closing_soon', label: 'E-mail: Carrinho Fechando em Breve', phase: 'launch', category: 'E-mails (Lançamento)', fields: placeholderFields },
+  { key: 'launch_social_post_product_demo', label: 'Post Social: Demonstração do Produto', phase: 'launch', category: 'Posts Redes Sociais (Lançamento)', fields: placeholderFields },
+  { key: 'launch_social_post_live_qa', label: 'Post Social: Sessão de Q&A Ao Vivo', phase: 'launch', category: 'Posts Redes Sociais (Lançamento)', fields: placeholderFields },
+  { key: 'postlaunch_email_survey_buyers', label: 'E-mail: Pesquisa de Satisfação (Compradores)', phase: 'post_launch', category: 'E-mails (Pós-Lançamento)', fields: placeholderFields },
+  { key: 'postlaunch_email_upsell_cross_sell', label: 'E-mail: Upsell/Cross-sell para Compradores', phase: 'post_launch', category: 'E-mails (Pós-Lançamento)', fields: placeholderFields },
+  { key: 'postlaunch_social_post_student_results', label: 'Post Social: Resultados de Alunos/Clientes', phase: 'post_launch', category: 'Posts Redes Sociais (Pós-Lançamento)', fields: placeholderFields }
 ];
+
+// É importante exportar tipos que CopyPage.tsx usará se eles não estiverem em shared/schema.ts
+// ou se forem específicos para esta configuração.
+// No caso de BaseGeneratorFormState, ele é usado em CopyPage.tsx.
+// Para simplificar, CopyPage.tsx pode definir seus próprios tipos locais ou importá-los daqui.
+// Vou assumir que CopyPage.tsx definirá ou importará BaseGeneratorFormState etc.
