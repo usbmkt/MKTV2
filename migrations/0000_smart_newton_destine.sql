@@ -1,30 +1,50 @@
-CREATE TYPE "public"."campaign_status" AS ENUM('active', 'paused', 'completed', 'draft');--> statement-breakpoint
-CREATE TYPE "public"."chat_sender" AS ENUM('user', 'agent');--> statement-breakpoint
-CREATE TYPE "public"."launch_phase" AS ENUM('pre_launch', 'launch', 'post_launch');--> statement-breakpoint
-CREATE TABLE "alerts" (
+-- Tipos ENUM (idempotentes)
+DO $$ BEGIN
+    CREATE TYPE "public"."campaign_status" AS ENUM('active', 'paused', 'completed', 'draft');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+
+DO $$ BEGIN
+    CREATE TYPE "public"."chat_sender" AS ENUM('user', 'agent');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+
+DO $$ BEGIN
+    CREATE TYPE "public"."launch_phase" AS ENUM('pre_launch', 'launch', 'post_launch');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+
+-- Tabelas (idempotentes)
+CREATE TABLE IF NOT EXISTS "alerts" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" integer NOT NULL,
 	"campaign_id" integer,
-	"type" text NOT NULL,
+	"type" text NOT NULL, -- Se este 'type' tiver um conjunto fixo de valores, considere usar um ENUM aqui também.
 	"title" text NOT NULL,
 	"message" text NOT NULL,
 	"is_read" boolean DEFAULT false NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "budgets" (
+CREATE TABLE IF NOT EXISTS "budgets" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" integer NOT NULL,
 	"campaign_id" integer,
 	"total_budget" numeric(10, 2) NOT NULL,
 	"spent_amount" numeric(10, 2) DEFAULT '0' NOT NULL,
-	"period" text NOT NULL,
+	"period" text NOT NULL, -- Considere ENUM se os valores forem fixos
 	"start_date" timestamp with time zone NOT NULL,
 	"end_date" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "campaigns" (
+CREATE TABLE IF NOT EXISTS "campaigns" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" integer NOT NULL,
 	"name" text NOT NULL,
@@ -43,7 +63,7 @@ CREATE TABLE "campaigns" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "chat_messages" (
+CREATE TABLE IF NOT EXISTS "chat_messages" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"session_id" integer NOT NULL,
 	"sender" "chat_sender" NOT NULL,
@@ -52,7 +72,7 @@ CREATE TABLE "chat_messages" (
 	"timestamp" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "chat_sessions" (
+CREATE TABLE IF NOT EXISTS "chat_sessions" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" integer NOT NULL,
 	"title" text DEFAULT 'Nova Conversa' NOT NULL,
@@ -60,7 +80,8 @@ CREATE TABLE "chat_sessions" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "copies" (
+-- Tabela COPIES ATUALIZADA conforme seu último schema.ts
+CREATE TABLE IF NOT EXISTS "copies" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" integer NOT NULL,
 	"campaign_id" integer,
@@ -78,22 +99,22 @@ CREATE TABLE "copies" (
 	"last_updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "creatives" (
+CREATE TABLE IF NOT EXISTS "creatives" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" integer NOT NULL,
 	"campaign_id" integer,
 	"name" text NOT NULL,
-	"type" text NOT NULL,
+	"type" text NOT NULL, -- Considere ENUM
 	"file_url" text,
 	"content" text,
-	"status" text DEFAULT 'pending' NOT NULL,
+	"status" text DEFAULT 'pending' NOT NULL, -- Considere ENUM
 	"platforms" jsonb DEFAULT '[]'::jsonb NOT NULL,
 	"thumbnail_url" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "funnel_stages" (
+CREATE TABLE IF NOT EXISTS "funnel_stages" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"funnel_id" integer NOT NULL,
 	"name" text NOT NULL,
@@ -104,7 +125,7 @@ CREATE TABLE "funnel_stages" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "funnels" (
+CREATE TABLE IF NOT EXISTS "funnels" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" integer NOT NULL,
 	"campaign_id" integer,
@@ -114,7 +135,7 @@ CREATE TABLE "funnels" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "landing_pages" (
+CREATE TABLE IF NOT EXISTS "landing_pages" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" integer NOT NULL,
 	"name" text NOT NULL,
@@ -122,16 +143,19 @@ CREATE TABLE "landing_pages" (
 	"slug" varchar(255) NOT NULL,
 	"description" text,
 	"grapes_js_data" jsonb,
-	"status" text DEFAULT 'draft' NOT NULL,
+	"status" text DEFAULT 'draft' NOT NULL, -- Considere ENUM
 	"public_url" text,
 	"published_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "landing_pages_studio_project_id_unique" UNIQUE("studio_project_id"),
-	CONSTRAINT "landing_pages_slug_unique" UNIQUE("slug")
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+	-- Constraints UNIQUE são problemáticas com IF NOT EXISTS na tabela.
+	-- Seria melhor adicioná-las com ALTER TABLE condicional se a tabela já existir.
+	-- Por ora, se a tabela não existir, elas serão criadas. Se existir, pode dar erro se elas já não existirem.
+	-- CONSTRAINT "landing_pages_studio_project_id_unique" UNIQUE("studio_project_id"),
+	-- CONSTRAINT "landing_pages_slug_unique" UNIQUE("slug")
 );
 --> statement-breakpoint
-CREATE TABLE "metrics" (
+CREATE TABLE IF NOT EXISTS "metrics" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"campaign_id" integer NOT NULL,
 	"user_id" integer NOT NULL,
@@ -145,43 +169,68 @@ CREATE TABLE "metrics" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "users" (
+CREATE TABLE IF NOT EXISTS "users" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"username" text NOT NULL,
 	"email" text NOT NULL,
 	"password" text NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "users_username_unique" UNIQUE("username"),
-	CONSTRAINT "users_email_unique" UNIQUE("email")
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+	-- CONSTRAINT "users_username_unique" UNIQUE("username"),
+	-- CONSTRAINT "users_email_unique" UNIQUE("email")
 );
 --> statement-breakpoint
-CREATE TABLE "whatsapp_messages" (
+CREATE TABLE IF NOT EXISTS "whatsapp_messages" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" integer NOT NULL,
 	"contact_number" text NOT NULL,
 	"contact_name" text,
 	"message" text NOT NULL,
-	"direction" text NOT NULL,
+	"direction" text NOT NULL, -- Considere ENUM
 	"timestamp" timestamp with time zone DEFAULT now() NOT NULL,
 	"is_read" boolean DEFAULT false NOT NULL
 );
 --> statement-breakpoint
-ALTER TABLE "alerts" ADD CONSTRAINT "alerts_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "alerts" ADD CONSTRAINT "alerts_campaign_id_campaigns_id_fk" FOREIGN KEY ("campaign_id") REFERENCES "public"."campaigns"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "budgets" ADD CONSTRAINT "budgets_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "budgets" ADD CONSTRAINT "budgets_campaign_id_campaigns_id_fk" FOREIGN KEY ("campaign_id") REFERENCES "public"."campaigns"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "campaigns" ADD CONSTRAINT "campaigns_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "chat_messages" ADD CONSTRAINT "chat_messages_session_id_chat_sessions_id_fk" FOREIGN KEY ("session_id") REFERENCES "public"."chat_sessions"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "chat_sessions" ADD CONSTRAINT "chat_sessions_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "copies" ADD CONSTRAINT "copies_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "copies" ADD CONSTRAINT "copies_campaign_id_campaigns_id_fk" FOREIGN KEY ("campaign_id") REFERENCES "public"."campaigns"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "creatives" ADD CONSTRAINT "creatives_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "creatives" ADD CONSTRAINT "creatives_campaign_id_campaigns_id_fk" FOREIGN KEY ("campaign_id") REFERENCES "public"."campaigns"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "funnel_stages" ADD CONSTRAINT "funnel_stages_funnel_id_funnels_id_fk" FOREIGN KEY ("funnel_id") REFERENCES "public"."funnels"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "funnels" ADD CONSTRAINT "funnels_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "funnels" ADD CONSTRAINT "funnels_campaign_id_campaigns_id_fk" FOREIGN KEY ("campaign_id") REFERENCES "public"."campaigns"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "landing_pages" ADD CONSTRAINT "landing_pages_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "metrics" ADD CONSTRAINT "metrics_campaign_id_campaigns_id_fk" FOREIGN KEY ("campaign_id") REFERENCES "public"."campaigns"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "metrics" ADD CONSTRAINT "metrics_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "whatsapp_messages" ADD CONSTRAINT "whatsapp_messages_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+
+-- Adicionar constraints UNIQUE separadamente e condicionalmente
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'landing_pages') AND
+       NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'landing_pages_studio_project_id_unique' AND conrelid = 'public.landing_pages'::regclass) THEN
+        ALTER TABLE "public"."landing_pages" ADD CONSTRAINT "landing_pages_studio_project_id_unique" UNIQUE("studio_project_id");
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'landing_pages') AND
+       NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'landing_pages_slug_unique' AND conrelid = 'public.landing_pages'::regclass) THEN
+        ALTER TABLE "public"."landing_pages" ADD CONSTRAINT "landing_pages_slug_unique" UNIQUE("slug");
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'users') AND
+       NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'users_username_unique' AND conrelid = 'public.users'::regclass) THEN
+        ALTER TABLE "public"."users" ADD CONSTRAINT "users_username_unique" UNIQUE("username");
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'users') AND
+       NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'users_email_unique' AND conrelid = 'public.users'::regclass) THEN
+        ALTER TABLE "public"."users" ADD CONSTRAINT "users_email_unique" UNIQUE("email");
+    END IF;
+END;
+$$;
+--> statement-breakpoint
+
+-- Constraints de Chave Estrangeira (idempotentes)
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'alerts_user_id_users_id_fk' AND conrelid = 'public.alerts'::regclass) THEN ALTER TABLE "public"."alerts" ADD CONSTRAINT "alerts_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action; END IF; END; $$; --> statement-breakpoint
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'alerts_campaign_id_campaigns_id_fk' AND conrelid = 'public.alerts'::regclass) THEN ALTER TABLE "public"."alerts" ADD CONSTRAINT "alerts_campaign_id_campaigns_id_fk" FOREIGN KEY ("campaign_id") REFERENCES "public"."campaigns"("id") ON DELETE set null ON UPDATE no action; END IF; END; $$; --> statement-breakpoint
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'budgets_user_id_users_id_fk' AND conrelid = 'public.budgets'::regclass) THEN ALTER TABLE "public"."budgets" ADD CONSTRAINT "budgets_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action; END IF; END; $$; --> statement-breakpoint
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'budgets_campaign_id_campaigns_id_fk' AND conrelid = 'public.budgets'::regclass) THEN ALTER TABLE "public"."budgets" ADD CONSTRAINT "budgets_campaign_id_campaigns_id_fk" FOREIGN KEY ("campaign_id") REFERENCES "public"."campaigns"("id") ON DELETE cascade ON UPDATE no action; END IF; END; $$; --> statement-breakpoint
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'campaigns_user_id_users_id_fk' AND conrelid = 'public.campaigns'::regclass) THEN ALTER TABLE "public"."campaigns" ADD CONSTRAINT "campaigns_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action; END IF; END; $$; --> statement-breakpoint
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chat_messages_session_id_chat_sessions_id_fk' AND conrelid = 'public.chat_messages'::regclass) THEN ALTER TABLE "public"."chat_messages" ADD CONSTRAINT "chat_messages_session_id_chat_sessions_id_fk" FOREIGN KEY ("session_id") REFERENCES "public"."chat_sessions"("id") ON DELETE cascade ON UPDATE no action; END IF; END; $$; --> statement-breakpoint
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chat_sessions_user_id_users_id_fk' AND conrelid = 'public.chat_sessions'::regclass) THEN ALTER TABLE "public"."chat_sessions" ADD CONSTRAINT "chat_sessions_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action; END IF; END; $$; --> statement-breakpoint
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'copies_user_id_users_id_fk' AND conrelid = 'public.copies'::regclass) THEN ALTER TABLE "public"."copies" ADD CONSTRAINT "copies_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action; END IF; END; $$; --> statement-breakpoint
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'copies_campaign_id_campaigns_id_fk' AND conrelid = 'public.copies'::regclass) THEN ALTER TABLE "public"."copies" ADD CONSTRAINT "copies_campaign_id_campaigns_id_fk" FOREIGN KEY ("campaign_id") REFERENCES "public"."campaigns"("id") ON DELETE set null ON UPDATE no action; END IF; END; $$; --> statement-breakpoint
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'creatives_user_id_users_id_fk' AND conrelid = 'public.creatives'::regclass) THEN ALTER TABLE "public"."creatives" ADD CONSTRAINT "creatives_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action; END IF; END; $$; --> statement-breakpoint
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'creatives_campaign_id_campaigns_id_fk' AND conrelid = 'public.creatives'::regclass) THEN ALTER TABLE "public"."creatives" ADD CONSTRAINT "creatives_campaign_id_campaigns_id_fk" FOREIGN KEY ("campaign_id") REFERENCES "public"."campaigns"("id") ON DELETE set null ON UPDATE no action; END IF; END; $$; --> statement-breakpoint
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'funnel_stages_funnel_id_funnels_id_fk' AND conrelid = 'public.funnel_stages'::regclass) THEN ALTER TABLE "public"."funnel_stages" ADD CONSTRAINT "funnel_stages_funnel_id_funnels_id_fk" FOREIGN KEY ("funnel_id") REFERENCES "public"."funnels"("id") ON DELETE cascade ON UPDATE no action; END IF; END; $$; --> statement-breakpoint
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'funnels_user_id_users_id_fk' AND conrelid = 'public.funnels'::regclass) THEN ALTER TABLE "public"."funnels" ADD CONSTRAINT "funnels_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action; END IF; END; $$; --> statement-breakpoint
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'funnels_campaign_id_campaigns_id_fk' AND conrelid = 'public.funnels'::regclass) THEN ALTER TABLE "public"."funnels" ADD CONSTRAINT "funnels_campaign_id_campaigns_id_fk" FOREIGN KEY ("campaign_id") REFERENCES "public"."campaigns"("id") ON DELETE set null ON UPDATE no action; END IF; END; $$; --> statement-breakpoint
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'landing_pages_user_id_users_id_fk' AND conrelid = 'public.landing_pages'::regclass) THEN ALTER TABLE "public"."landing_pages" ADD CONSTRAINT "landing_pages_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action; END IF; END; $$; --> statement-breakpoint
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'metrics_campaign_id_campaigns_id_fk' AND conrelid = 'public.metrics'::regclass) THEN ALTER TABLE "public"."metrics" ADD CONSTRAINT "metrics_campaign_id_campaigns_id_fk" FOREIGN KEY ("campaign_id") REFERENCES "public"."campaigns"("id") ON DELETE cascade ON UPDATE no action; END IF; END; $$; --> statement-breakpoint
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'metrics_user_id_users_id_fk' AND conrelid = 'public.metrics'::regclass) THEN ALTER TABLE "public"."metrics" ADD CONSTRAINT "metrics_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action; END IF; END; $$; --> statement-breakpoint
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'whatsapp_messages_user_id_users_id_fk' AND conrelid = 'public.whatsapp_messages'::regclass) THEN ALTER TABLE "public"."whatsapp_messages" ADD CONSTRAINT "whatsapp_messages_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action; END IF; END; $$;
