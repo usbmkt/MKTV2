@@ -34,7 +34,8 @@ export const FloatingMCPAgent: React.FC = () => {
         )}
         aria-label="Abrir Agente MCP"
       >
-        <span className="flex items-center justify-center w-full h-full"> {/* MODIFICAÇÃO: Wrapper span */}
+        {/* CORREÇÃO: Envolver a imagem em um span para garantir um único filho */}
+        <span className="flex items-center justify-center w-full h-full"> 
           <img 
               src="/ubie-logo.svg" 
               alt="Ubie Agente MCP" 
