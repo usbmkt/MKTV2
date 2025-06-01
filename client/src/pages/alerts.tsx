@@ -1,3 +1,4 @@
+// client/src/pages/alerts.tsx
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -6,18 +7,19 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
-import { AlertTriangle, Bell, CheckCircle, Clock, TrendingDown, DollarSign, Users, Settings } from 'lucide-react';
-import { apiRequest } from '@/lib/queryClient';
+import { AlertTriangle, Bell, CheckCircle, Clock, TrendingDown, DollarSign, Users, Settings, Loader2 } from 'lucide-react';
+import { apiRequest } from '@/lib/api'; // Ajustado para usar o apiRequest geral
+import { useToast } from "@/hooks/use-toast"; // Adicionado useToast
 
 interface Alert {
   id: number;
   type: 'budget' | 'performance' | 'audience' | 'system';
   title: string;
   message: string;
-  severity: 'low' | 'medium' | 'high' | 'critical';
+  severity: 'low' | 'medium' | 'high' | 'critical'; // Adicionando severity se for usada do backend
   isRead: boolean;
   campaignId?: number;
-  campaignName?: string;
+  campaignName?: string; // Este campo pode não vir da API /api/alerts diretamente.
   createdAt: string;
   data?: any;
 }
@@ -25,87 +27,56 @@ interface Alert {
 export default function AlertsPage() {
   const [selectedTab, setSelectedTab] = useState('active');
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
-  const { data: alerts = [], isLoading } = useQuery({
-    queryKey: ['/api/alerts'],
+  const { data: alerts = [], isLoading, error: alertsError, refetch } = useQuery<Alert[]>({
+    queryKey: ['alerts'], // Modificado queryKey para algo mais simples
     queryFn: async () => {
-      // Mock data - em produção real seria da API
-      const mockAlerts: Alert[] = [
-        {
-          id: 1,
-          type: 'budget',
-          title: 'Orçamento quase esgotado',
-          message: 'A campanha "E-commerce Q1" atingiu 85% do orçamento mensal',
-          severity: 'high',
-          isRead: false,
-          campaignId: 1,
-          campaignName: 'E-commerce Q1',
-          createdAt: new Date().toISOString(),
-          data: { budgetUsed: 85, totalBudget: 5000, remaining: 750 }
-        },
-        {
-          id: 2,
-          type: 'performance',
-          title: 'Queda no CTR',
-          message: 'CTR da campanha "Google Ads" caiu 15% nas últimas 24h',
-          severity: 'medium',
-          isRead: false,
-          campaignId: 2,
-          campaignName: 'Google Ads - Produtos',
-          createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-          data: { previousCTR: 3.2, currentCTR: 2.7, change: -15 }
-        },
-        {
-          id: 3,
-          type: 'audience',
-          title: 'Novo segmento em alta',
-          message: 'Audiência 25-34 anos apresentou crescimento de 25% em conversões',
-          severity: 'low',
-          isRead: true,
-          createdAt: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(),
-          data: { segment: '25-34', growth: 25 }
-        },
-        {
-          id: 4,
-          type: 'system',
-          title: 'Integração atualizada',
-          message: 'Nova versão da API do Facebook disponível com melhorias de performance',
-          severity: 'low',
-          isRead: true,
-          createdAt: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString()
-        },
-        {
-          id: 5,
-          type: 'budget',
-          title: 'Limite diário atingido',
-          message: 'Campanha "Instagram Stories" atingiu o limite diário de gastos',
-          severity: 'critical',
-          isRead: false,
-          campaignId: 3,
-          campaignName: 'Instagram Stories',
-          createdAt: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-          data: { dailyBudget: 200, spent: 200 }
-        }
-      ];
-      return mockAlerts;
-    }
+      const response = await apiRequest('GET', '/api/alerts'); // Busca todos os alertas
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Falha ao carregar alertas.' }));
+        throw new Error(errorData.message || 'Falha ao carregar alertas.');
+      }
+      return response.json();
+    },
   });
 
   const markAsReadMutation = useMutation({
     mutationFn: async (alertId: number) => {
-      return apiRequest('PATCH', `/api/alerts/${alertId}/read`, {});
+      // Corrigido para PUT e endpoint correto
+      const response = await apiRequest('PUT', `/api/alerts/${alertId}/read`, {});
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Falha ao marcar como lido.' }));
+        throw new Error(errorData.message || 'Falha ao marcar como lido.');
+      }
+      return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/alerts'] });
+      queryClient.invalidateQueries({ queryKey: ['alerts'] });
+      toast({ title: "Alerta atualizado", description: "O alerta foi marcado como lido." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
     }
   });
 
+  // ATENÇÃO: O endpoint /api/alerts/read-all não está definido no server/routes.ts.
+  // Esta funcionalidade não funcionará completamente sem a implementação no backend.
   const markAllAsReadMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest('PATCH', '/api/alerts/read-all', {});
+      const response = await apiRequest('PATCH', '/api/alerts/read-all', {}); // Mantendo PATCH como no código original, mas requer endpoint
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Falha ao marcar todos como lidos.' }));
+        throw new Error(errorData.message || 'Falha ao marcar todos como lidos.');
+      }
+      return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/alerts'] });
+      queryClient.invalidateQueries({ queryKey: ['alerts'] });
+      toast({ title: "Alertas atualizados", description: "Todos os alertas foram marcados como lidos." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
     }
   });
 
@@ -119,8 +90,20 @@ export default function AlertsPage() {
     }
   };
 
-  const getSeverityColor = (severity: string) => {
-    switch (severity) {
+  // Adicionando uma função de fallback para severity se não vier do backend
+  const getSeverityFromType = (type: Alert['type']): Alert['severity'] => {
+    switch(type) {
+      case 'budget': return 'high';
+      case 'performance': return 'medium';
+      case 'audience': return 'low';
+      case 'system': return 'low';
+      default: return 'low';
+    }
+  }
+
+  const getSeverityColor = (severity?: Alert['severity'], type?: Alert['type']) => {
+    const effectiveSeverity = severity || getSeverityFromType(type!);
+    switch (effectiveSeverity) {
       case 'critical': return 'bg-red-500';
       case 'high': return 'bg-orange-500';
       case 'medium': return 'bg-yellow-500';
@@ -129,12 +112,13 @@ export default function AlertsPage() {
     }
   };
 
-  const getSeverityBadge = (severity: string) => {
-    switch (severity) {
+  const getSeverityBadge = (severity?: Alert['severity'], type?: Alert['type']) => {
+    const effectiveSeverity = severity || getSeverityFromType(type!);
+    switch (effectiveSeverity) {
       case 'critical': return <Badge variant="destructive">Crítico</Badge>;
-      case 'high': return <Badge variant="destructive">Alto</Badge>;
-      case 'medium': return <Badge variant="secondary">Médio</Badge>;
-      case 'low': return <Badge variant="outline">Baixo</Badge>;
+      case 'high': return <Badge className="bg-orange-500 hover:bg-orange-600 text-white">Alto</Badge>;
+      case 'medium': return <Badge className="bg-yellow-500 hover:bg-yellow-600 text-black">Médio</Badge>;
+      case 'low': return <Badge className="bg-blue-500 hover:bg-blue-600 text-white">Baixo</Badge>;
       default: return <Badge variant="outline">Baixo</Badge>;
     }
   };
@@ -146,19 +130,37 @@ export default function AlertsPage() {
     const hours = Math.floor(diff / (1000 * 60 * 60));
     const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
     
-    if (hours > 0) {
+    if (hours > 24) {
+        return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date);
+    } else if (hours > 0) {
       return `${hours}h atrás`;
-    } else {
+    } else if (minutes > 0) {
       return `${minutes}m atrás`;
+    } else {
+        return "Agora mesmo";
     }
   };
 
   const activeAlerts = alerts.filter(alert => !alert.isRead);
-  const readAlerts = alerts.filter(alert => alert.isRead);
-  const criticalAlerts = alerts.filter(alert => alert.severity === 'critical');
+  // A API /api/alerts não retorna o campo 'severity', então vamos usar o tipo para simular uma severidade
+  const criticalAlerts = alerts.filter(alert => !alert.isRead && getSeverityFromType(alert.type) === 'critical');
+
+  if (isLoading) {
+    return <div className="p-8 text-center"><Loader2 className="h-12 w-12 animate-spin text-primary mx-auto" /> Carregando alertas...</div>;
+  }
+
+  if (alertsError) {
+    return (
+      <div className="p-8 text-center text-destructive">
+        <AlertTriangle className="h-12 w-12 mx-auto mb-2" />
+        Erro ao carregar alertas: {(alertsError as Error).message}
+        <Button onClick={() => refetch()} className="mt-4">Tentar Novamente</Button>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-4 md:p-6">
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Central de Alertas</h1>
@@ -167,20 +169,24 @@ export default function AlertsPage() {
           </p>
         </div>
         <div className="flex space-x-2">
-          <Button variant="outline" onClick={() => markAllAsReadMutation.mutate()}>
-            <CheckCircle className="w-4 h-4 mr-2" />
+          <Button 
+            variant="outline" 
+            onClick={() => markAllAsReadMutation.mutate()}
+            disabled={markAllAsReadMutation.isPending || activeAlerts.length === 0}
+            className="neu-button"
+          >
+            {markAllAsReadMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle className="w-4 h-4 mr-2" /> }
             Marcar Tudo Lido
           </Button>
-          <Button>
+          {/* <Button className="neu-button">
             <Settings className="w-4 h-4 mr-2" />
             Configurar
-          </Button>
+          </Button> */}
         </div>
       </div>
 
-      {/* Resumo de Alertas */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="neu-card">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Alertas Ativos</CardTitle>
             <Bell className="h-4 w-4 text-muted-foreground" />
@@ -192,8 +198,7 @@ export default function AlertsPage() {
             </p>
           </CardContent>
         </Card>
-
-        <Card>
+        <Card className="neu-card">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Críticos</CardTitle>
             <AlertTriangle className="h-4 w-4 text-red-500" />
@@ -205,8 +210,7 @@ export default function AlertsPage() {
             </p>
           </CardContent>
         </Card>
-
-        <Card>
+        <Card className="neu-card">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Orçamento</CardTitle>
             <DollarSign className="h-4 w-4 text-orange-500" />
@@ -220,8 +224,7 @@ export default function AlertsPage() {
             </p>
           </CardContent>
         </Card>
-
-        <Card>
+        <Card className="neu-card">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Performance</CardTitle>
             <TrendingDown className="h-4 w-4 text-yellow-500" />
@@ -238,61 +241,57 @@ export default function AlertsPage() {
       </div>
 
       <Tabs value={selectedTab} onValueChange={setSelectedTab} className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="active">
+        <TabsList className="neu-card-inset p-1">
+          <TabsTrigger value="active" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md rounded-md">
             Ativos ({activeAlerts.length})
           </TabsTrigger>
-          <TabsTrigger value="all">Todos ({alerts.length})</TabsTrigger>
-          <TabsTrigger value="settings">Configurações</TabsTrigger>
+          <TabsTrigger value="all" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md rounded-md">
+            Todos ({alerts.length})
+          </TabsTrigger>
+          {/* <TabsTrigger value="settings">Configurações</TabsTrigger> */}
         </TabsList>
 
         <TabsContent value="active" className="space-y-4">
           {activeAlerts.length === 0 ? (
-            <Card>
+            <Card className="neu-card">
               <CardContent className="flex flex-col items-center justify-center py-12">
                 <CheckCircle className="w-16 h-16 text-green-500 mb-4" />
                 <h3 className="text-lg font-semibold mb-2">Tudo sob controle!</h3>
                 <p className="text-muted-foreground text-center">
-                  Não há alertas ativos no momento. Suas campanhas estão funcionando bem.
+                  Não há alertas ativos no momento.
                 </p>
               </CardContent>
             </Card>
           ) : (
             <div className="space-y-4">
               {activeAlerts.map((alert) => (
-                <Card key={alert.id} className={`border-l-4 ${alert.severity === 'critical' ? 'border-l-red-500' : alert.severity === 'high' ? 'border-l-orange-500' : 'border-l-yellow-500'}`}>
-                  <CardContent className="p-6">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-start space-x-4">
-                        <div className={`w-2 h-2 rounded-full mt-2 ${getSeverityColor(alert.severity)}`}></div>
+                <Card key={alert.id} className={`neu-card border-l-4 ${getSeverityColor(alert.severity, alert.type).replace('bg-', 'border-l-')}`}>
+                  <CardContent className="p-4 md:p-6">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex items-start space-x-3 md:space-x-4">
+                        <div className={`w-2 h-2 rounded-full mt-1.5 ${getSeverityColor(alert.severity, alert.type)} flex-shrink-0`}></div>
                         <div className="flex-1">
-                          <div className="flex items-center space-x-3 mb-2">
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-1 md:mb-2">
                             {getAlertIcon(alert.type)}
-                            <h3 className="font-semibold">{alert.title}</h3>
-                            {getSeverityBadge(alert.severity)}
+                            <h3 className="font-semibold text-base md:text-lg">{alert.title}</h3>
+                            {getSeverityBadge(alert.severity, alert.type)}
                           </div>
-                          <p className="text-sm text-muted-foreground mb-3">
+                          <p className="text-sm text-muted-foreground mb-2 md:mb-3">
                             {alert.message}
                           </p>
-                          {alert.campaignName && (
-                            <p className="text-xs text-blue-600 mb-2">
-                              Campanha: {alert.campaignName}
+                          {alert.campaignName && ( // O campo campaignName não vem da API /api/alerts, precisa ser adicionado no backend ou buscado separadamente
+                            <p className="text-xs text-primary mb-2">
+                              Campanha: {alert.campaignName} 
                             </p>
                           )}
+                          {/* Mocked data display (remover/ajustar para dados reais da API) */}
                           {alert.data && (
-                            <div className="bg-muted/50 rounded-lg p-3 mb-3">
-                              {alert.type === 'budget' && alert.data && (
-                                <div className="text-sm">
-                                  <p>Orçamento usado: {alert.data.budgetUsed}%</p>
-                                  <p>Restante: R$ {alert.data.remaining}</p>
-                                </div>
+                            <div className="bg-muted/50 rounded-lg p-2.5 mb-2 md:mb-3 text-xs">
+                              {alert.type === 'budget' && alert.data.budgetUsed && (
+                                <p>Orçamento usado: {alert.data.budgetUsed}% | Restante: R$ {alert.data.remaining}</p>
                               )}
-                              {alert.type === 'performance' && alert.data && (
-                                <div className="text-sm">
-                                  <p>CTR anterior: {alert.data.previousCTR}%</p>
-                                  <p>CTR atual: {alert.data.currentCTR}%</p>
-                                  <p className="text-red-600">Variação: {alert.data.change}%</p>
-                                </div>
+                              {alert.type === 'performance' && alert.data.currentCTR && (
+                                <p>CTR: {alert.data.currentCTR}% (Anterior: {alert.data.previousCTR}%)</p>
                               )}
                             </div>
                           )}
@@ -302,16 +301,19 @@ export default function AlertsPage() {
                           </div>
                         </div>
                       </div>
-                      <div className="flex space-x-2">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-2 flex-shrink-0">
                         <Button 
                           size="sm" 
                           variant="outline"
                           onClick={() => markAsReadMutation.mutate(alert.id)}
+                          disabled={markAsReadMutation.isPending && markAsReadMutation.variables === alert.id}
+                          className="neu-button text-xs"
                         >
-                          Marcar como Lido
+                          { (markAsReadMutation.isPending && markAsReadMutation.variables === alert.id) && <Loader2 className="w-3 h-3 mr-1.5 animate-spin"/>}
+                          Marcar Lido
                         </Button>
-                        {alert.campaignId && (
-                          <Button size="sm">
+                        {alert.campaignId && ( // Exemplo de ação, linkar para a campanha
+                          <Button size="sm" onClick={() => alert(`Ir para campanha ID: ${alert.campaignId}`)} className="neu-button text-xs">
                             Ver Campanha
                           </Button>
                         )}
@@ -325,116 +327,73 @@ export default function AlertsPage() {
         </TabsContent>
 
         <TabsContent value="all" className="space-y-4">
-          <div className="space-y-4">
+          {alerts.length === 0 ? (
+             <Card className="neu-card">
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <Bell className="w-16 h-16 text-muted-foreground mb-4 opacity-50" />
+                <h3 className="text-lg font-semibold mb-2">Sem Alertas</h3>
+                <p className="text-muted-foreground text-center">
+                  Não há nenhum alerta registrado no sistema.
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-4">
             {alerts.map((alert) => (
-              <Card key={alert.id} className={`${alert.isRead ? 'opacity-60' : ''}`}>
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-start space-x-4">
-                      <div className={`w-2 h-2 rounded-full mt-2 ${getSeverityColor(alert.severity)}`}></div>
+              <Card key={alert.id} className={`neu-card ${alert.isRead ? 'opacity-70 bg-card/70' : ''}`}>
+                <CardContent className="p-4 md:p-6">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-start space-x-3 md:space-x-4">
+                      <div className={`w-2 h-2 rounded-full mt-1.5 ${getSeverityColor(alert.severity, alert.type)} flex-shrink-0`}></div>
                       <div className="flex-1">
-                        <div className="flex items-center space-x-3 mb-2">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-1 md:mb-2">
                           {getAlertIcon(alert.type)}
-                          <h3 className="font-semibold">{alert.title}</h3>
-                          {getSeverityBadge(alert.severity)}
-                          {alert.isRead && <Badge variant="outline">Lido</Badge>}
+                          <h3 className="font-semibold text-base md:text-lg">{alert.title}</h3>
+                          {getSeverityBadge(alert.severity, alert.type)}
+                          {alert.isRead && <Badge variant="outline" className="text-xs">Lido</Badge>}
                         </div>
-                        <p className="text-sm text-muted-foreground mb-2">
+                        <p className="text-sm text-muted-foreground mb-2 md:mb-3">
                           {alert.message}
                         </p>
-                        {alert.campaignName && (
-                          <p className="text-xs text-blue-600 mb-2">
-                            Campanha: {alert.campaignName}
-                          </p>
-                        )}
-                        <div className="flex items-center text-xs text-muted-foreground">
+                         <div className="flex items-center text-xs text-muted-foreground">
                           <Clock className="w-3 h-3 mr-1" />
                           {formatTime(alert.createdAt)}
                         </div>
                       </div>
                     </div>
+                    {!alert.isRead && (
+                         <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => markAsReadMutation.mutate(alert.id)}
+                          disabled={markAsReadMutation.isPending && markAsReadMutation.variables === alert.id}
+                          className="neu-button text-xs flex-shrink-0"
+                        >
+                           { (markAsReadMutation.isPending && markAsReadMutation.variables === alert.id) && <Loader2 className="w-3 h-3 mr-1.5 animate-spin"/>}
+                          Marcar Lido
+                        </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>
             ))}
-          </div>
+            </div>
+          )}
         </TabsContent>
 
-        <TabsContent value="settings" className="space-y-4">
-          <Card>
+        {/* <TabsContent value="settings" className="space-y-4">
+          <Card className="neu-card">
             <CardHeader>
               <CardTitle>Configurações de Notificações</CardTitle>
               <CardDescription>
-                Personalize quando e como receber alertas
+                Personalize quando e como receber alertas (funcionalidade futura)
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="space-y-4">
-                <h4 className="text-sm font-medium">Alertas de Orçamento</h4>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm">Orçamento 80% esgotado</p>
-                      <p className="text-xs text-muted-foreground">Alerta quando campanha atingir 80% do orçamento</p>
-                    </div>
-                    <Switch defaultChecked />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm">Orçamento diário esgotado</p>
-                      <p className="text-xs text-muted-foreground">Notificação quando limite diário for atingido</p>
-                    </div>
-                    <Switch defaultChecked />
-                  </div>
-                </div>
-              </div>
-
-              <Separator />
-
-              <div className="space-y-4">
-                <h4 className="text-sm font-medium">Alertas de Performance</h4>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm">Queda no CTR superior a 15%</p>
-                      <p className="text-xs text-muted-foreground">Alerta quando CTR cair significativamente</p>
-                    </div>
-                    <Switch defaultChecked />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm">Taxa de conversão baixa</p>
-                      <p className="text-xs text-muted-foreground">Notificação quando conversões caírem abaixo da média</p>
-                    </div>
-                    <Switch defaultChecked />
-                  </div>
-                </div>
-              </div>
-
-              <Separator />
-
-              <div className="space-y-4">
-                <h4 className="text-sm font-medium">Notificações</h4>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm">Notificações por email</p>
-                      <p className="text-xs text-muted-foreground">Receber alertas críticos por email</p>
-                    </div>
-                    <Switch defaultChecked />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm">Notificações push</p>
-                      <p className="text-xs text-muted-foreground">Notificações em tempo real no navegador</p>
-                    </div>
-                    <Switch />
-                  </div>
-                </div>
-              </div>
+               Conteúdo das configurações de alertas aqui
             </CardContent>
           </Card>
-        </TabsContent>
+        </TabsContent> */}
       </Tabs>
     </div>
   );
