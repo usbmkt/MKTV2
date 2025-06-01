@@ -4,10 +4,8 @@ import {
   users, campaigns, creatives, metrics, whatsappMessages, copies, alerts, budgets, landingPages,
   chatSessions, chatMessages, funnels, funnelStages, launchPhaseEnum,
   // Tipos e tabelas do WhatsApp
-  whatsappConnections as whatsappConnectionsTable, // Renomeado para evitar conflito de nome
-  insertWhatsappConnectionSchema, // Schema Zod para inserção
-  selectWhatsappConnectionSchema, // Schema Zod para seleção
-  type WhatsappConnection, type InsertWhatsappConnection, // Tipos TypeScript
+  whatsappConnections as whatsappConnectionsTable,
+  type WhatsappConnection, type InsertWhatsappConnection,
 
   type User, type InsertUser, type Campaign, type InsertCampaign,
   type Creative, type InsertCreative, type Metric, type InsertMetric,
@@ -21,15 +19,16 @@ import {
 import { eq, count, sum, sql, desc, and, or, gte, lte, isNull, asc, ilike } from 'drizzle-orm';
 import * as bcrypt from 'bcrypt';
 
-// Funções de simulação de dados de gráfico (mantidas como no seu original)
+// Funções de simulação de gráficos (MANTIDAS)
+// ... (cole as funções generateSimulated...ChartData aqui se elas não estiverem já no seu arquivo)
 const chartColors = { palette: [ 'rgba(75, 192, 192, 1)', 'rgba(255, 99, 132, 1)', 'rgba(54, 162, 235, 1)', 'rgba(255, 206, 86, 1)', 'rgba(153, 102, 255, 1)', 'rgba(255, 159, 64, 1)', 'rgba(200, 200, 200, 1)' ], background: [ 'rgba(75, 192, 192, 0.2)', 'rgba(255, 99, 132, 0.2)', 'rgba(54, 162, 235, 0.2)', 'rgba(255, 206, 86, 0.2)', 'rgba(153, 102, 255, 0.2)', 'rgba(255, 159, 64, 0.2)', 'rgba(200, 200, 200, 0.2)' ] };
 function generateSimulatedLineChartData(label: string, startValue: number, countNum: number, maxFluctuation: number, color: string): { labels: string[], datasets: { label: string, data: number[], borderColor: string, backgroundColor: string, fill: boolean, tension: number }[] } { const dataPoints: number[] = []; const labels: string[] = []; let currentValue = startValue; for (let i = 0; i < countNum; i++) { labels.push(`Dia ${i + 1}`); dataPoints.push(Math.round(currentValue)); currentValue += (Math.random() * maxFluctuation * 2) - maxFluctuation; if (currentValue < 0) currentValue = 0; } return { labels: labels, datasets: [ { label: label, data: dataPoints, borderColor: color, backgroundColor: color.replace('1)', '0.2)'), fill: true, tension: 0.4, }, ], }; }
 function generateSimulatedBarChartData(label: string, categories: string[], baseValue: number, maxFluctuation: number, colors: string[]): { labels: string[], datasets: { label: string, data: number[], backgroundColor: string[] }[] } { const dataPoints: number[] = categories.map(() => Math.round(baseValue + (Math.random() * maxFluctuation * 2) - maxFluctuation)); return { labels: categories, datasets: [ { label: label, data: dataPoints, backgroundColor: colors, }, ], }; }
 function generateSimulatedDoughnutChartData(chartLabels: string[], baseValue: number, maxFluctuation: number, colors: string[]): { labels: string[], datasets: { data: number[], backgroundColor: string[], borderWidth: number }[] } { const dataPoints: number[] = chartLabels.map(() => Math.round(baseValue + (Math.random() * maxFluctuation * 2) - maxFluctuation)); return { labels: chartLabels, datasets: [ { data: dataPoints, backgroundColor: colors.map(color => color.replace('1)', '0.8)')), borderWidth: 0, }, ], }; }
 
 
-// Interface IStorage (mantida como no seu original, mas com adições para WhatsApp)
 export interface IStorage {
+  // ... (interface IStorage completa como antes)
   // User methods
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
@@ -104,15 +103,58 @@ export interface IStorage {
   updateWhatsappConnection(userId: number, data: Partial<Omit<InsertWhatsappConnection, 'userId' | 'id'>>): Promise<WhatsappConnection | undefined>;
 }
 
-
 export class DatabaseStorage implements IStorage {
-  // Métodos de User (mantidos)
-  async getUser(id: number): Promise<User | undefined> { const result = await db.select().from(users).where(eq(users.id, id)).limit(1); return result[0]; }
-  async getUserByUsername(username: string): Promise<User | undefined> { const result = await db.select().from(users).where(eq(users.username, username)).limit(1); return result[0]; }
-  async getUserByEmail(email: string): Promise<User | undefined> { const result = await db.select().from(users).where(eq(users.email, email)).limit(1); return result[0]; }
-  async createUser(userData: InsertUser): Promise<User> { const hashedPassword = await bcrypt.hash(userData.password, 10); const [newUser] = await db.insert(users).values({ ...userData, password: hashedPassword, }).returning(); if (!newUser) throw new Error("Falha ao criar usuário."); return newUser; }
+  // CORREÇÃO APLICADA AQUI: Selecionar colunas explicitamente
+  async getUser(id: number): Promise<User | undefined> {
+    const result = await db.select({
+      id: users.id,
+      username: users.username,
+      email: users.email,
+      password: users.password,
+      createdAt: users.createdAt,
+      updatedAt: users.updatedAt
+    }).from(users).where(eq(users.id, id)).limit(1);
+    return result[0];
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const result = await db.select({
+      id: users.id,
+      username: users.username,
+      email: users.email,
+      password: users.password,
+      createdAt: users.createdAt,
+      updatedAt: users.updatedAt
+    }).from(users).where(eq(users.username, username)).limit(1);
+    return result[0];
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const result = await db.select({
+      id: users.id,
+      username: users.username,
+      email: users.email,
+      password: users.password,
+      createdAt: users.createdAt,
+      updatedAt: users.updatedAt
+    }).from(users).where(eq(users.email, email)).limit(1);
+    return result[0];
+  }
+
+  async createUser(userData: InsertUser): Promise<User> {
+    const hashedPassword = await bcrypt.hash(userData.password, 10);
+    const [newUser] = await db.insert(users).values({
+      username: userData.username,
+      email: userData.email,
+      password: hashedPassword,
+      // createdAt e updatedAt têm defaultNow() no schema
+    }).returning();
+    if (!newUser) throw new Error("Falha ao criar usuário.");
+    return newUser;
+  }
   async validatePassword(password: string, hashedPassword: string): Promise<boolean> { return bcrypt.compare(password, hashedPassword); }
 
+  // ... (Restante dos métodos da classe DatabaseStorage como antes)
   // Métodos de Campaign (mantidos)
   async getCampaigns(userId: number, limit?: number): Promise<Campaign[]> { let query = db.select().from(campaigns).where(eq(campaigns.userId, userId)).orderBy(desc(campaigns.createdAt)); if (limit) { return query.limit(limit); } return query; }
   async getCampaign(id: number, userId: number): Promise<Campaign | undefined> { const [campaign] = await db.select().from(campaigns).where(and(eq(campaigns.id, id), eq(campaigns.userId, userId))).limit(1); return campaign; }
@@ -146,7 +188,7 @@ export class DatabaseStorage implements IStorage {
     if (searchTerm && searchTerm.trim() !== '') { const searchPattern = `%${searchTerm.toLowerCase()}%`; conditions.push(or(ilike(copies.title, searchPattern), ilike(copies.content, searchPattern)));}
     return db.select().from(copies).where(and(...conditions)).orderBy(desc(copies.createdAt));
   }
-  async createCopy(copyData: InsertCopy): Promise<Copy> { if (typeof copyData.userId !== 'number') { throw new Error("Erro interno: userId inválido ao tentar criar copy.");} const dataToInsert = { ...copyData, campaignId: copyData.campaignId === undefined ? null : copyData.campaignId, details: copyData.details || {}, baseInfo: copyData.baseInfo || {}, fullGeneratedResponse: copyData.fullGeneratedResponse || {}, tags: copyData.tags || [], }; const [newCopy] = await db.insert(copies).values(dataToInsert).returning(); if (!newCopy) { throw new Error("Falha ao salvar a copy no banco de dados.");} return newCopy;}
+  async createCopy(copyData: InsertCopy): Promise<Copy> { if (typeof copyData.userId !== 'number') { console.error('[storage.createCopy] ERRO FATAL: userId não é um número ou está ausente no copyData que chegou ao storage!', copyData.userId); throw new Error("Erro interno: userId inválido ao tentar criar copy.");} const dataToInsert = { ...copyData, campaignId: copyData.campaignId === undefined ? null : copyData.campaignId, details: copyData.details || {}, baseInfo: copyData.baseInfo || {}, fullGeneratedResponse: copyData.fullGeneratedResponse || {}, tags: copyData.tags || [], }; const [newCopy] = await db.insert(copies).values(dataToInsert).returning(); if (!newCopy) { console.error("[storage.createCopy] Falha ao inserir copy no banco. `returning()` não retornou dados."); throw new Error("Falha ao salvar a copy no banco de dados.");} return newCopy;}
   async updateCopy(id: number, copyData: Partial<Omit<InsertCopy, 'userId' | 'id' | 'createdAt'>>, userId: number): Promise<Copy | undefined> { const existingCopyResult = await db.select({id: copies.id}).from(copies).where(and(eq(copies.id, id), eq(copies.userId, userId))).limit(1); if(!existingCopyResult || existingCopyResult.length === 0) { return undefined; } const dataToUpdate: Partial<Omit<Copy, 'id' | 'userId' | 'createdAt'>> = { ...copyData, lastUpdatedAt: new Date(), }; if (copyData.hasOwnProperty('campaignId')) { (dataToUpdate as any).campaignId = copyData.campaignId === undefined ? null : copyData.campaignId; } const [updatedCopy] = await db.update(copies).set(dataToUpdate).where(and(eq(copies.id, id), eq(copies.userId, userId))).returning(); return updatedCopy;}
   async deleteCopy(id: number, userId: number): Promise<boolean> { const result = await db.delete(copies).where(and(eq(copies.id, id), eq(copies.userId, userId))); return (result.rowCount ?? 0) > 0; }
 
@@ -189,7 +231,7 @@ export class DatabaseStorage implements IStorage {
   async updateFunnelStage(id: number, stageData: Partial<Omit<InsertFunnelStage, 'funnelId'>>, userId: number): Promise<FunnelStage | undefined> { const existingStage = await db.query.funnelStages.findFirst({ where: eq(funnelStages.id, id), with: { funnel: { columns: { userId: true } } } }); if (!existingStage || existingStage.funnel?.userId !== userId) { throw new Error("Etapa do funil não encontrada ou não pertence ao usuário."); } const [updatedStage] = await db.update(funnelStages) .set({ ...stageData, updatedAt: new Date() }) .where(eq(funnelStages.id, id)) .returning(); return updatedStage; }
   async deleteFunnelStage(id: number, userId: number): Promise<boolean> { const existingStage = await db.query.funnelStages.findFirst({ where: eq(funnelStages.id, id), with: { funnel: { columns: { userId: true } } } }); if (!existingStage || existingStage.funnel?.userId !== userId) { console.warn(`Tentativa de deletar etapa ${id} não encontrada ou não pertencente ao usuário ${userId}.`); return false;  } const result = await db.delete(funnelStages).where(eq(funnelStages.id, id)); return (result.rowCount ?? 0) > 0; }
 
-  // Método de Dashboard (mantido)
+  // Método de Dashboard (mantido e corrigido)
   async getDashboardData(userId: number, timeRange: string = '30d'): Promise<any> {
     const now = new Date();
     let startDate = new Date();
@@ -202,7 +244,6 @@ export class DatabaseStorage implements IStorage {
     const activeCampaignsResult = await db.select({ count: count() }).from(campaigns).where(and(eq(campaigns.userId, userId), eq(campaigns.status, 'active')));
     const activeCampaigns = activeCampaignsResult[0]?.count || 0;
     
-    // Correção: Assegurar que os campos de orçamento são tratados como números antes de somar
     const budgetsData = await db.select({ spentAmount: budgets.spentAmount }).from(budgets).where(budgetsUserCondition);
     const totalSpent = budgetsData.reduce((acc, curr) => acc + parseFloat(String(curr.spentAmount || "0")), 0);
 
@@ -214,7 +255,6 @@ export class DatabaseStorage implements IStorage {
 
     const totalCostResult = await db.select({ total: sum(sql<number>`CAST(${metrics.cost} AS DECIMAL)`) }).from(metrics).where(metricsTimeCondition);
     const totalCost = parseFloat(String(totalCostResult[0]?.total || '0')) || 0;
-
 
     const avgROI = totalCost > 0 ? parseFloat((((totalRevenue - totalCost) / totalCost) * 100).toFixed(2)) : 0;
     const totalImpressionsResult = await db.select({ total: sum(metrics.impressions) }).from(metrics).where(metricsTimeCondition);
@@ -240,15 +280,20 @@ export class DatabaseStorage implements IStorage {
 
   // --- NOVOS MÉTODOS PARA WHATSAPP CONNECTIONS ---
   async createWhatsappConnection(data: InsertWhatsappConnection): Promise<WhatsappConnection> {
-    // Assegurar que userId está presente e é um número
     if (typeof data.userId !== 'number') {
         console.error('[storage.createWhatsappConnection] ERRO FATAL: userId não é um número ou está ausente!', data.userId);
         throw new Error("Erro interno: userId inválido ao tentar criar conexão WhatsApp.");
     }
+    // Assegura que whatsappConnectionsTable está definido (é a tabela importada)
+    if (!whatsappConnectionsTable) {
+        console.error('[storage.createWhatsappConnection] ERRO FATAL: Tabela whatsappConnectionsTable não está definida.');
+        throw new Error("Erro interno: Configuração da tabela WhatsApp ausente.");
+    }
     const [newConnection] = await db.insert(whatsappConnectionsTable)
       .values({
-        ...data, // Espalha todos os campos de data (incluindo userId)
-        updatedAt: new Date(), // Garante que updatedAt seja atualizado
+        ...data,
+        updatedAt: new Date(), // Garante que updatedAt seja atualizado ou definido na criação
+        createdAt: data.createdAt || new Date(), // Garante que createdAt seja definido
       })
       .returning();
     if (!newConnection) throw new Error("Falha ao criar registro de conexão WhatsApp.");
@@ -256,6 +301,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getWhatsappConnection(userId: number): Promise<WhatsappConnection | undefined> {
+    if (!whatsappConnectionsTable) {
+        console.error('[storage.getWhatsappConnection] ERRO FATAL: Tabela whatsappConnectionsTable não está definida.');
+        return undefined;
+    }
     const result = await db.select()
       .from(whatsappConnectionsTable)
       .where(eq(whatsappConnectionsTable.userId, userId))
@@ -264,14 +313,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateWhatsappConnection(userId: number, data: Partial<Omit<InsertWhatsappConnection, 'userId' | 'id'>>): Promise<WhatsappConnection | undefined> {
+    if (!whatsappConnectionsTable) {
+        console.error('[storage.updateWhatsappConnection] ERRO FATAL: Tabela whatsappConnectionsTable não está definida.');
+        return undefined;
+    }
     const [updatedConnection] = await db.update(whatsappConnectionsTable)
       .set({
         ...data,
-        updatedAt: new Date(), // Sempre atualiza o updatedAt
+        updatedAt: new Date(),
       })
       .where(eq(whatsappConnectionsTable.userId, userId))
       .returning();
-    // Retornará undefined se nenhum registro for encontrado para o userId
     return updatedConnection;
   }
 }
