@@ -1,24 +1,31 @@
 // shared/schema.ts
-import { pgTable, text, serial, integer, boolean, timestamp, decimal, jsonb, varchar, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, decimal, jsonb, varchar, pgEnum, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { relations } from 'drizzle-orm';
 
-// Enums do Banco de Dados
-export const campaignStatusEnum = pgEnum('campaign_status', ['active', 'paused', 'completed', 'draft']);
-export const chatSenderEnum = pgEnum('chat_sender', ['user', 'agent']);
-export const launchPhaseEnum = pgEnum('launch_phase', ['pre_launch', 'launch', 'post_launch']); // Este enum será usado por 'copies.launchPhase'
+// Importar schemas e tipos do WhatsApp
+import {
+    whatsappSchema, // Contém todas as tabelas, enums, relações e schemas Zod do WhatsApp
+    type WhatsappConnection, type InsertWhatsappConnection,
+    type WhatsappFlow, type InsertWhatsappFlow,
+    type WhatsappFlowUserState, type InsertWhatsappFlowUserState,
+    type WhatsappMessageTemplate, type InsertWhatsappMessageTemplate,
+    type FlowElements // Importando o tipo FlowElements, mesmo que simplificado
+} from './whatsapp.schema';
 
-// --- Definições de Tipos para Copy Configurations ---
-// Estas interfaces são para a lógica de configuração da sua aplicação, não diretamente para o schema do DB
+// Enums Existentes (Manter os que não são do WhatsApp)
+export const campaignStatusEnum = pgEnum('campaign_status', ['active', 'paused', 'completed', 'draft']);
+export const chatSenderEnum = pgEnum('chat_sender', ['user', 'agent']); // MCP/Chat Geral
+export const launchPhaseEnum = pgEnum('launch_phase', ['pre_launch', 'launch', 'post_launch']); // Para Copies
+
+// --- Definições de Tipos para Copy Configurations (Existente) ---
 export interface BaseGeneratorFormState {
   product: string;
   audience: string;
   objective: 'sales' | 'leads' | 'engagement' | 'awareness';
   tone: 'professional' | 'casual' | 'urgent' | 'inspirational' | 'educational' | 'empathetic' | 'divertido' | 'sofisticado';
 }
-
-export type LaunchPhase = z.infer<typeof launchPhaseEnum>; // Tipo inferido do enum do Drizzle
 
 export interface FieldDefinition {
   name: string;
@@ -36,14 +43,14 @@ export interface FieldDefinition {
 export interface CopyPurposeConfig {
   key: string;
   label: string;
-  phase: LaunchPhase; // Usa o tipo LaunchPhase inferido
+  phase: z.infer<typeof launchPhaseEnum>;
   fields: FieldDefinition[];
   category: string;
   description?: string;
   promptEnhancer?: (basePrompt: string, details: Record<string, any>, baseForm: BaseGeneratorFormState) => string;
 }
 
-// --- Definições de Tabelas ---
+// --- Definições de Tabelas (Core da Aplicação) ---
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
@@ -72,21 +79,20 @@ export const campaigns = pgTable("campaigns", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-// Definição da tabela 'copies' ATUALIZADA (sem a coluna 'type' antiga)
 export const copies = pgTable("copies", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   campaignId: integer("campaign_id").references(() => campaigns.id, { onDelete: 'set null' }),
   title: text("title").notNull(),
   content: text("content").notNull(),
-  purposeKey: text("purpose_key").notNull(), // Nova coluna para identificar a finalidade
-  launchPhase: launchPhaseEnum("launch_phase").notNull(), // Nova coluna para a fase
-  details: jsonb("details").$type<Record<string, any>>().default({}).notNull(), // Detalhes específicos da copy
-  baseInfo: jsonb("base_info").$type<BaseGeneratorFormState | any>().default({}).notNull(), // Informações base usadas para gerar
-  fullGeneratedResponse: jsonb("full_generated_response").$type<any>().default({}).notNull(), // Resposta completa da IA
-  platform: text("platform"), // Plataforma sugerida ou alvo
+  purposeKey: text("purpose_key").notNull(),
+  launchPhase: launchPhaseEnum("launch_phase").notNull(),
+  details: jsonb("details").$type<Record<string, any>>().default({}).notNull(),
+  baseInfo: jsonb("base_info").$type<BaseGeneratorFormState | any>().default({}).notNull(),
+  fullGeneratedResponse: jsonb("full_generated_response").$type<any>().default({}).notNull(),
+  platform: text("platform"),
   isFavorite: boolean("is_favorite").default(false).notNull(),
-  tags: jsonb("tags").$type<string[]>().default([]).notNull(), // Tags como array de strings
+  tags: jsonb("tags").$type<string[]>().default([]).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   lastUpdatedAt: timestamp("last_updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
@@ -120,6 +126,7 @@ export const metrics = pgTable("metrics", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+// Tabela whatsapp_messages (Core) - Modificada
 export const whatsappMessages = pgTable("whatsapp_messages", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
@@ -129,6 +136,9 @@ export const whatsappMessages = pgTable("whatsapp_messages", {
   direction: text("direction", { enum: ["incoming", "outgoing"] }).notNull(),
   timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow().notNull(),
   isRead: boolean("is_read").default(false).notNull(),
+  // Novas colunas adicionadas:
+  flowId: integer('flow_id').references(() => whatsappSchema.whatsappFlows.id, { onDelete: 'set null' }).nullable(),
+  messageIdBaileys: text('message_id_baileys').nullable().unique(),
 });
 
 export const alerts = pgTable("alerts", {
@@ -161,7 +171,7 @@ export const landingPages = pgTable("landing_pages", {
     studioProjectId: varchar("studio_project_id", { length: 255 }).unique(),
     slug: varchar("slug", { length: 255 }).notNull().unique(),
     description: text("description"),
-    grapesJsData: jsonb("grapes_js_data"), // $type<any> é implícito para jsonb sem tipo específico
+    grapesJsData: jsonb("grapes_js_data"),
     status: text("status", { enum: ["draft", "published", "archived"] }).default("draft").notNull(),
     publicUrl: text("public_url"),
     publishedAt: timestamp("published_at", { withTimezone: true }),
@@ -169,7 +179,7 @@ export const landingPages = pgTable("landing_pages", {
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const chatSessions = pgTable('chat_sessions', {
+export const chatSessions = pgTable('chat_sessions', { // MCP Chat Geral
   id: serial('id').primaryKey(),
   userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   title: text('title').notNull().default('Nova Conversa'),
@@ -177,7 +187,7 @@ export const chatSessions = pgTable('chat_sessions', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const chatMessages = pgTable('chat_messages', {
+export const chatMessages = pgTable('chat_messages', { // MCP Chat Geral
   id: serial('id').primaryKey(),
   sessionId: integer('session_id').notNull().references(() => chatSessions.id, { onDelete: 'cascade' }),
   sender: chatSenderEnum('sender').notNull(),
@@ -202,29 +212,96 @@ export const funnelStages = pgTable("funnel_stages", {
   name: text("name").notNull(),
   description: text("description"),
   order: integer("order").notNull().default(0),
-  config: jsonb("config").$type<Record<string, any>>().default({}), // Adicionado default
+  config: jsonb("config").$type<Record<string, any>>().default({}),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 
-// --- RELAÇÕES ---
-export const userRelations = relations(users, ({ many }) => ({ campaigns: many(campaigns), creatives: many(creatives), metrics: many(metrics), whatsappMessages: many(whatsappMessages), copies: many(copies), alerts: many(alerts), budgets: many(budgets), landingPages: many(landingPages), chatSessions: many(chatSessions), funnels: many(funnels), }));
-export const campaignRelations = relations(campaigns, ({ one, many }) => ({ user: one(users, { fields: [campaigns.userId], references: [users.id] }), creatives: many(creatives), metrics: many(metrics), copies: many(copies), alerts: many(alerts), budgets: many(budgets), funnels: many(funnels), }));
-export const creativeRelations = relations(creatives, ({ one }) => ({ user: one(users, { fields: [creatives.userId], references: [users.id] }), campaign: one(campaigns, { fields: [creatives.campaignId], references: [campaigns.id] }), }));
-export const metricRelations = relations(metrics, ({ one }) => ({ campaign: one(campaigns, { fields: [metrics.campaignId], references: [campaigns.id] }), user: one(users, { fields: [metrics.userId], references: [users.id] }), }));
-export const whatsappMessageRelations = relations(whatsappMessages, ({ one }) => ({ user: one(users, { fields: [whatsappMessages.userId], references: [users.id] }), }));
-export const copyRelations = relations(copies, ({ one }) => ({ user: one(users, { fields: [copies.userId], references: [users.id] }), campaign: one(campaigns, { fields: [copies.campaignId], references: [campaigns.id] }), }));
-export const alertRelations = relations(alerts, ({ one }) => ({ user: one(users, { fields: [alerts.userId], references: [users.id] }), campaign: one(campaigns, { fields: [alerts.campaignId], references: [campaigns.id] }), }));
-export const budgetRelations = relations(budgets, ({ one }) => ({ user: one(users, { fields: [budgets.userId], references: [users.id] }), campaign: one(campaigns, { fields: [budgets.campaignId], references: [campaigns.id] }), }));
-export const landingPageRelations = relations(landingPages, ({ one }) => ({ user: one(users, { fields: [landingPages.userId], references: [users.id] }), }));
-export const chatSessionRelations = relations(chatSessions, ({ one, many }) => ({ user: one(users, { fields: [chatSessions.userId], references: [users.id] }), messages: many(chatMessages), }));
-export const chatMessageRelations = relations(chatMessages, ({ one }) => ({ session: one(chatSessions, { fields: [chatMessages.sessionId], references: [chatSessions.id] }), }));
-export const funnelRelations = relations(funnels, ({ one, many }) => ({ user: one(users, { fields: [funnels.userId], references: [users.id] }), campaign: one(campaigns, { fields: [funnels.campaignId], references: [campaigns.id] }), stages: many(funnelStages), }));
-export const funnelStageRelations = relations(funnelStages, ({ one }) => ({ funnel: one(funnels, { fields: [funnelStages.funnelId], references: [funnels.id] }), }));
+// --- RELAÇÕES (Combinadas) ---
+export const userRelations = relations(users, ({ many }) => ({
+  campaigns: many(campaigns),
+  creatives: many(creatives),
+  metrics: many(metrics),
+  whatsappMessages: many(whatsappMessages), // Mantém relação com a tabela principal de mensagens
+  copies: many(copies),
+  alerts: many(alerts),
+  budgets: many(budgets),
+  landingPages: many(landingPages),
+  chatSessions: many(chatSessions),
+  funnels: many(funnels),
+  whatsappConnections: many(whatsappSchema.whatsappConnections), // Relação com tabela do schema WhatsApp
+  whatsappFlows: many(whatsappSchema.whatsappFlows),
+  whatsappFlowUserStates: many(whatsappSchema.whatsappFlowUserStates),
+  whatsappMessageTemplates: many(whatsappSchema.whatsappMessageTemplates),
+}));
+
+export const campaignRelations = relations(campaigns, ({ one, many }) => ({
+  user: one(users, { fields: [campaigns.userId], references: [users.id] }),
+  creatives: many(creatives),
+  metrics: many(metrics),
+  copies: many(copies),
+  alerts: many(alerts),
+  budgets: many(budgets),
+  funnels: many(funnels),
+}));
+
+export const creativeRelations = relations(creatives, ({ one }) => ({
+  user: one(users, { fields: [creatives.userId], references: [users.id] }),
+  campaign: one(campaigns, { fields: [creatives.campaignId], references: [campaigns.id] }),
+}));
+
+export const metricRelations = relations(metrics, ({ one }) => ({
+  campaign: one(campaigns, { fields: [metrics.campaignId], references: [campaigns.id] }),
+  user: one(users, { fields: [metrics.userId], references: [users.id] }),
+}));
+
+// Relação whatsappMessages ATUALIZADA para incluir flow
+export const whatsappMessageRelations = relations(whatsappMessages, ({ one }) => ({
+  user: one(users, { fields: [whatsappMessages.userId], references: [users.id] }),
+  flow: one(whatsappSchema.whatsappFlows, { fields: [whatsappMessages.flowId], references: [whatsappSchema.whatsappFlows.id] }),
+}));
+
+export const copyRelations = relations(copies, ({ one }) => ({
+  user: one(users, { fields: [copies.userId], references: [users.id] }),
+  campaign: one(campaigns, { fields: [copies.campaignId], references: [campaigns.id] }),
+}));
+
+export const alertRelations = relations(alerts, ({ one }) => ({
+  user: one(users, { fields: [alerts.userId], references: [users.id] }),
+  campaign: one(campaigns, { fields: [alerts.campaignId], references: [campaigns.id] }),
+}));
+
+export const budgetRelations = relations(budgets, ({ one }) => ({
+  user: one(users, { fields: [budgets.userId], references: [users.id] }),
+  campaign: one(campaigns, { fields: [budgets.campaignId], references: [campaigns.id] }),
+}));
+
+export const landingPageRelations = relations(landingPages, ({ one }) => ({
+  user: one(users, { fields: [landingPages.userId], references: [users.id] }),
+}));
+
+export const chatSessionRelations = relations(chatSessions, ({ one, many }) => ({
+  user: one(users, { fields: [chatSessions.userId], references: [users.id] }),
+  messages: many(chatMessages),
+}));
+
+export const chatMessageRelations = relations(chatMessages, ({ one }) => ({
+  session: one(chatSessions, { fields: [chatMessages.sessionId], references: [chatSessions.id] }),
+}));
+
+export const funnelRelations = relations(funnels, ({ one, many }) => ({
+  user: one(users, { fields: [funnels.userId], references: [users.id] }),
+  campaign: one(campaigns, { fields: [funnels.campaignId], references: [campaigns.id] }),
+  stages: many(funnelStages),
+}));
+
+export const funnelStageRelations = relations(funnelStages, ({ one }) => ({
+  funnel: one(funnels, { fields: [funnelStages.funnelId], references: [funnels.id] }),
+}));
 
 
-// --- SCHEMAS ZOD PARA INSERÇÃO ---
+// --- SCHEMAS ZOD PARA INSERÇÃO (Core - Manter os existentes) ---
 export const insertUserSchema = createInsertSchema(users, {
   email: z.string().email("Email inválido."),
   username: z.string().min(3, "Nome de usuário deve ter pelo menos 3 caracteres."),
@@ -283,9 +360,7 @@ export const insertCreativeSchema = createInsertSchema(creatives, {
   ),
 }).omit({ id: true, createdAt: true, updatedAt: true, userId: true });
 
-// Schema de inserção para 'copies' ATUALIZADO
 export const insertCopySchema = createInsertSchema(copies, {
-  // userId é obrigatório e será adicionado na rota. Validamos sua presença e tipo aqui.
   userId: z.number().int().positive({ message: "ID do usuário é obrigatório e deve ser um número positivo." }),
   title: z.string().min(1, "Título da copy é obrigatório."),
   content: z.string().min(1, "Conteúdo (mainCopy) é obrigatório."),
@@ -304,13 +379,7 @@ export const insertCopySchema = createInsertSchema(copies, {
     (val) => (val === undefined || val === null || val === "" || String(val).toUpperCase() === "NONE" ? null : parseInt(String(val))),
     z.number().int().positive().nullable().optional()
   ),
-}).omit({
-  id: true, // Gerado pelo banco
-  createdAt: true, // Gerado pelo banco com defaultNow()
-  lastUpdatedAt: true, // Gerado pelo banco com defaultNow()
-  // NÃO OMITIR 'userId' AQUI, pois ele é crucial e vem da autenticação.
-});
-
+}).omit({ id: true, createdAt: true, lastUpdatedAt: true });
 
 export const insertFunnelSchema = createInsertSchema(funnels, {
   name: z.string().min(1, "O nome do funil é obrigatório."),
@@ -341,10 +410,13 @@ export const insertLandingPageSchema = createInsertSchema(landingPages, {
   studioProjectId: z.string().optional().nullable(),
 }).omit({ id: true, createdAt: true, updatedAt: true, userId: true, publicUrl: true, publishedAt: true });
 
+// Schema de inserção para whatsappMessages ATUALIZADO
 export const insertWhatsappMessageSchema = createInsertSchema(whatsappMessages, {
   contactNumber: z.string().min(1, "Número de contato é obrigatório."),
   message: z.string().min(1, "Mensagem é obrigatória."),
   direction: z.enum(["incoming", "outgoing"]),
+  flowId: z.number().int().positive().nullable().optional(),
+  messageIdBaileys: z.string().nullable().optional(),
 }).omit({ id: true, userId: true, timestamp: true, isRead: true });
 
 export const insertAlertSchema = createInsertSchema(alerts, {
@@ -377,19 +449,25 @@ export const insertBudgetSchema = createInsertSchema(budgets, {
   ),
 }).omit({ id: true, createdAt: true, userId: true });
 
-export const insertChatSessionSchema = createInsertSchema(chatSessions, {
+export const insertChatSessionSchema = createInsertSchema(chatSessions, { // MCP Chat Geral
   title: z.string().min(1, "Título da sessão é obrigatório.").default('Nova Conversa').optional(),
 }).omit({ id: true, createdAt: true, updatedAt: true, userId: true });
 
-export const insertChatMessageSchema = createInsertSchema(chatMessages, {
+export const insertChatMessageSchema = createInsertSchema(chatMessages, { // MCP Chat Geral
     text: z.string().min(1, "O texto da mensagem é obrigatório."),
     sender: z.enum(chatSenderEnum.enumValues),
     sessionId: z.number().int().positive(),
     attachmentUrl: z.string().url().optional().nullable(),
 }).omit({id: true, timestamp: true});
 
+// Re-exportar schemas Zod de WhatsApp
+export const insertWhatsappConnectionSchema = whatsappSchema.insertWhatsappConnectionSchema;
+export const insertWhatsappFlowSchema = whatsappSchema.insertWhatsappFlowSchema;
+export const insertWhatsappFlowUserStateSchema = whatsappSchema.insertWhatsappFlowUserStateSchema;
+export const insertWhatsappMessageTemplateSchema = whatsappSchema.insertWhatsappMessageTemplateSchema;
 
-// --- SCHEMAS ZOD PARA SELEÇÃO (SELECT) ---
+
+// --- SCHEMAS ZOD PARA SELEÇÃO (SELECT - Core) ---
 export const selectUserSchema = createSelectSchema(users);
 export const selectCampaignSchema = createSelectSchema(campaigns);
 export const selectCreativeSchema = createSelectSchema(creatives);
@@ -403,19 +481,24 @@ export const selectChatSessionSchema = createSelectSchema(chatSessions);
 export const selectChatMessageSchema = createSelectSchema(chatMessages);
 export const selectFunnelSchema = createSelectSchema(funnels);
 export const selectFunnelStageSchema = createSelectSchema(funnelStages);
+// Re-exportar schemas Zod de SELECT do WhatsApp
+export const selectWhatsappConnectionSchema = whatsappSchema.selectWhatsappConnectionSchema;
+export const selectWhatsappFlowSchema = whatsappSchema.selectWhatsappFlowSchema;
+export const selectWhatsappFlowUserStateSchema = whatsappSchema.selectWhatsappFlowUserStateSchema;
+export const selectWhatsappMessageTemplateSchema = whatsappSchema.selectWhatsappMessageTemplateSchema;
 
 
-// --- Tipos Inferidos ---
+// --- Tipos Inferidos (Core) ---
 export type User = z.infer<typeof selectUserSchema>;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type Campaign = z.infer<typeof selectCampaignSchema>;
 export type InsertCampaign = z.infer<typeof insertCampaignSchema>;
 export type Creative = z.infer<typeof selectCreativeSchema>;
 export type InsertCreative = z.infer<typeof insertCreativeSchema>;
-export type Copy = z.infer<typeof selectCopySchema>; // Tipo para SELECT
-export type InsertCopy = z.infer<typeof insertCopySchema>; // Tipo para INSERT
+export type Copy = z.infer<typeof selectCopySchema>;
+export type InsertCopy = z.infer<typeof insertCopySchema>;
 export type Metric = z.infer<typeof selectMetricSchema>;
-// export type InsertMetric = z.infer<typeof insertMetricSchema>; // Se precisar
+export type InsertMetric = z.infer<typeof createInsertSchema<typeof metrics>>;
 export type WhatsappMessage = z.infer<typeof selectWhatsappMessageSchema>;
 export type InsertWhatsappMessage = z.infer<typeof insertWhatsappMessageSchema>;
 export type Alert = z.infer<typeof selectAlertSchema>;
@@ -424,23 +507,30 @@ export type Budget = z.infer<typeof selectBudgetSchema>;
 export type InsertBudget = z.infer<typeof insertBudgetSchema>;
 export type LandingPage = z.infer<typeof selectLandingPageSchema>;
 export type InsertLandingPage = z.infer<typeof insertLandingPageSchema>;
-export type ChatSession = z.infer<typeof selectChatSessionSchema>;
-export type InsertChatSession = z.infer<typeof insertChatSessionSchema>;
-export type ChatMessage = z.infer<typeof selectChatMessageSchema>;
-export type InsertChatMessage = z.infer<typeof insertChatMessageSchema>;
+export type ChatSession = z.infer<typeof selectChatSessionSchema>; // MCP Chat
+export type InsertChatSession = z.infer<typeof insertChatSessionSchema>; // MCP Chat
+export type ChatMessage = z.infer<typeof selectChatMessageSchema>; // MCP Chat
+export type InsertChatMessage = z.infer<typeof insertChatMessageSchema>; // MCP Chat
 export type Funnel = z.infer<typeof selectFunnelSchema>;
 export type InsertFunnel = z.infer<typeof insertFunnelSchema>;
 export type FunnelStage = z.infer<typeof selectFunnelStageSchema>;
 export type InsertFunnelStage = z.infer<typeof insertFunnelStageSchema>;
 
+// Re-exportar tipos inferidos do WhatsApp
+export type {
+    WhatsappConnection, InsertWhatsappConnection,
+    WhatsappFlow, InsertWhatsappFlow,
+    WhatsappFlowUserState, InsertWhatsappFlowUserState,
+    WhatsappMessageTemplate, InsertWhatsappMessageTemplate,
+    FlowElements
+};
 
-// --- CONFIGURAÇÕES DE COPY ---
-// (Mantido como no seu original)
+// --- CONFIGURAÇÕES DE COPY (Manter no final) ---
 export const allCopyPurposesConfig: CopyPurposeConfig[] = [
   {
     key: 'prelaunch_ad_event_invitation',
     label: 'Anúncio: Convite para Evento Online Gratuito',
-    phase: 'pre_launch', // Usando o tipo LaunchPhase
+    phase: 'pre_launch',
     category: 'Anúncios (Pré-Lançamento)',
     description: 'Crie anúncios chamativos para convidar pessoas para seu webinar, masterclass ou live.',
     fields: [
@@ -456,7 +546,7 @@ export const allCopyPurposesConfig: CopyPurposeConfig[] = [
       { name: 'urgencyScarcityElement', label: 'Elemento de Urgência/Escassez (Opcional)', type: 'text', placeholder: 'Ex: Vagas limitadas, Bônus para os 100 primeiros inscritos', tooltip: 'Algum motivo para a pessoa agir rápido?' },
     ],
   },
-  // ... (restante da configuração de allCopyPurposesConfig)
+  // ... (restante da sua configuração de allCopyPurposesConfig)
 ];
 
 // Schema para a resposta da IA (usado na API Gemini)
@@ -483,3 +573,41 @@ export type AiResponseType = z.infer<typeof aiResponseValidationSchema>;
 
 export const contentIdeasResponseSchema = { type: "OBJECT" as const, properties: { contentIdeas: { type: "ARRAY" as const, items: { "type": "STRING" as const } } }, required: ["contentIdeas"] };
 export const optimizeCopyResponseSchema = { type: "OBJECT" as const, properties: { optimizedCopy: { type: "STRING" as const }, optimizationNotes: { type: "STRING" as const } }, required: ["optimizedCopy"] };
+
+// Agrupa todos os objetos de schema para exportação e uso no Drizzle
+export const schema = {
+    // Enums existentes
+    campaignStatusEnum,
+    chatSenderEnum,
+    launchPhaseEnum,
+    // Tabelas existentes
+    users,
+    campaigns,
+    creatives,
+    metrics,
+    whatsappMessages, // Tabela atualizada
+    copies,
+    alerts,
+    budgets,
+    landingPages,
+    chatSessions,
+    chatMessages,
+    funnels,
+    funnelStages,
+    // Relações existentes
+    userRelations,
+    campaignRelations,
+    creativeRelations,
+    metricRelations,
+    whatsappMessageRelations, // Relação atualizada
+    copyRelations,
+    alertRelations,
+    budgetRelations,
+    landingPageRelations,
+    chatSessionRelations,
+    chatMessageRelations,
+    funnelRelations,
+    funnelStageRelations,
+    // Enums, Tabelas e Relações do WhatsApp (importados de whatsappSchema)
+    ...whatsappSchema,
+};
