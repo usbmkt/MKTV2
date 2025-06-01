@@ -1,6 +1,6 @@
-CREATE TYPE "public"."campaign_status" AS ENUM('active', 'paused', 'completed', 'draft') IF NOT EXISTS;--> statement-breakpoint
-CREATE TYPE "public"."chat_sender" AS ENUM('user', 'agent') IF NOT EXISTS;--> statement-breakpoint
-CREATE TYPE "public"."launch_phase" AS ENUM('pre_launch', 'launch', 'post_launch') IF NOT EXISTS;--> statement-breakpoint
+CREATE TYPE "public"."campaign_status" AS ENUM('active', 'paused', 'completed', 'draft');--> statement-breakpoint
+CREATE TYPE "public"."chat_sender" AS ENUM('user', 'agent');--> statement-breakpoint
+CREATE TYPE "public"."launch_phase" AS ENUM('pre_launch', 'launch', 'post_launch');--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "alerts" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" integer NOT NULL,
