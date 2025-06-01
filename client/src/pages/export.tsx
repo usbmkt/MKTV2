@@ -26,8 +26,8 @@ import { Campaign as CampaignType } from '@shared/schema';
 
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import Chart from 'chart.js/auto'; // Para renderizar gráficos temporariamente
-import LogoPng from '@/img/logo.png'; // Importando o logo
+import Chart from 'chart.js/auto';
+import LogoPng from '@/img/logo.png';
 
 interface ExportTemplate {
   id: string;
@@ -75,8 +75,8 @@ const exportTemplates: ExportTemplate[] = [
     id: 'campaign-performance-summary',
     name: 'Resumo de Performance de Campanhas',
     description: 'Principais métricas de performance por campanha selecionada.',
-    type: 'pdf', // Alterado para PDF para testar
-    icon: FileSpreadsheet, // Ícone pode ser genérico
+    type: 'pdf',
+    icon: FileSpreadsheet,
     fields: ['campaignName', 'status', 'budget', 'spentAmount', 'impressions', 'clicks', 'conversions', 'cost', 'roi'],
     popular: true
   },
@@ -135,7 +135,6 @@ function downloadCSV(csvData: string, filename: string) {
   URL.revokeObjectURL(link.href);
 }
 
-// Função para carregar imagem e converter para DataURL
 async function getImageDataUrl(imageUrl: string): Promise<string> {
     try {
         const response = await fetch(imageUrl);
@@ -148,7 +147,7 @@ async function getImageDataUrl(imageUrl: string): Promise<string> {
         });
     } catch (error) {
         console.error("Erro ao carregar imagem para PDF:", error);
-        return ""; // Retorna string vazia em caso de erro
+        return "";
     }
 }
 
@@ -157,11 +156,11 @@ export default function ExportPage() {
   const [selectedCampaignIds, setSelectedCampaignIds] = useState<string[]>([]);
   const [selectedFieldIds, setSelectedFieldIds] = useState<string[]>([]);
   const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>({ from: subDays(new Date(), 30), to: new Date()});
-  const [exportFormat, setExportFormat] = useState<string>('pdf'); // Alterado para PDF como padrão para este exemplo
+  const [exportFormat, setExportFormat] = useState<string>('pdf');
   const { toast } = useToast();
   const [isExporting, setIsExporting] = useState(false);
 
-  const chartContainerRef = useRef<HTMLDivElement>(null); // Para renderizar gráficos off-screen
+  const chartContainerRef = useRef<HTMLDivElement>(null);
 
   const { data: campaigns = [], isLoading: isLoadingCampaigns, error: campaignsError } = useQuery<CampaignType[]>({
     queryKey: ['campaignsForExport'],
@@ -193,6 +192,34 @@ export default function ExportPage() {
     return numValue.toLocaleString('pt-BR');
   };
 
+  const handleTemplateSelect = (templateId: string) => {
+    const template = exportTemplates.find(t => t.id === templateId);
+    if (template) {
+      setSelectedTemplateId(templateId);
+      setSelectedFieldIds(template.fields as (keyof FormattedCampaignDataRow)[]);
+      setExportFormat(template.type === 'csv' || template.type === 'excel' || template.type === 'pdf' ? template.type : 'csv');
+    } else {
+      setSelectedTemplateId('');
+    }
+  };
+
+  const handleCampaignToggle = (campaignId: string) => {
+    setSelectedCampaignIds(prev => 
+      prev.includes(campaignId)
+        ? prev.filter(id => id !== campaignId)
+        : [...prev, campaignId]
+    );
+  };
+
+  const handleFieldToggle = (fieldId: keyof FormattedCampaignDataRow) => {
+    setSelectedFieldIds(prev => 
+      prev.includes(fieldId)
+        ? prev.filter(id => id !== fieldId)
+        : [...prev, fieldId]
+    );
+    setSelectedTemplateId(''); 
+  };
+  
   const generatePdfDocument = async (
     campaignData: FormattedCampaignDataRow[],
     selectedFieldsForPdf: AvailableField[],
@@ -218,116 +245,113 @@ export default function ExportPage() {
         doc.addImage(logoDataUrl, 'PNG', margin, margin / 2, imgWidth, imgHeight);
       }
       doc.setFontSize(18);
-      doc.setTextColor(40);
+      doc.setTextColor(40,40,40);
       doc.text("Relatório de Exportação", pageWidth / 2, margin + 5, { align: 'center' });
       currentY = margin + 20;
-      if (logoDataUrl) currentY = Math.max(currentY, margin / 2 + 30 + 5); // Ajusta Y se logo for alto
+      if (logoDataUrl) currentY = Math.max(currentY, margin / 2 + 30 + 5);
     };
 
     const addFooter = () => {
       doc.setFontSize(8);
-      doc.setTextColor(150);
+      doc.setTextColor(150,150,150);
       const footerText = `Desenvolvido por USB ABC CONTEUDO CRIATIVO - Página ${pageNumber}`;
       doc.text(footerText, pageWidth / 2, pageHeight - 10, { align: 'center' });
     };
 
     const checkAndAddPage = (neededHeight = 20) => {
-      if (currentY + neededHeight > pageHeight - margin - 10) { // -10 para footer
+      if (currentY + neededHeight > pageHeight - margin - 15) { // Ajuste para footer
         addFooter();
         doc.addPage();
         pageNumber++;
         addHeader();
-        return true; // Nova página adicionada
+        return true; 
       }
       return false;
     };
     
     addHeader();
 
-    // Seção de Informações Gerais
-    doc.setFontSize(14);
-    doc.setTextColor(50);
+    doc.setFontSize(14); doc.setTextColor(50,50,50);
     doc.text("Resumo do Relatório", margin, currentY);
     currentY += 8;
-    doc.setFontSize(10);
-    doc.setTextColor(100);
-    doc.text(`Período: ${reportDateRange.from ? format(reportDateRange.from, "dd/MM/yyyy", {locale: ptBR}) : 'N/A'} a ${reportDateRange.to ? format(reportDateRange.to, "dd/MM/yyyy", {locale: ptBR}) : 'N/A'}`, margin, currentY);
+    doc.setFontSize(10); doc.setTextColor(100,100,100);
+    doc.text(`Período: ${reportDateRange.from && isValid(reportDateRange.from) ? format(reportDateRange.from, "dd/MM/yyyy", {locale: ptBR}) : 'N/A'} a ${reportDateRange.to && isValid(reportDateRange.to) ? format(reportDateRange.to, "dd/MM/yyyy", {locale: ptBR}) : 'N/A'}`, margin, currentY);
     currentY += 5;
     doc.text(`Total de Campanhas Selecionadas: ${campaignData.length}`, margin, currentY);
     currentY += 5;
     doc.text(`Campos Incluídos: ${selectedFieldsForPdf.map(f => f.label).join(', ')}`, margin, currentY, { maxWidth: pageWidth - margin * 2 });
     currentY += 10;
 
-    // Função para renderizar um gráfico em um canvas temporário e obter a imagem
     const getChartImage = async (chartConfig: any, chartType: 'line'|'bar'|'pie'|'doughnut'): Promise<string> => {
         return new Promise((resolve) => {
-            const canvas = document.createElement('canvas');
-            canvas.width = 400; // Largura fixa para consistência
-            canvas.height = 250; // Altura fixa
-            const ctx = canvas.getContext('2d');
-            if (!ctx) { resolve(''); return; }
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = 400; 
+            tempCanvas.height = 250;
+            
+            // Adiciona o canvas ao corpo (oculto) para garantir que seja renderizável
+            tempCanvas.style.position = 'absolute';
+            tempCanvas.style.left = '-9999px';
+            document.body.appendChild(tempCanvas);
+
+            const ctx = tempCanvas.getContext('2d');
+            if (!ctx) { document.body.removeChild(tempCanvas); resolve(''); return; }
 
             new Chart(ctx, {
                 type: chartType,
                 data: chartConfig,
                 options: {
-                    responsive: false, // Importante para renderizar no tamanho definido
-                    animation: { duration: 0 }, // Desabilitar animações para captura
-                    devicePixelRatio: 2, // Melhor qualidade da imagem
-                    plugins: { legend: { display: true, position: 'bottom' } }
+                    responsive: false, 
+                    animation: { duration: 0 }, 
+                    devicePixelRatio: 2.5, // Aumenta a resolução da imagem do gráfico
+                     plugins: { legend: { display: true, position: 'bottom', labels: { font: {size: 8}, color: '#333' } }, title: { display: true, text: chartConfig.options?.title?.text || '', font: {size: 10}, color: '#333' } },
+                     scales: { x: { ticks: { font: {size: 8}, color: '#555' }, grid: { color: '#eee'} }, y: { ticks: { font: {size: 8}, color: '#555' }, grid: { color: '#eee'} }}
                 }
             });
             
-            // Pequeno delay para garantir que o gráfico foi renderizado antes de capturar
             setTimeout(() => {
-                resolve(canvas.toDataURL('image/png'));
-            }, 200);
+                resolve(tempCanvas.toDataURL('image/png'));
+                document.body.removeChild(tempCanvas); // Limpa o canvas temporário
+            }, 300); // Aumentado o delay para garantir renderização completa
         });
     };
     
-    // Seção de Gráficos
     if(selectedFieldsForPdf.some(f => ['impressions', 'clicks', 'conversions', 'roi'].includes(f.id))) {
-        checkAndAddPage(80); // Estimar altura necessária para título e um gráfico
-        doc.setFontSize(14); doc.setTextColor(50);
+        checkAndAddPage(10 + ((chartsData.timeSeries || chartsData.channel || chartsData.roi) ? 80 : 0)); 
+        doc.setFontSize(14); doc.setTextColor(50,50,50);
         doc.text("Visualizações Gráficas", margin, currentY);
         currentY += 8;
 
-        const chartWidth = (pageWidth - margin * 2 - 10) / 2; // Para 2 gráficos por linha
-        const chartHeight = chartWidth * (250/400); // Manter proporção
+        const chartWidth = (pageWidth - margin * 2 - 10) / 2; 
+        const chartHeight = chartWidth * (250/400); 
         let chartX = margin;
+        let chartsOnCurrentRow = 0;
 
-        if (chartsData.timeSeries && dashboardApiData?.timeSeriesData) {
-            if (checkAndAddPage(chartHeight + 10)) chartX = margin; // Reset X se nova página
-            const chartImage = await getChartImage(dashboardApiData.timeSeriesData, 'line');
-            if(chartImage) doc.addImage(chartImage, 'PNG', chartX, currentY, chartWidth, chartHeight);
-            chartX += chartWidth + 10;
-        }
-        if (chartsData.channel && dashboardApiData?.channelPerformanceData) {
-            if (chartX + chartWidth > pageWidth - margin) { // Próxima linha
-                currentY += chartHeight + 10;
-                chartX = margin;
-                checkAndAddPage(chartHeight + 10);
+        const addChartToPdf = async (chartData: any, type: 'line'|'bar'|'pie'|'doughnut', title: string) => {
+            if (chartData) {
+                 if (chartsOnCurrentRow >= 2 || chartX + chartWidth > pageWidth - margin) {
+                    currentY += chartHeight + 15; // Mais espaço vertical
+                    chartX = margin;
+                    chartsOnCurrentRow = 0;
+                    checkAndAddPage(chartHeight + 15);
+                }
+                const chartImage = await getChartImage({...chartData, options: { ...(chartData.options || {}), title: {display: true, text: title}}}, type);
+                if(chartImage) {
+                    doc.addImage(chartImage, 'PNG', chartX, currentY, chartWidth, chartHeight);
+                    chartsOnCurrentRow++;
+                    chartX += chartWidth + 10;
+                }
             }
-            const chartImage = await getChartImage(dashboardApiData.channelPerformanceData, 'doughnut');
-            if(chartImage) doc.addImage(chartImage, 'PNG', chartX, currentY, chartWidth, chartHeight);
-            chartX += chartWidth + 10;
         }
-        if (chartsData.roi && dashboardApiData?.roiData) {
-            if (chartX + chartWidth > pageWidth - margin) { // Próxima linha
-                currentY += chartHeight + 10;
-                chartX = margin;
-                checkAndAddPage(chartHeight + 10);
-            }
-            const chartImage = await getChartImage(dashboardApiData.roiData, 'bar');
-            if(chartImage) doc.addImage(chartImage, 'PNG', chartX, currentY, chartWidth, chartHeight);
-        }
-        currentY += chartHeight + 10; // Espaço após os gráficos
+
+        if (chartsData.timeSeries && dashboardApiData?.timeSeriesData) await addChartToPdf(dashboardApiData.timeSeriesData, 'line', 'Performance ao Longo do Tempo');
+        if (chartsData.channel && dashboardApiData?.channelPerformanceData) await addChartToPdf(dashboardApiData.channelPerformanceData, 'doughnut', 'Distribuição por Canal');
+        if (chartsData.roi && dashboardApiData?.roiData) await addChartToPdf(dashboardApiData.roiData, 'bar', 'ROI por Mês/Plataforma');
+        
+        if(chartsOnCurrentRow > 0) currentY += chartHeight + 15;
     }
 
-
-    // Seção de Dados Tabulares
-    checkAndAddPage(30); // Estimar altura para título da tabela e alguns dados
-    doc.setFontSize(14); doc.setTextColor(50);
+    checkAndAddPage(30); 
+    doc.setFontSize(14); doc.setTextColor(50,50,50);
     doc.text("Dados Detalhados", margin, currentY);
     currentY += 8;
 
@@ -345,33 +369,33 @@ export default function ExportPage() {
         const value = row[field.id];
         return value === null || value === undefined ? '' : String(value);
       })),
-      theme: 'grid',
-      styles: { fontSize: 8, cellPadding: 1.5, overflow: 'linebreak' },
-      headStyles: { fillColor: [22, 160, 133], textColor: 255, fontStyle: 'bold' },
+      theme: 'striped', // 'striped', 'grid', 'plain'
+      styles: { fontSize: 7, cellPadding: 1.5, overflow: 'linebreak' },
+      headStyles: { fillColor: [26, 188, 156], textColor: 255, fontStyle: 'bold', fontSize: 8 },
+      alternateRowStyles: { fillColor: [245, 245, 245] },
       columnStyles: tableColumnStyles,
       margin: { left: margin, right: margin },
-      didDrawPage: (data) => { // Adiciona header e footer em novas páginas criadas pelo autoTable
-        if (data.pageNumber > pageNumber) { // Evita adicionar na primeira página de novo
-            pageNumber = data.pageNumber;
-            addHeader(); // Adiciona header em novas páginas
+      didDrawPage: (data) => { 
+        if (data.pageNumber > 1 || (data.pageNumber === 1 && data.cursor?.y === margin + 20)) {
+          // (Re)adiciona header se não for a primeiríssima chamada da primeira página
+          if (data.pageNumber > pageNumber || (data.pageNumber ===1 && data.cursor?.y !== margin + 20 )) { // Evitar header duplo na primeira pagina do autotable
+             if(data.pageNumber !== 1) addHeader(); // Só adiciona header se não for a primeira página
+          }
         }
-        addFooter(); // Adiciona footer em todas as páginas desenhadas pelo autoTable
+         pageNumber = data.pageNumber; // Atualiza o contador de página
+        addFooter();
       }
     });
     
-    // currentY = (doc as any).lastAutoTable.finalY + 10; // Atualiza currentY após a tabela
-    // O didDrawPage já cuida do footer para páginas do autoTable.
-    // Se houver conteúdo após a tabela, precisa adicionar o footer na última página manualmente.
-    if (pageNumber === (doc.getNumberOfPages() || 1) && (doc as any).lastAutoTable.finalY < pageHeight - margin -15 ) {
-        addFooter(); // Adiciona footer na última página se não foi adicionado pelo autoTable
+    // Adiciona footer na última página se o autotable não criou uma nova página no final
+    if (pageNumber === doc.getNumberOfPages()){
+        addFooter();
     }
-
-
+    
     doc.save(`Relatorio_USB_MKT_${format(new Date(), "yyyyMMdd_HHmmss")}.pdf`);
     setIsExporting(false);
     toast({ title: "PDF Gerado", description: "Seu relatório em PDF foi baixado." });
   };
-
 
   const handleExport = async () => {
     if (selectedCampaignIds.length === 0 || selectedFieldIds.length === 0 || !dateRange.from || !dateRange.to) {
@@ -384,35 +408,34 @@ export default function ExportPage() {
     const dataToExport: FormattedCampaignDataRow[] = [];
     const dashboardMetrics = dashboardApiData?.metrics;
     const recentCampaignsFromDashboard = dashboardApiData?.recentCampaigns || [];
-    const selectedFieldObjects = availableFields.filter(f => selectedFieldIds.includes(f.id));
-
+    const finalSelectedFieldObjects = availableFields.filter(f => selectedFieldIds.includes(f.id));
 
     for (const campaign of selectedCampaignObjects) {
       const row: FormattedCampaignDataRow = {};
       const recentCampaignData = recentCampaignsFromDashboard.find((rc: any) => rc.id === campaign.id);
 
-      for (const field of selectedFieldObjects) {
+      for (const field of finalSelectedFieldObjects) {
         const fieldId = field.id;
         switch (fieldId) {
           case 'campaignId': row[fieldId] = campaign.id; break;
           case 'campaignName': row[fieldId] = campaign.name; break;
           case 'status': row[fieldId] = campaign.status; break;
-          case 'startDate': row[fieldId] = campaign.startDate && isValid(parseISO(String(campaign.startDate))) ? format(parseISO(String(campaign.startDate)), 'dd/MM/yyyy') : 'N/A'; break;
-          case 'endDate': row[fieldId] = campaign.endDate && isValid(parseISO(String(campaign.endDate))) ? format(parseISO(String(campaign.endDate)), 'dd/MM/yyyy') : 'N/A'; break;
-          case 'platforms': row[fieldId] = campaign.platforms?.join(', '); break;
+          case 'startDate': row[fieldId] = campaign.startDate && isValid(parseISO(String(campaign.startDate))) ? format(parseISO(String(campaign.startDate)), 'dd/MM/yyyy', {locale: ptBR}) : 'N/A'; break;
+          case 'endDate': row[fieldId] = campaign.endDate && isValid(parseISO(String(campaign.endDate))) ? format(parseISO(String(campaign.endDate)), 'dd/MM/yyyy', {locale: ptBR}) : 'N/A'; break;
+          case 'platforms': row[fieldId] = campaign.platforms?.join(', ') || 'N/A'; break;
           case 'targetAudience': row[fieldId] = campaign.targetAudience || 'N/A'; break;
           case 'industry': row[fieldId] = campaign.industry || 'N/A'; break;
           case 'budget': row[fieldId] = formatCurrency(campaign.budget); break;
           case 'spentAmount': row[fieldId] = formatCurrency(recentCampaignData?.spent ?? 'N/A'); break;
-          case 'impressions': row[fieldId] = formatNumber(recentCampaignData?.performanceData?.impressions ?? (selectedCampaignObjects.length === 1 ? dashboardMetrics?.impressions : 'N/A (Agregado)')); break;
-          case 'clicks': row[fieldId] = formatNumber(recentCampaignData?.performanceData?.clicks ?? (selectedCampaignObjects.length === 1 ? dashboardMetrics?.clicks : 'N/A (Agregado)')); break;
-          case 'ctr': row[fieldId] = `${(recentCampaignData?.performanceData?.ctr ?? (selectedCampaignObjects.length === 1 ? dashboardMetrics?.ctr : 0)).toFixed(2)}%`; break;
-          case 'conversions': row[fieldId] = formatNumber(recentCampaignData?.performanceData?.conversions ?? (selectedCampaignObjects.length === 1 ? dashboardMetrics?.conversions : 'N/A (Agregado)')); break;
-          case 'cost': row[fieldId] = formatCurrency(recentCampaignData?.performanceData?.cost ?? (selectedCampaignObjects.length === 1 ? dashboardMetrics?.totalCostPeriod : 'N/A (Agregado)')); break;
-          case 'revenue': row[fieldId] = formatCurrency(recentCampaignData?.performanceData?.revenue ?? 'N/A'); break;
-          case 'roi': row[fieldId] = `${(recentCampaignData?.performanceData?.roi ?? (selectedCampaignObjects.length === 1 ? dashboardMetrics?.avgROI : 0)).toFixed(1)}x`; break;
-          case 'cpa': row[fieldId] = formatCurrency(recentCampaignData?.performanceData?.cpa ?? 'N/A'); break;
-          case 'leads': row[fieldId] = formatNumber(recentCampaignData?.performanceData?.leads ?? 'N/A'); break;
+          case 'impressions': row[fieldId] = formatNumber(dashboardMetrics?.impressions); break;
+          case 'clicks': row[fieldId] = formatNumber(dashboardMetrics?.clicks); break;
+          case 'ctr': row[fieldId] = `${dashboardMetrics?.ctr?.toFixed(2) ?? '0.00'}%`; break;
+          case 'conversions': row[fieldId] = formatNumber(dashboardMetrics?.conversions); break;
+          case 'cost': row[fieldId] = formatCurrency(dashboardMetrics?.totalCostPeriod); break;
+          case 'revenue': row[fieldId] = 'N/A'; break; 
+          case 'roi': row[fieldId] = `${dashboardMetrics?.avgROI?.toFixed(1) ?? '0.0'}x`; break;
+          case 'cpa': row[fieldId] = 'N/A'; break;
+          case 'leads': row[fieldId] = 'N/A'; break;
           default: row[fieldId] = (campaign as any)[fieldId] !== undefined && (campaign as any)[fieldId] !== null ? String((campaign as any)[fieldId]) : 'N/A';
         }
       }
@@ -432,7 +455,7 @@ export default function ExportPage() {
     if (exportFormat === 'pdf') {
       await generatePdfDocument(
         dataToExport, 
-        selectedFieldObjects, 
+        finalSelectedFieldObjects, 
         dashboardMetrics,
         { 
           timeSeries: dashboardApiData?.timeSeriesData, 
@@ -442,7 +465,7 @@ export default function ExportPage() {
         dateRange
       );
     } else if (exportFormat === 'csv') {
-      const csvData = convertToCSV(dataToExport, selectedFieldObjects);
+      const csvData = convertToCSV(dataToExport, finalSelectedFieldObjects);
       if(csvData) {
         downloadCSV(csvData, `relatorio_mktv2_${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`);
         toast({ title: "Exportação CSV Concluída", description: "Seu relatório foi gerado e baixado." });
@@ -451,7 +474,7 @@ export default function ExportPage() {
       }
       setIsExporting(false);
     } else {
-      toast({ title: "Formato Indisponível", description: `A exportação para ${exportFormat.toUpperCase()} ainda não está implementada. Tente CSV ou PDF.`, variant: "default" });
+      toast({ title: "Formato Indisponível", description: `A exportação para ${exportFormat.toUpperCase()} ainda não está implementada.`, variant: "default" });
       setIsExporting(false);
     }
   };
@@ -472,7 +495,7 @@ export default function ExportPage() {
     return acc;
   }, {} as Record<string, AvailableField[]>);
 
-  if (isLoadingCampaigns || (isLoadingDashboardData && !dashboardApiData)) {
+  if (isLoadingCampaigns || (isLoadingDashboardData && !dashboardApiData && (dateRange.from && dateRange.to))) {
     return <div className="p-8 text-center"><Loader2 className="h-12 w-12 animate-spin text-primary mx-auto" /> Carregando dados para exportação...</div>;
   }
 
@@ -487,7 +510,6 @@ export default function ExportPage() {
   
   return (
     <div className="space-y-6 p-4 md:p-6">
-      {/* Elemento para renderizar gráficos off-screen */}
       <div ref={chartContainerRef} style={{ position: 'absolute', left: '-9999px', top: '-9999px', width: '400px', height: '250px' }}></div>
 
       <div className="flex justify-between items-center">
@@ -513,7 +535,7 @@ export default function ExportPage() {
             <CardHeader>
               <CardTitle>1. Escolher Template (Opcional)</CardTitle>
               <CardDescription>
-                Templates pré-definem os campos.
+                Templates pré-definem os campos e o formato do relatório.
               </CardDescription>
             </CardHeader>
             <CardContent>
