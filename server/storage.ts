@@ -3,6 +3,12 @@ import { db } from './db';
 import {
   users, campaigns, creatives, metrics, whatsappMessages, copies, alerts, budgets, landingPages,
   chatSessions, chatMessages, funnels, funnelStages, launchPhaseEnum,
+  // Tipos e tabelas do WhatsApp
+  whatsappConnections as whatsappConnectionsTable, // Renomeado para evitar conflito de nome
+  insertWhatsappConnectionSchema, // Schema Zod para inserção
+  selectWhatsappConnectionSchema, // Schema Zod para seleção
+  type WhatsappConnection, type InsertWhatsappConnection, // Tipos TypeScript
+
   type User, type InsertUser, type Campaign, type InsertCampaign,
   type Creative, type InsertCreative, type Metric, type InsertMetric,
   type WhatsappMessage, type InsertWhatsappMessage, type Copy, type InsertCopy,
@@ -10,52 +16,60 @@ import {
   type LandingPage, type InsertLandingPage,
   type ChatSession, type InsertChatSession, type ChatMessage, type InsertChatMessage,
   type Funnel, type InsertFunnel, type FunnelStage, type InsertFunnelStage
-  // Adicione quaisquer outros tipos ou schemas que você usa aqui
-} from '../shared/schema'; // Ajuste o caminho se necessário
+} from '../shared/schema';
 
 import { eq, count, sum, sql, desc, and, or, gte, lte, isNull, asc, ilike } from 'drizzle-orm';
 import * as bcrypt from 'bcrypt';
 
 // Funções de simulação de dados de gráfico (mantidas como no seu original)
-const chartColors = { /* ... seu objeto chartColors ... */ palette: [ 'rgba(75, 192, 192, 1)', 'rgba(255, 99, 132, 1)', 'rgba(54, 162, 235, 1)', 'rgba(255, 206, 86, 1)', 'rgba(153, 102, 255, 1)', 'rgba(255, 159, 64, 1)', 'rgba(200, 200, 200, 1)' ], background: [ 'rgba(75, 192, 192, 0.2)', 'rgba(255, 99, 132, 0.2)', 'rgba(54, 162, 235, 0.2)', 'rgba(255, 206, 86, 0.2)', 'rgba(153, 102, 255, 0.2)', 'rgba(255, 159, 64, 0.2)', 'rgba(200, 200, 200, 0.2)' ] };
+const chartColors = { palette: [ 'rgba(75, 192, 192, 1)', 'rgba(255, 99, 132, 1)', 'rgba(54, 162, 235, 1)', 'rgba(255, 206, 86, 1)', 'rgba(153, 102, 255, 1)', 'rgba(255, 159, 64, 1)', 'rgba(200, 200, 200, 1)' ], background: [ 'rgba(75, 192, 192, 0.2)', 'rgba(255, 99, 132, 0.2)', 'rgba(54, 162, 235, 0.2)', 'rgba(255, 206, 86, 0.2)', 'rgba(153, 102, 255, 0.2)', 'rgba(255, 159, 64, 0.2)', 'rgba(200, 200, 200, 0.2)' ] };
 function generateSimulatedLineChartData(label: string, startValue: number, countNum: number, maxFluctuation: number, color: string): { labels: string[], datasets: { label: string, data: number[], borderColor: string, backgroundColor: string, fill: boolean, tension: number }[] } { const dataPoints: number[] = []; const labels: string[] = []; let currentValue = startValue; for (let i = 0; i < countNum; i++) { labels.push(`Dia ${i + 1}`); dataPoints.push(Math.round(currentValue)); currentValue += (Math.random() * maxFluctuation * 2) - maxFluctuation; if (currentValue < 0) currentValue = 0; } return { labels: labels, datasets: [ { label: label, data: dataPoints, borderColor: color, backgroundColor: color.replace('1)', '0.2)'), fill: true, tension: 0.4, }, ], }; }
 function generateSimulatedBarChartData(label: string, categories: string[], baseValue: number, maxFluctuation: number, colors: string[]): { labels: string[], datasets: { label: string, data: number[], backgroundColor: string[] }[] } { const dataPoints: number[] = categories.map(() => Math.round(baseValue + (Math.random() * maxFluctuation * 2) - maxFluctuation)); return { labels: categories, datasets: [ { label: label, data: dataPoints, backgroundColor: colors, }, ], }; }
 function generateSimulatedDoughnutChartData(chartLabels: string[], baseValue: number, maxFluctuation: number, colors: string[]): { labels: string[], datasets: { data: number[], backgroundColor: string[], borderWidth: number }[] } { const dataPoints: number[] = chartLabels.map(() => Math.round(baseValue + (Math.random() * maxFluctuation * 2) - maxFluctuation)); return { labels: chartLabels, datasets: [ { data: dataPoints, backgroundColor: colors.map(color => color.replace('1)', '0.8)')), borderWidth: 0, }, ], }; }
 
 
-// Interface IStorage (mantida como no seu original)
+// Interface IStorage (mantida como no seu original, mas com adições para WhatsApp)
 export interface IStorage {
+  // User methods
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   validatePassword(password: string, hashedPassword: string): Promise<boolean>;
+  // Campaign methods
   getCampaigns(userId: number, limit?: number): Promise<Campaign[]>;
   getCampaign(id: number, userId: number): Promise<Campaign | undefined>;
   createCampaign(campaign: InsertCampaign): Promise<Campaign>;
   updateCampaign(id: number, campaign: Partial<Omit<InsertCampaign, 'userId'>>, userId: number): Promise<Campaign | undefined>;
   deleteCampaign(id: number, userId: number): Promise<boolean>;
+  // Creative methods
   getCreatives(userId: number, campaignId?: number | null): Promise<Creative[]>;
   getCreative(id: number, userId: number): Promise<Creative | undefined>;
   createCreative(creative: InsertCreative): Promise<Creative>;
   updateCreative(id: number, creative: Partial<Omit<InsertCreative, 'userId'>>, userId: number): Promise<Creative | undefined>;
   deleteCreative(id: number, userId: number): Promise<boolean>;
+  // Metric methods
   getMetricsForCampaign(campaignId: number, userId: number): Promise<Metric[]>;
   createMetric(metricData: InsertMetric): Promise<Metric>;
+  // Whatsapp Message methods (geral)
   getMessages(userId: number, contactNumber?: string): Promise<WhatsappMessage[]>;
   createMessage(messageData: InsertWhatsappMessage): Promise<WhatsappMessage>;
   markMessageAsRead(id: number, userId: number): Promise<boolean>;
   getContacts(userId: number): Promise<{ contactNumber: string; contactName: string | null; lastMessage: string; timestamp: Date, unreadCount: number }[]>;
+  // Copy methods
   getCopies(userId: number, campaignId?: number | null, phase?: string, purposeKey?: string, searchTerm?: string): Promise<Copy[]>;
   createCopy(copy: InsertCopy): Promise<Copy>;
   updateCopy(id: number, copyData: Partial<Omit<InsertCopy, 'userId' | 'id' | 'createdAt'>>, userId: number): Promise<Copy | undefined>;
   deleteCopy(id: number, userId: number): Promise<boolean>;
+  // Alert methods
   getAlerts(userId: number, onlyUnread?: boolean): Promise<Alert[]>;
   createAlert(alertData: InsertAlert): Promise<Alert>;
   markAlertAsRead(id: number, userId: number): Promise<boolean>;
+  // Budget methods
   getBudgets(userId: number, campaignId?: number | null): Promise<Budget[]>;
   createBudget(budget: InsertBudget): Promise<Budget>;
   updateBudget(id: number, budgetData: Partial<Omit<InsertBudget, 'userId' | 'campaignId'>>, userId: number): Promise<Budget | undefined>;
+  // Landing Page methods
   getLandingPages(userId: number): Promise<LandingPage[]>;
   getLandingPage(id: number, userId: number): Promise<LandingPage | undefined>;
   getLandingPageBySlug(slug: string): Promise<LandingPage | undefined>;
@@ -63,6 +77,7 @@ export interface IStorage {
   createLandingPage(lpData: InsertLandingPage): Promise<LandingPage>;
   updateLandingPage(id: number, lpData: Partial<Omit<InsertLandingPage, 'userId'>>, userId: number): Promise<LandingPage | undefined>;
   deleteLandingPage(id: number, userId: number): Promise<boolean>;
+  // Chat Session methods (MCP)
   createChatSession(userId: number, title?: string): Promise<ChatSession>;
   getChatSession(sessionId: number, userId: number): Promise<ChatSession | undefined>;
   getChatSessions(userId: number): Promise<ChatSession[]>;
@@ -70,7 +85,9 @@ export interface IStorage {
   deleteChatSession(sessionId: number, userId: number): Promise<boolean>;
   addChatMessage(messageData: InsertChatMessage): Promise<ChatMessage>;
   getChatMessages(sessionId: number, userId: number): Promise<ChatMessage[]>;
+  // Dashboard methods
   getDashboardData(userId: number, timeRange: string): Promise<any>;
+  // Funnel methods
   getFunnels(userId: number, campaignId?: number | null): Promise<Funnel[]>;
   getFunnel(id: number, userId: number): Promise<Funnel | undefined>;
   createFunnel(funnelData: InsertFunnel): Promise<Funnel>;
@@ -80,6 +97,11 @@ export interface IStorage {
   createFunnelStage(stageData: InsertFunnelStage): Promise<FunnelStage>;
   updateFunnelStage(id: number, stageData: Partial<Omit<InsertFunnelStage, 'funnelId'>>, userId: number): Promise<FunnelStage | undefined>;
   deleteFunnelStage(id: number, userId: number): Promise<boolean>;
+
+  // NOVOS MÉTODOS PARA WHATSAPP CONNECTIONS
+  createWhatsappConnection(data: InsertWhatsappConnection): Promise<WhatsappConnection>;
+  getWhatsappConnection(userId: number): Promise<WhatsappConnection | undefined>;
+  updateWhatsappConnection(userId: number, data: Partial<Omit<InsertWhatsappConnection, 'userId' | 'id'>>): Promise<WhatsappConnection | undefined>;
 }
 
 
@@ -115,122 +137,18 @@ export class DatabaseStorage implements IStorage {
   async markMessageAsRead(id: number, userId: number): Promise<boolean> { const result = await db.update(whatsappMessages).set({ isRead: true }).where(and(eq(whatsappMessages.id, id), eq(whatsappMessages.userId, userId), eq(whatsappMessages.isRead, false))); return (result.rowCount ?? 0) > 0; }
   async getContacts(userId: number): Promise<{ contactNumber: string; contactName: string | null; lastMessage: string; timestamp: Date, unreadCount: number }[]> { const allMessages = await db.select().from(whatsappMessages).where(eq(whatsappMessages.userId, userId)).orderBy(desc(whatsappMessages.timestamp)); const contactsMap = new Map<string, { contactNumber: string; contactName: string | null; lastMessage: string; timestamp: Date, unreadCount: number }>(); for (const msg of allMessages) { if (!contactsMap.has(msg.contactNumber)) { contactsMap.set(msg.contactNumber, { contactNumber: msg.contactNumber, contactName: msg.contactName || null, lastMessage: msg.message, timestamp: new Date(msg.timestamp), unreadCount: 0, }); } const contact = contactsMap.get(msg.contactNumber)!; if (!msg.isRead && msg.direction === 'incoming') { contact.unreadCount++; } } return Array.from(contactsMap.values()).sort((a,b) => b.timestamp.getTime() - a.timestamp.getTime()); }
 
-  // --- MÉTODOS DE COPIES (COM LOGS) ---
+  // Métodos de Copies (mantidos)
   async getCopies(userId: number, campaignId?: number | null, phase?: string, purposeKey?: string, searchTerm?: string): Promise<Copy[]> {
     const conditions: any[] = [eq(copies.userId, userId)];
-    if (campaignId !== undefined) { // Verifica se campaignId foi fornecido
-      conditions.push(campaignId === null ? isNull(copies.campaignId) : eq(copies.campaignId, campaignId));
-    }
-    if (phase && phase !== 'all') { // Adicionado check para 'all'
-        conditions.push(eq(copies.launchPhase, phase as typeof launchPhaseEnum.enumValues[number]));
-    }
-    if (purposeKey && purposeKey !== 'all') { // Adicionado check para 'all'
-        conditions.push(eq(copies.purposeKey, purposeKey));
-    }
-    if (searchTerm && searchTerm.trim() !== '') {
-        const searchPattern = `%${searchTerm.toLowerCase()}%`; // Convertido para minúsculas para ilike
-        conditions.push(
-            or(
-                ilike(copies.title, searchPattern),
-                ilike(copies.content, searchPattern)
-                // Adicionar outros campos se necessário para busca, ex: ilike(copies.platform, searchPattern)
-            )
-        );
-    }
+    if (campaignId !== undefined) { conditions.push(campaignId === null ? isNull(copies.campaignId) : eq(copies.campaignId, campaignId)); }
+    if (phase && phase !== 'all') { conditions.push(eq(copies.launchPhase, phase as typeof launchPhaseEnum.enumValues[number]));}
+    if (purposeKey && purposeKey !== 'all') { conditions.push(eq(copies.purposeKey, purposeKey)); }
+    if (searchTerm && searchTerm.trim() !== '') { const searchPattern = `%${searchTerm.toLowerCase()}%`; conditions.push(or(ilike(copies.title, searchPattern), ilike(copies.content, searchPattern)));}
     return db.select().from(copies).where(and(...conditions)).orderBy(desc(copies.createdAt));
   }
-
-  async createCopy(copyData: InsertCopy): Promise<Copy> {
-    // LOGS PARA DEBUG ADICIONADOS AQUI
-    console.log('[storage.createCopy] Iniciando método.');
-    console.log('[storage.createCopy] copyData recebido (argumento da função):', JSON.stringify(copyData, null, 2));
-
-    // Assegurar que userId está presente e é um número
-    if (typeof copyData.userId !== 'number') {
-        console.error('[storage.createCopy] ERRO FATAL: userId não é um número ou está ausente no copyData que chegou ao storage!', copyData.userId);
-        throw new Error("Erro interno: userId inválido ao tentar criar copy.");
-    }
-
-    const dataToInsert = {
-        ...copyData, // Espalha todos os campos de copyData (incluindo userId)
-        // Trata campaignId para ser null se for undefined, caso contrário usa o valor de copyData.campaignId
-        campaignId: copyData.campaignId === undefined ? null : copyData.campaignId,
-        // Garante que os campos JSONB tenham um valor padrão se não forem fornecidos
-        details: copyData.details || {},
-        baseInfo: copyData.baseInfo || {},
-        fullGeneratedResponse: copyData.fullGeneratedResponse || {},
-        tags: copyData.tags || [],
-        // createdAt e lastUpdatedAt são definidos pelo banco com defaultNow() e não devem ser incluídos aqui
-        // a menos que você queira sobrescrevê-los, o que geralmente não é o caso para create.
-    };
-
-    // Remover campos que o banco gerencia (id, createdAt, lastUpdatedAt) antes da inserção,
-    // embora o Drizzle possa lidar com isso, é uma boa prática ser explícito.
-    // No entanto, InsertCopy já deve ser o tipo correto sem esses campos devido ao .omit() no Zod schema.
-    // Mas se userId não está no .omit() do Zod, ele estará em copyData.
-
-    console.log('[storage.createCopy] dataToInsert (objeto final para o DB):', JSON.stringify(dataToInsert, null, 2));
-
-    const [newCopy] = await db.insert(copies).values(dataToInsert).returning();
-    if (!newCopy) {
-      console.error("[storage.createCopy] Falha ao inserir copy no banco. `returning()` não retornou dados.");
-      throw new Error("Falha ao salvar a copy no banco de dados.");
-    }
-    console.log('[storage.createCopy] Copy criada com sucesso:', JSON.stringify(newCopy, null, 2));
-    return newCopy;
-  }
-
-  async updateCopy(id: number, copyData: Partial<Omit<InsertCopy, 'userId' | 'id' | 'createdAt'>>, userId: number): Promise<Copy | undefined> {
-    // Verifica se a copy existe e pertence ao usuário
-    const existingCopyResult = await db.select({id: copies.id}).from(copies)
-        .where(and(eq(copies.id, id), eq(copies.userId, userId)))
-        .limit(1);
-
-    if(!existingCopyResult || existingCopyResult.length === 0) {
-      console.warn(`[storage.updateCopy] Tentativa de atualizar copy com ID: ${id} para UserID: ${userId}. Copy não encontrada ou não pertence ao usuário.`);
-      return undefined;
-    }
-
-    // Prepara os dados para atualização
-    const dataToUpdate: Partial<Omit<Copy, 'id' | 'userId' | 'createdAt'>> = {
-        ...copyData, // Espalha os campos permitidos de copyData
-        lastUpdatedAt: new Date(), // Atualiza explicitamente o lastUpdatedAt
-    };
-
-    // Tratar campaignId explicitamente para garantir que null seja enviado se for o caso
-    // Usar hasOwnProperty para distinguir entre campaignId não enviado e campaignId: undefined
-    if (copyData.hasOwnProperty('campaignId')) {
-        // @ts-ignore // campaignId pode ser null
-        dataToUpdate.campaignId = copyData.campaignId === undefined ? null : copyData.campaignId;
-    }
-    // Não é necessário remover userId, id, createdAt de dataToUpdate porque o tipo Omit já fez isso
-
-    console.log(`[storage.updateCopy] Atualizando copy ID: ${id} para UserID: ${userId} com dados:`, JSON.stringify(dataToUpdate, null, 2));
-
-    const [updatedCopy] = await db.update(copies)
-      .set(dataToUpdate)
-      .where(and(eq(copies.id, id), eq(copies.userId, userId))) // Garante que só atualiza a copy correta
-      .returning();
-
-    if (!updatedCopy) {
-        console.error(`[storage.updateCopy] Falha ao ATUALIZAR copy ID: ${id} para usuário ${userId} no banco, embora a verificação inicial tenha encontrado a copy.`);
-    } else {
-        console.log(`[storage.updateCopy] Copy ID: ${id} atualizada com sucesso para UserID: ${userId}.`);
-    }
-    return updatedCopy;
-  }
-
-  async deleteCopy(id: number, userId: number): Promise<boolean> {
-    console.log(`[storage.deleteCopy] Tentando deletar copy ID: ${id} para UserID: ${userId}`);
-    const result = await db.delete(copies).where(and(eq(copies.id, id), eq(copies.userId, userId)));
-    const success = (result.rowCount ?? 0) > 0;
-    if (success) {
-        console.log(`[storage.deleteCopy] Copy ID: ${id} deletada com sucesso para UserID: ${userId}.`);
-    } else {
-        console.warn(`[storage.deleteCopy] Nenhuma copy deletada para ID: ${id} e UserID: ${userId}. Pode não existir ou não pertencer ao usuário.`);
-    }
-    return success;
-  }
+  async createCopy(copyData: InsertCopy): Promise<Copy> { if (typeof copyData.userId !== 'number') { throw new Error("Erro interno: userId inválido ao tentar criar copy.");} const dataToInsert = { ...copyData, campaignId: copyData.campaignId === undefined ? null : copyData.campaignId, details: copyData.details || {}, baseInfo: copyData.baseInfo || {}, fullGeneratedResponse: copyData.fullGeneratedResponse || {}, tags: copyData.tags || [], }; const [newCopy] = await db.insert(copies).values(dataToInsert).returning(); if (!newCopy) { throw new Error("Falha ao salvar a copy no banco de dados.");} return newCopy;}
+  async updateCopy(id: number, copyData: Partial<Omit<InsertCopy, 'userId' | 'id' | 'createdAt'>>, userId: number): Promise<Copy | undefined> { const existingCopyResult = await db.select({id: copies.id}).from(copies).where(and(eq(copies.id, id), eq(copies.userId, userId))).limit(1); if(!existingCopyResult || existingCopyResult.length === 0) { return undefined; } const dataToUpdate: Partial<Omit<Copy, 'id' | 'userId' | 'createdAt'>> = { ...copyData, lastUpdatedAt: new Date(), }; if (copyData.hasOwnProperty('campaignId')) { (dataToUpdate as any).campaignId = copyData.campaignId === undefined ? null : copyData.campaignId; } const [updatedCopy] = await db.update(copies).set(dataToUpdate).where(and(eq(copies.id, id), eq(copies.userId, userId))).returning(); return updatedCopy;}
+  async deleteCopy(id: number, userId: number): Promise<boolean> { const result = await db.delete(copies).where(and(eq(copies.id, id), eq(copies.userId, userId))); return (result.rowCount ?? 0) > 0; }
 
   // Métodos de Alerts (mantidos)
   async getAlerts(userId: number, onlyUnread?: boolean): Promise<Alert[]> { const conditions = [eq(alerts.userId, userId)]; if (onlyUnread) { conditions.push(eq(alerts.isRead, false)); } return db.select().from(alerts).where(and(...conditions)).orderBy(desc(alerts.createdAt)); }
@@ -251,7 +169,7 @@ export class DatabaseStorage implements IStorage {
   async updateLandingPage(id: number, lpData: Partial<Omit<InsertLandingPage, 'userId'>>, userId: number): Promise<LandingPage | undefined> { const [updatedLP] = await db.update(landingPages).set({ ...lpData, updatedAt: new Date() }).where(and(eq(landingPages.id, id), eq(landingPages.userId, userId))).returning(); return updatedLP; }
   async deleteLandingPage(id: number, userId: number): Promise<boolean> { const result = await db.delete(landingPages).where(and(eq(landingPages.id, id), eq(landingPages.userId, userId))); return (result.rowCount ?? 0) > 0; }
 
-  // Métodos de Chat (mantidos)
+  // Métodos de Chat (MCP - mantidos)
   async createChatSession(userId: number, title: string = 'Nova Conversa'): Promise<ChatSession> { const [newSession] = await db.insert(chatSessions).values({ userId, title, createdAt: new Date(), updatedAt: new Date() }).returning(); if (!newSession) throw new Error("Falha ao criar nova sessão de chat."); return newSession; }
   async getChatSession(sessionId: number, userId: number): Promise<ChatSession | undefined> { const [session] = await db.select().from(chatSessions).where(and(eq(chatSessions.id, sessionId), eq(chatSessions.userId, userId))).limit(1); return session; }
   async getChatSessions(userId: number): Promise<ChatSession[]> { return db.select().from(chatSessions).where(eq(chatSessions.userId, userId)).orderBy(desc(chatSessions.updatedAt)); }
@@ -279,23 +197,24 @@ export class DatabaseStorage implements IStorage {
     else { startDate.setDate(now.getDate() - 30); }
 
     const metricsTimeCondition = and( eq(metrics.userId, userId), gte(metrics.date, startDate) );
-    const budgetsUserCondition = eq(budgets.userId, userId); // Assuming budgets also need a user check
+    const budgetsUserCondition = eq(budgets.userId, userId);
 
     const activeCampaignsResult = await db.select({ count: count() }).from(campaigns).where(and(eq(campaigns.userId, userId), eq(campaigns.status, 'active')));
     const activeCampaigns = activeCampaignsResult[0]?.count || 0;
-
-    // Use sql<string | number> para CAST se os campos de orçamento forem TEXT
-    const totalSpentResult = await db.select({ total: sum(sql<string | number>`CAST(${budgets.spentAmount} AS DECIMAL)`) }).from(budgets).where(budgetsUserCondition);
-    const totalSpent = parseFloat(String(totalSpentResult[0]?.total || "0")) || 0;
+    
+    // Correção: Assegurar que os campos de orçamento são tratados como números antes de somar
+    const budgetsData = await db.select({ spentAmount: budgets.spentAmount }).from(budgets).where(budgetsUserCondition);
+    const totalSpent = budgetsData.reduce((acc, curr) => acc + parseFloat(String(curr.spentAmount || "0")), 0);
 
     const totalConversionsResult = await db.select({ total: sum(metrics.conversions) }).from(metrics).where(metricsTimeCondition);
     const conversions = parseFloat(String(totalConversionsResult[0]?.total || '0')) || 0;
 
-    const totalRevenueResult = await db.select({ total: sum(metrics.revenue) }).from(metrics).where(metricsTimeCondition);
+    const totalRevenueResult = await db.select({ total: sum(sql<number>`CAST(${metrics.revenue} AS DECIMAL)`) }).from(metrics).where(metricsTimeCondition);
     const totalRevenue = parseFloat(String(totalRevenueResult[0]?.total || '0')) || 0;
 
-    const totalCostResult = await db.select({ total: sum(metrics.cost) }).from(metrics).where(metricsTimeCondition);
+    const totalCostResult = await db.select({ total: sum(sql<number>`CAST(${metrics.cost} AS DECIMAL)`) }).from(metrics).where(metricsTimeCondition);
     const totalCost = parseFloat(String(totalCostResult[0]?.total || '0')) || 0;
+
 
     const avgROI = totalCost > 0 ? parseFloat((((totalRevenue - totalCost) / totalCost) * 100).toFixed(2)) : 0;
     const totalImpressionsResult = await db.select({ total: sum(metrics.impressions) }).from(metrics).where(metricsTimeCondition);
@@ -303,7 +222,7 @@ export class DatabaseStorage implements IStorage {
     const totalClicksResult = await db.select({ total: sum(metrics.clicks) }).from(metrics).where(metricsTimeCondition);
     const clicks = parseFloat(String(totalClicksResult[0]?.total || '0')) || 0;
     const ctr = clicks > 0 && impressions > 0 ? parseFloat(((clicks / impressions) * 100).toFixed(2)) : 0;
-    const cpc = clicks > 0 && totalCost > 0 ? parseFloat((totalCost / clicks).toFixed(2)) : 0; // Usar totalCost do período
+    const cpc = clicks > 0 && totalCost > 0 ? parseFloat((totalCost / clicks).toFixed(2)) : 0; 
     const metricsData = { activeCampaigns, totalSpent, totalCostPeriod: totalCost, conversions, avgROI, impressions, clicks, ctr, cpc };
     const campaignsChange = parseFloat((Math.random() * 20 - 10).toFixed(1));
     const spentChange = parseFloat((Math.random() * 20 - 10).toFixed(1));
@@ -317,6 +236,43 @@ export class DatabaseStorage implements IStorage {
     const conversionData = generateSimulatedLineChartData('Conversões', 200, timeRange === '30d' ? 30 : 7, 30, chartColors.palette[1]);
     const roiData = generateSimulatedBarChartData('ROI (%)', ['Meta Ads', 'Google Ads', 'LinkedIn', 'TikTok'], 250, 100, chartColors.palette);
     return { metrics: metricsData, recentCampaigns, alertCount: (await db.select({ count: count() }).from(alerts).where(and(eq(alerts.userId, userId), eq(alerts.isRead, false))))[0]?.count || 0, trends, timeSeriesData, channelPerformanceData, conversionData, roiData, };
+  }
+
+  // --- NOVOS MÉTODOS PARA WHATSAPP CONNECTIONS ---
+  async createWhatsappConnection(data: InsertWhatsappConnection): Promise<WhatsappConnection> {
+    // Assegurar que userId está presente e é um número
+    if (typeof data.userId !== 'number') {
+        console.error('[storage.createWhatsappConnection] ERRO FATAL: userId não é um número ou está ausente!', data.userId);
+        throw new Error("Erro interno: userId inválido ao tentar criar conexão WhatsApp.");
+    }
+    const [newConnection] = await db.insert(whatsappConnectionsTable)
+      .values({
+        ...data, // Espalha todos os campos de data (incluindo userId)
+        updatedAt: new Date(), // Garante que updatedAt seja atualizado
+      })
+      .returning();
+    if (!newConnection) throw new Error("Falha ao criar registro de conexão WhatsApp.");
+    return newConnection;
+  }
+
+  async getWhatsappConnection(userId: number): Promise<WhatsappConnection | undefined> {
+    const result = await db.select()
+      .from(whatsappConnectionsTable)
+      .where(eq(whatsappConnectionsTable.userId, userId))
+      .limit(1);
+    return result[0];
+  }
+
+  async updateWhatsappConnection(userId: number, data: Partial<Omit<InsertWhatsappConnection, 'userId' | 'id'>>): Promise<WhatsappConnection | undefined> {
+    const [updatedConnection] = await db.update(whatsappConnectionsTable)
+      .set({
+        ...data,
+        updatedAt: new Date(), // Sempre atualiza o updatedAt
+      })
+      .where(eq(whatsappConnectionsTable.userId, userId))
+      .returning();
+    // Retornará undefined se nenhum registro for encontrado para o userId
+    return updatedConnection;
   }
 }
 
