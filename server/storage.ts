@@ -15,22 +15,12 @@ import {
 import { eq, count, sum, sql, desc, and, or, gte, lte, isNull, asc, ilike } from 'drizzle-orm';
 import * as bcrypt from 'bcrypt';
 
-// Funções de simulação de dados de gráfico (mantidas como no seu original)
+// Funções de simulação e convertBudgetData mantidas como no seu original
 const chartColors = { palette: [ 'rgba(75, 192, 192, 1)', 'rgba(255, 99, 132, 1)', 'rgba(54, 162, 235, 1)', 'rgba(255, 206, 86, 1)', 'rgba(153, 102, 255, 1)', 'rgba(255, 159, 64, 1)', 'rgba(200, 200, 200, 1)' ], background: [ 'rgba(75, 192, 192, 0.2)', 'rgba(255, 99, 132, 0.2)', 'rgba(54, 162, 235, 0.2)', 'rgba(255, 206, 86, 0.2)', 'rgba(153, 102, 255, 0.2)', 'rgba(255, 159, 64, 0.2)', 'rgba(200, 200, 200, 0.2)' ] };
 function generateSimulatedLineChartData(label: string, startValue: number, countNum: number, maxFluctuation: number, color: string): { labels: string[], datasets: { label: string, data: number[], borderColor: string, backgroundColor: string, fill: boolean, tension: number }[] } { const dataPoints: number[] = []; const labels: string[] = []; let currentValue = startValue; for (let i = 0; i < countNum; i++) { labels.push(`Dia ${i + 1}`); dataPoints.push(Math.round(currentValue)); currentValue += (Math.random() * maxFluctuation * 2) - maxFluctuation; if (currentValue < 0) currentValue = 0; } return { labels: labels, datasets: [ { label: label, data: dataPoints, borderColor: color, backgroundColor: color.replace('1)', '0.2)'), fill: true, tension: 0.4, }, ], }; }
 function generateSimulatedBarChartData(label: string, categories: string[], baseValue: number, maxFluctuation: number, colors: string[]): { labels: string[], datasets: { label: string, data: number[], backgroundColor: string[] }[] } { const dataPoints: number[] = categories.map(() => Math.round(baseValue + (Math.random() * maxFluctuation * 2) - maxFluctuation)); return { labels: categories, datasets: [ { label: label, data: dataPoints, backgroundColor: colors, }, ], }; }
 function generateSimulatedDoughnutChartData(chartLabels: string[], baseValue: number, maxFluctuation: number, colors: string[]): { labels: string[], datasets: { data: number[], backgroundColor: string[], borderWidth: number }[] } { const dataPoints: number[] = chartLabels.map(() => Math.round(baseValue + (Math.random() * maxFluctuation * 2) - maxFluctuation)); return { labels: chartLabels, datasets: [ { data: dataPoints, backgroundColor: colors.map(color => color.replace('1)', '0.8)')), borderWidth: 0, }, ], }; }
-
-// Função convertBudgetData (mantida)
-function convertBudgetData(data: any) {
-  const converted = { ...data };
-  if (typeof converted.totalBudget === 'number') { converted.totalBudget = String(converted.totalBudget); }
-  if (typeof converted.spentAmount === 'number') { converted.spentAmount = String(converted.spentAmount); }
-  if (typeof converted.budget === 'number') { converted.budget = String(converted.budget); } // Para campaigns
-  if (typeof converted.dailyBudget === 'number') { converted.dailyBudget = String(converted.dailyBudget); } // Para campaigns
-  if (typeof converted.avgTicket === 'number') { converted.avgTicket = String(converted.avgTicket); } // Para campaigns
-  return converted;
-}
+function convertBudgetData(data: any) { const converted = { ...data }; if (typeof converted.totalBudget === 'number') { converted.totalBudget = String(converted.totalBudget); } if (typeof converted.spentAmount === 'number') { converted.spentAmount = String(converted.spentAmount); } if (typeof converted.budget === 'number') { converted.budget = String(converted.budget); } if (typeof converted.dailyBudget === 'number') { converted.dailyBudget = String(converted.dailyBudget); } if (typeof converted.avgTicket === 'number') { converted.avgTicket = String(converted.avgTicket); } return converted; }
 
 export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
@@ -38,7 +28,6 @@ export interface IStorage {
   getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   validatePassword(password: string, hashedPassword: string): Promise<boolean>;
-  // ... (outras definições de interface mantidas como no seu original)
   getCampaigns(userId: number, limit?: number): Promise<Campaign[]>;
   getCampaign(id: number, userId: number): Promise<Campaign | undefined>;
   createCampaign(campaign: InsertCampaign): Promise<Campaign>;
@@ -91,38 +80,66 @@ export interface IStorage {
   deleteFunnelStage(id: number, userId: number): Promise<boolean>;
 }
 
+const selectedUserFields = {
+  id: users.id,
+  username: users.username,
+  email: users.email,
+  password: users.password,
+  createdAt: users.createdAt,
+  updatedAt: users.updatedAt,
+};
+
 export class DatabaseStorage implements IStorage {
-  // --- Métodos de User CORRIGIDOS ---
   async getUser(id: number): Promise<User | undefined> {
-    // Usando db.query API para mais robustez
-    return db.query.users.findFirst({
-      where: eq(users.id, id),
-    });
+    console.log(`[STORAGE_GETUSER] Buscando usuário por ID: ${id}`);
+    if (isNaN(id)) {
+        console.warn("[STORAGE_GETUSER] ID inválido fornecido.");
+        return undefined;
+    }
+    try {
+      const result = await db.select(selectedUserFields).from(users).where(eq(users.id, id)).limit(1);
+      return result[0];
+    } catch (error) {
+      console.error(`[STORAGE_GETUSER] Erro ao buscar usuário por ID ${id}:`, error);
+      throw error;
+    }
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    return db.query.users.findFirst({
-      where: eq(users.username, username),
-    });
+    console.log(`[STORAGE_GETUSERBYUSERNAME] Buscando usuário por username: ${username}`);
+    if (!username || typeof username !== 'string' || username.trim() === '') {
+      console.warn("[STORAGE_GETUSERBYUSERNAME] Tentativa de buscar usuário com username inválido ou ausente.");
+      return undefined;
+    }
+    try {
+      const result = await db.select(selectedUserFields).from(users).where(eq(users.username, username.trim())).limit(1);
+      return result[0];
+    } catch (error) {
+      console.error(`[STORAGE_GETUSERBYUSERNAME] Erro ao buscar usuário por username ${username}:`, error);
+      throw error;
+    }
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
     console.log(`[STORAGE_GETUSERBYEMAIL] Buscando usuário por email: ${email}`);
+    if (!email || typeof email !== 'string' || email.trim() === '') {
+      console.warn("[STORAGE_GETUSERBYEMAIL] Tentativa de buscar usuário com email inválido ou ausente.");
+      return undefined;
+    }
     try {
-      const user = await db.query.users.findFirst({
-        where: eq(users.email, email),
-      });
-      console.log(`[STORAGE_GETUSERBYEMAIL] Resultado para ${email}:`, user ? `Usuário ID ${user.id}` : 'Não encontrado');
-      return user;
+      const result = await db.select(selectedUserFields).from(users).where(eq(users.email, email.trim())).limit(1);
+      console.log(`[STORAGE_GETUSERBYEMAIL] Resultado para ${email}:`, result[0] ? `Usuário ID ${result[0].id}` : 'Não encontrado');
+      return result[0];
     } catch (error) {
       console.error(`[STORAGE_GETUSERBYEMAIL] Erro ao buscar usuário por email ${email}:`, error);
-      throw error; // Re-lança o erro para ser tratado pela rota
+      throw error;
     }
   }
 
   async createUser(userData: InsertUser): Promise<User> {
     const hashedPassword = await bcrypt.hash(userData.password, 10);
-    const [newUser] = await db.insert(users).values({ ...userData, password: hashedPassword }).returning();
+    // Seleciona explicitamente os campos ao retornar
+    const [newUser] = await db.insert(users).values({ ...userData, password: hashedPassword }).returning(selectedUserFields);
     if (!newUser) throw new Error("Falha ao criar usuário.");
     return newUser;
   }
@@ -131,9 +148,16 @@ export class DatabaseStorage implements IStorage {
     return bcrypt.compare(password, hashedPassword);
   }
 
-  // --- Métodos de Campaign (mantidos, mas usando convertBudgetData) ---
+  // ... (restante dos métodos da classe DatabaseStorage mantidos como no seu arquivo anterior) ...
+  // ... (certifique-se de que createCampaign, updateCampaign, etc., usem os schemas corretos
+  //     e que o userId seja injetado/verificado corretamente nas rotas)
+
+  // Exemplo para getCampaigns, mantendo o original mas mostrando como seria com selectedFields
   async getCampaigns(userId: number, limit?: number): Promise<Campaign[]> {
-    let query = db.select().from(campaigns).where(eq(campaigns.userId, userId)).orderBy(desc(campaigns.createdAt));
+    let query = db.select(/* aqui você poderia usar { ...campaigns } ou campos específicos */)
+                  .from(campaigns)
+                  .where(eq(campaigns.userId, userId))
+                  .orderBy(desc(campaigns.createdAt));
     if (limit) { return query.limit(limit); }
     return query;
   }
@@ -142,8 +166,8 @@ export class DatabaseStorage implements IStorage {
     return campaign;
   }
   async createCampaign(campaignData: InsertCampaign): Promise<Campaign> {
-    // @ts-ignore // userId será adicionado pela rota e validado pelo Zod schema.
-    const dataToInsert = { ...campaignData }; // convertBudgetData não é mais necessário se o schema Zod já trata os números.
+    // @ts-ignore 
+    const dataToInsert = { ...campaignData }; 
     const [newCampaign] = await db.insert(campaigns).values(dataToInsert).returning();
     if (!newCampaign) throw new Error("Falha ao criar campanha.");
     return newCampaign;
@@ -159,7 +183,6 @@ export class DatabaseStorage implements IStorage {
     return (result.rowCount ?? 0) > 0;
   }
 
-  // --- Métodos de Creative (mantidos) ---
   async getCreatives(userId: number, campaignId?: number | null): Promise<Creative[]> {
     const conditions = [eq(creatives.userId, userId)];
     if (campaignId !== undefined) {
@@ -172,7 +195,7 @@ export class DatabaseStorage implements IStorage {
     return creative;
   }
   async createCreative(creativeData: InsertCreative): Promise<Creative> {
-    // @ts-ignore // userId será adicionado pela rota
+    // @ts-ignore 
     const [newCreative] = await db.insert(creatives).values(creativeData).returning();
     if (!newCreative) throw new Error("Falha ao criar criativo.");
     return newCreative;
@@ -187,7 +210,6 @@ export class DatabaseStorage implements IStorage {
     return (result.rowCount ?? 0) > 0;
   }
 
-  // --- Métodos de Metrics (mantidos) ---
   async getMetricsForCampaign(campaignId: number, userId: number): Promise<Metric[]> {
     const campaignExists = await db.select({id: campaigns.id}).from(campaigns).where(and(eq(campaigns.id, campaignId), eq(campaigns.userId, userId))).limit(1);
     if (!campaignExists.length) { throw new Error("Campanha não encontrada ou não pertence ao usuário."); }
@@ -199,14 +221,13 @@ export class DatabaseStorage implements IStorage {
     return newMetric;
   }
 
-  // --- Métodos de Whatsapp (mantidos) ---
   async getMessages(userId: number, contactNumber?: string): Promise<WhatsappMessage[]> {
     const conditions = [eq(whatsappMessages.userId, userId)];
     if (contactNumber) { conditions.push(eq(whatsappMessages.contactNumber, contactNumber)); }
     return db.select().from(whatsappMessages).where(and(...conditions)).orderBy(desc(whatsappMessages.timestamp));
   }
   async createMessage(messageData: InsertWhatsappMessage): Promise<WhatsappMessage> {
-    // @ts-ignore // userId será adicionado pela rota
+    // @ts-ignore 
     const [newMessage] = await db.insert(whatsappMessages).values(messageData).returning();
     if (!newMessage) throw new Error("Falha ao criar mensagem.");
     return newMessage;
@@ -226,7 +247,6 @@ export class DatabaseStorage implements IStorage {
     return Array.from(contactsMap.values()).sort((a,b) => b.timestamp.getTime() - a.timestamp.getTime());
   }
 
-  // --- Métodos de Copies (mantidos com logs) ---
   async getCopies(userId: number, campaignId?: number | null, phase?: string, purposeKey?: string, searchTerm?: string): Promise<Copy[]> {
     const conditions: any[] = [eq(copies.userId, userId)];
     if (campaignId !== undefined) { conditions.push(campaignId === null ? isNull(copies.campaignId) : eq(copies.campaignId, campaignId)); }
@@ -237,7 +257,7 @@ export class DatabaseStorage implements IStorage {
   }
   async createCopy(copyData: InsertCopy): Promise<Copy> {
     // @ts-ignore
-    const [newCopy] = await db.insert(copies).values(copyData).returning(); // userId está em copyData
+    const [newCopy] = await db.insert(copies).values(copyData).returning(); 
     if (!newCopy) throw new Error("Falha ao salvar a copy no banco de dados.");
     return newCopy;
   }
@@ -256,42 +276,37 @@ export class DatabaseStorage implements IStorage {
     return (result.rowCount ?? 0) > 0;
   }
 
-  // --- Métodos de Alerts (mantidos) ---
   async getAlerts(userId: number, onlyUnread?: boolean): Promise<Alert[]> { const conditions = [eq(alerts.userId, userId)]; if (onlyUnread) { conditions.push(eq(alerts.isRead, false)); } return db.select().from(alerts).where(and(...conditions)).orderBy(desc(alerts.createdAt)); }
   async createAlert(alertData: InsertAlert): Promise<Alert> { // @ts-ignore
-    const [newAlert] = await db.insert(alerts).values(alertData).returning(); if (!newAlert) throw new Error("Falha ao criar alerta."); return newAlert; } // userId será preenchido pela rota
+    const [newAlert] = await db.insert(alerts).values(alertData).returning(); if (!newAlert) throw new Error("Falha ao criar alerta."); return newAlert; } 
   async markAlertAsRead(id: number, userId: number): Promise<boolean> { const result = await db.update(alerts).set({ isRead: true }).where(and(eq(alerts.id, id), eq(alerts.userId, userId), eq(alerts.isRead, false))); return (result.rowCount ?? 0) > 0; }
 
-  // --- Métodos de Budgets (mantidos) ---
   async getBudgets(userId: number, campaignId?: number | null): Promise<Budget[]> { const conditions = [eq(budgets.userId, userId)]; if (campaignId !== undefined) { conditions.push(campaignId === null ? isNull(budgets.campaignId) : eq(budgets.campaignId, campaignId)); } return db.select().from(budgets).where(and(...conditions)).orderBy(desc(budgets.createdAt)); }
   async createBudget(budgetData: InsertBudget): Promise<Budget> { // @ts-ignore
-    const dataToInsert = { ...budgetData }; // userId e campaignId já estão em budgetData ou são opcionais
+    const dataToInsert = { ...budgetData }; 
     const [newBudget] = await db.insert(budgets).values(dataToInsert).returning(); if (!newBudget) throw new Error("Falha ao criar orçamento."); return newBudget; }
   async updateBudget(id: number, budgetData: Partial<Omit<InsertBudget, 'userId' | 'campaignId'>>, userId: number): Promise<Budget | undefined> { const existingBudget = await db.select().from(budgets).where(and(eq(budgets.id, id), eq(budgets.userId, userId))).limit(1); if(!existingBudget || existingBudget.length === 0) { return undefined;} 
     // @ts-ignore
     const [updatedBudget] = await db.update(budgets).set(budgetData).where(and(eq(budgets.id, id), eq(budgets.userId, userId))).returning(); return updatedBudget; }
 
-  // --- Métodos de Landing Pages (mantidos) ---
   async getLandingPages(userId: number): Promise<LandingPage[]> { return db.select().from(landingPages).where(eq(landingPages.userId, userId)).orderBy(desc(landingPages.createdAt)); }
   async getLandingPage(id: number, userId: number): Promise<LandingPage | undefined> { const [lp] = await db.select().from(landingPages).where(and(eq(landingPages.id, id), eq(landingPages.userId, userId))).limit(1); return lp; }
   async getLandingPageBySlug(slug: string): Promise<LandingPage | undefined> { const [lp] = await db.select().from(landingPages).where(eq(landingPages.slug, slug)).limit(1); return lp; }
   async getLandingPageByStudioProjectId(studioProjectId: string, userId: number): Promise<LandingPage | undefined> { const [lp] = await db.select().from(landingPages).where(and(eq(landingPages.studioProjectId, studioProjectId), eq(landingPages.userId, userId))).limit(1); return lp; }
   async createLandingPage(lpData: InsertLandingPage): Promise<LandingPage> { // @ts-ignore
-    const [newLP] = await db.insert(landingPages).values(lpData).returning(); if (!newLP) throw new Error("Falha ao criar landing page."); return newLP; } // userId em lpData
+    const [newLP] = await db.insert(landingPages).values(lpData).returning(); if (!newLP) throw new Error("Falha ao criar landing page."); return newLP; }
   async updateLandingPage(id: number, lpData: Partial<Omit<InsertLandingPage, 'userId'>>, userId: number): Promise<LandingPage | undefined> { // @ts-ignore
     const [updatedLP] = await db.update(landingPages).set({ ...lpData, updatedAt: new Date() }).where(and(eq(landingPages.id, id), eq(landingPages.userId, userId))).returning(); return updatedLP; }
   async deleteLandingPage(id: number, userId: number): Promise<boolean> { const result = await db.delete(landingPages).where(and(eq(landingPages.id, id), eq(landingPages.userId, userId))); return (result.rowCount ?? 0) > 0; }
   
-  // --- Métodos de Chat (mantidos) ---
   async createChatSession(userId: number, title: string = 'Nova Conversa'): Promise<ChatSession> { const [newSession] = await db.insert(chatSessions).values({ userId, title, createdAt: new Date(), updatedAt: new Date() }).returning(); if (!newSession) throw new Error("Falha ao criar nova sessão de chat."); return newSession; }
   async getChatSession(sessionId: number, userId: number): Promise<ChatSession | undefined> { const [session] = await db.select().from(chatSessions).where(and(eq(chatSessions.id, sessionId), eq(chatSessions.userId, userId))).limit(1); return session; }
   async getChatSessions(userId: number): Promise<ChatSession[]> { return db.select().from(chatSessions).where(eq(chatSessions.userId, userId)).orderBy(desc(chatSessions.updatedAt)); }
   async updateChatSessionTitle(sessionId: number, userId: number, newTitle: string): Promise<ChatSession | undefined> { const [updatedSession] = await db.update(chatSessions).set({ title: newTitle, updatedAt: new Date() }).where(and(eq(chatSessions.id, sessionId), eq(chatSessions.userId, userId))).returning(); return updatedSession; }
-  async deleteChatSession(sessionId: number, userId: number): Promise<boolean> { const result = await db.delete(chatSessions).where(and(eq(chatSessions.id, sessionId), eq(chatSessions.userId, userId))); return (result.rowCount ?? 0) > 0; } // Corrigido para retornar boolean
+  async deleteChatSession(sessionId: number, userId: number): Promise<boolean> { const result = await db.delete(chatSessions).where(and(eq(chatSessions.id, sessionId), eq(chatSessions.userId, userId))); return (result.rowCount ?? 0) > 0; } 
   async addChatMessage(messageData: InsertChatMessage): Promise<ChatMessage> { const [newMessage] = await db.insert(chatMessages).values({ ...messageData, timestamp: new Date() }).returning(); if (!newMessage) throw new Error("Falha ao adicionar mensagem ao chat."); await db.update(chatSessions).set({ updatedAt: new Date() }).where(eq(chatSessions.id, messageData.sessionId)); return newMessage; }
   async getChatMessages(sessionId: number, userId: number): Promise<ChatMessage[]> { const sessionExists = await db.select({ id: chatSessions.id }).from(chatSessions).where(and(eq(chatSessions.id, sessionId), eq(chatSessions.userId, userId))).limit(1); if (!sessionExists.length) { return []; } return db.select().from(chatMessages).where(eq(chatMessages.sessionId, sessionId)).orderBy(asc(chatMessages.timestamp)); }
 
-  // --- Métodos de Funnels (mantidos) ---
   async getFunnels(userId: number, campaignId?: number | null): Promise<Funnel[]> { const conditions: any[] = [eq(funnels.userId, userId)]; if (campaignId !== undefined) { conditions.push(campaignId === null ? isNull(funnels.campaignId) : eq(funnels.campaignId, campaignId)); } return db.query.funnels.findMany({ where: and(...conditions), with: { stages: { orderBy: [asc(funnelStages.order)], }, }, orderBy: [desc(funnels.createdAt)], }); }
   async getFunnel(id: number, userId: number): Promise<Funnel | undefined> { return db.query.funnels.findFirst({ where: and(eq(funnels.id, id), eq(funnels.userId, userId)), with: { stages: { orderBy: [asc(funnelStages.order)], }, }, }); }
   async createFunnel(funnelData: InsertFunnel): Promise<Funnel> { // @ts-ignore
@@ -305,31 +320,22 @@ export class DatabaseStorage implements IStorage {
     const [updatedStage] = await db.update(funnelStages).set({ ...stageData, updatedAt: new Date() }).where(eq(funnelStages.id, id)).returning(); return updatedStage; }
   async deleteFunnelStage(id: number, userId: number): Promise<boolean> { const existingStage = await db.query.funnelStages.findFirst({ where: eq(funnelStages.id, id), with: { funnel: { columns: { userId: true } } } }); if (!existingStage || existingStage.funnel?.userId !== userId) { return false;  } const result = await db.delete(funnelStages).where(eq(funnelStages.id, id)); return (result.rowCount ?? 0) > 0; }
 
-  // --- Método de Dashboard (mantido, mas usando `sql<number>` para casts e tratando strings de orçamento) ---
   async getDashboardData(userId: number, timeRange: string = '30d'): Promise<any> {
     const now = new Date();
     let startDate = new Date();
     if (timeRange === '7d') { startDate.setDate(now.getDate() - 7); } else { startDate.setDate(now.getDate() - 30); }
-
     const metricsTimeCondition = and( eq(metrics.userId, userId), gte(metrics.date, startDate) );
     const budgetsUserCondition = eq(budgets.userId, userId);
-
     const activeCampaignsResult = await db.select({ count: count() }).from(campaigns).where(and(eq(campaigns.userId, userId), eq(campaigns.status, 'active')));
     const activeCampaigns = activeCampaignsResult[0]?.count || 0;
-    
-    // Ajuste para somar campos de orçamento que podem ser TEXT no schema antigo, mas são DECIMAL no novo
     const totalSpentResult = await db.select({ total: sum(sql<number>`TRY_CAST(${budgets.spentAmount} AS DECIMAL)`) }).from(budgets).where(budgetsUserCondition);
     const totalSpent = totalSpentResult[0]?.total || 0;
-
     const totalConversionsResult = await db.select({ total: sum(metrics.conversions) }).from(metrics).where(metricsTimeCondition);
     const conversions = Number(totalConversionsResult[0]?.total || 0);
-
     const totalRevenueResult = await db.select({ total: sum(metrics.revenue) }).from(metrics).where(metricsTimeCondition);
     const totalRevenue = Number(totalRevenueResult[0]?.total || 0);
-
     const totalCostResult = await db.select({ total: sum(metrics.cost) }).from(metrics).where(metricsTimeCondition);
     const totalCost = Number(totalCostResult[0]?.total || 0);
-
     const avgROI = totalCost > 0 ? parseFloat((((totalRevenue - totalCost) / totalCost) * 100).toFixed(2)) : 0;
     const totalImpressionsResult = await db.select({ total: sum(metrics.impressions) }).from(metrics).where(metricsTimeCondition);
     const impressions = Number(totalImpressionsResult[0]?.total || 0);
@@ -338,8 +344,6 @@ export class DatabaseStorage implements IStorage {
     const ctr = clicks > 0 && impressions > 0 ? parseFloat(((clicks / impressions) * 100).toFixed(2)) : 0;
     const cpc = clicks > 0 && totalCost > 0 ? parseFloat((totalCost / clicks).toFixed(2)) : 0;
     const metricsData = { activeCampaigns, totalSpent, totalCostPeriod: totalCost, conversions, avgROI, impressions, clicks, ctr, cpc };
-    
-    // Dados simulados mantidos
     const campaignsChange = parseFloat((Math.random() * 20 - 10).toFixed(1));
     const spentChange = parseFloat((Math.random() * 20 - 10).toFixed(1));
     const conversionsChange = parseFloat((Math.random() * 30 - 15).toFixed(1));
@@ -353,7 +357,6 @@ export class DatabaseStorage implements IStorage {
     const roiData = generateSimulatedBarChartData('ROI (%)', ['Meta Ads', 'Google Ads', 'LinkedIn', 'TikTok'], 250, 100, chartColors.palette);
     const alertCountResult = await db.select({ count: count() }).from(alerts).where(and(eq(alerts.userId, userId), eq(alerts.isRead, false)));
     const alertCountNum = alertCountResult[0]?.count || 0;
-
     return { metrics: metricsData, recentCampaigns, alertCount: alertCountNum, trends, timeSeriesData, channelPerformanceData, conversionData, roiData, };
   }
 }
