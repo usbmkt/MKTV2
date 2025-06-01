@@ -1,23 +1,17 @@
 import { defineConfig } from "drizzle-kit";
 
-// Remova esta linha se ela contiver suas credenciais! É uma falha de segurança grave.
-// if (!process.env.DATABASE_URL) {
-//   console.warn("DATABASE_URL não está definida. O Drizzle Kit pode falhar se não encontrar um arquivo .env ou variável de ambiente.");
-// }
-
 export default defineConfig({
   out: "./migrations",
-  // Caminho para o seu arquivo de schema (confirmado como correto)
-  schema: "./shared/schema.ts",
+  // Modifique a linha abaixo para incluir os dois arquivos de schema
+  schema: ["./shared/schema.ts", "./shared/whatsapp.schema.ts"],
   dialect: "postgresql",
-  // Usamos 'pglite' AQUI para satisfazer a validação do 'drizzle-kit generate' durante o build
-  driver: "pglite",
+  driver: "pglite", // Mantido para geração de schema sem DB real
   dbCredentials: {
-    // Usamos 'url' pois o erro anterior indicou que é o esperado para o migrate/config
     url: process.env.DATABASE_URL!,
-    // Mantemos a configuração SSL necessária para conectar ao Render
-    ssl: { rejectUnauthorized: false }
+    // A configuração de SSL não é usada pelo driver 'pglite' para geração,
+    // mas não prejudica mantê-la se outras partes do seu workflow a usam.
+    // ssl: { rejectUnauthorized: false } 
   },
-  verbose: true, // Mantém logs detalhados, útil para depuração
+  verbose: true,
   strict: true,
 });

@@ -12,7 +12,7 @@ export const flowStatusEnum = pgEnum('flow_status', ['draft', 'active', 'inactiv
 export const messageTemplateCategoryEnum = pgEnum('message_template_category', ['MARKETING', 'UTILITY', 'AUTHENTICATION']);
 export const messageTemplateStatusMetaEnum = pgEnum('message_template_status_meta', ['PENDING_APPROVAL', 'APPROVED', 'REJECTED', 'PAUSED', 'DISABLED', 'DRAFT']);
 
-// Tipos para FlowElements (Placeholder - idealmente viria de uma definição mais robusta, talvez de zap.ts)
+// Tipos para FlowElements (Placeholder)
 export type FlowNodeData = { label: string; [key: string]: any; };
 export type FlowNode = { id: string; type: string; position: { x: number; y: number }; data: FlowNodeData; };
 export type FlowEdge = { id: string; source: string; target: string; sourceHandle?: string | null; targetHandle?: string | null; label?: string; type?: string; animated?: boolean; };
@@ -24,7 +24,7 @@ export const whatsappConnections = pgTable("whatsapp_connections", {
   userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   connectionStatus: whatsappConnectionStatusEnum('status').notNull().default('disconnected'),
   qrCodeData: text('qr_code_data'),
-  sessionPath: text('session_path'),
+  sessionPath: text('session_path'), 
   connectedPhoneNumber: text('connected_phone_number'),
   lastConnectedAt: timestamp('last_connected_at', { withTimezone: true }),
   lastError: text('last_error'),
@@ -65,7 +65,7 @@ export const whatsappMessageTemplates = pgTable("whatsapp_message_templates", {
   name: text('template_name').notNull(),
   category: messageTemplateCategoryEnum('category'),
   language: text('language_code').notNull(),
-  components: jsonb('components').$type<any[]>().notNull(), // Definir tipo mais específico para componentes do template
+  components: jsonb('components').$type<any[]>().notNull(),
   statusMeta: messageTemplateStatusMetaEnum('meta_status').default('DRAFT'),
   metaTemplateId: text('meta_template_id'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -82,7 +82,7 @@ export const whatsappConnectionRelations = relations(whatsappConnections, ({ one
 export const whatsappFlowRelations = relations(whatsappFlows, ({ one, many }) => ({
   user: one(users, { fields: [whatsappFlows.userId], references: [users.id] }),
   userStates: many(whatsappFlowUserStates),
-  // A relação com whatsappMessages será definida no schema principal devido à dependência mútua
+  // messages: many(whatsappMessages) // Esta relação é definida no schema principal
 }));
 
 export const whatsappFlowUserStateRelations = relations(whatsappFlowUserStates, ({ one }) => ({
@@ -93,7 +93,6 @@ export const whatsappFlowUserStateRelations = relations(whatsappFlowUserStates, 
 export const whatsappMessageTemplateRelations = relations(whatsappMessageTemplates, ({ one }) => ({
   user: one(users, { fields: [whatsappMessageTemplates.userId], references: [users.id] }),
 }));
-
 
 // --- Schemas Zod e Tipos para WhatsApp ---
 export const insertWhatsappConnectionSchema = createInsertSchema(whatsappConnections, {
@@ -107,9 +106,9 @@ export const insertWhatsappFlowSchema = createInsertSchema(whatsappFlows, {
   name: z.string().min(1, "Nome do fluxo é obrigatório."),
   triggerType: z.enum(flowTriggerTypeEnum.enumValues),
   status: z.enum(flowStatusEnum.enumValues).default('draft'),
-  elements: z.custom<FlowElements>((val) => {
-    return typeof val === 'object' && val !== null && Array.isArray((val as any).nodes) && Array.isArray((val as any).edges);
-  }).default({ nodes: [], edges: [] }),
+  elements: z.custom<FlowElements>((val: any) => 
+    typeof val === 'object' && val !== null && Array.isArray(val.nodes) && Array.isArray(val.edges)
+  ).default({ nodes: [], edges: [] }),
   triggerConfig: z.record(z.any()).optional().default({}),
 }).omit({ id: true, createdAt: true, updatedAt: true, userId: true });
 export const selectWhatsappFlowSchema = createSelectSchema(whatsappFlows);
@@ -135,7 +134,6 @@ export const selectWhatsappMessageTemplateSchema = createSelectSchema(whatsappMe
 export type WhatsappMessageTemplate = z.infer<typeof selectWhatsappMessageTemplateSchema>;
 export type InsertWhatsappMessageTemplate = z.infer<typeof insertWhatsappMessageTemplateSchema>;
 
-// Exportar todos os schemas para serem usados no schema principal
 export const whatsappSchema = {
     whatsappConnectionStatusEnum,
     flowTriggerTypeEnum,

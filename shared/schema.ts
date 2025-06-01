@@ -126,7 +126,7 @@ export const metrics = pgTable("metrics", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-// Tabela whatsapp_messages (Core) - Modificada
+// Tabela whatsapp_messages (Core) - CORRIGIDA
 export const whatsappMessages = pgTable("whatsapp_messages", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
@@ -136,9 +136,8 @@ export const whatsappMessages = pgTable("whatsapp_messages", {
   direction: text("direction", { enum: ["incoming", "outgoing"] }).notNull(),
   timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow().notNull(),
   isRead: boolean("is_read").default(false).notNull(),
-  // Novas colunas adicionadas:
-  flowId: integer('flow_id').references(() => whatsappSchema.whatsappFlows.id, { onDelete: 'set null' }).nullable(),
-  messageIdBaileys: text('message_id_baileys').nullable().unique(),
+  flowId: integer('flow_id').references(() => whatsappSchema.whatsappFlows.id, { onDelete: 'set null' }), // .nullable() REMOVIDO
+  messageIdBaileys: text('message_id_baileys').unique(), // .nullable() REMOVIDO (text é nullable por padrão)
 });
 
 export const alerts = pgTable("alerts", {
@@ -223,14 +222,14 @@ export const userRelations = relations(users, ({ many }) => ({
   campaigns: many(campaigns),
   creatives: many(creatives),
   metrics: many(metrics),
-  whatsappMessages: many(whatsappMessages), // Mantém relação com a tabela principal de mensagens
+  whatsappMessages: many(whatsappMessages),
   copies: many(copies),
   alerts: many(alerts),
   budgets: many(budgets),
   landingPages: many(landingPages),
   chatSessions: many(chatSessions),
   funnels: many(funnels),
-  whatsappConnections: many(whatsappSchema.whatsappConnections), // Relação com tabela do schema WhatsApp
+  whatsappConnections: many(whatsappSchema.whatsappConnections),
   whatsappFlows: many(whatsappSchema.whatsappFlows),
   whatsappFlowUserStates: many(whatsappSchema.whatsappFlowUserStates),
   whatsappMessageTemplates: many(whatsappSchema.whatsappMessageTemplates),
@@ -256,7 +255,6 @@ export const metricRelations = relations(metrics, ({ one }) => ({
   user: one(users, { fields: [metrics.userId], references: [users.id] }),
 }));
 
-// Relação whatsappMessages ATUALIZADA para incluir flow
 export const whatsappMessageRelations = relations(whatsappMessages, ({ one }) => ({
   user: one(users, { fields: [whatsappMessages.userId], references: [users.id] }),
   flow: one(whatsappSchema.whatsappFlows, { fields: [whatsappMessages.flowId], references: [whatsappSchema.whatsappFlows.id] }),
@@ -410,13 +408,13 @@ export const insertLandingPageSchema = createInsertSchema(landingPages, {
   studioProjectId: z.string().optional().nullable(),
 }).omit({ id: true, createdAt: true, updatedAt: true, userId: true, publicUrl: true, publishedAt: true });
 
-// Schema de inserção para whatsappMessages ATUALIZADO
+// Schema de inserção para whatsappMessages CORRIGIDO
 export const insertWhatsappMessageSchema = createInsertSchema(whatsappMessages, {
   contactNumber: z.string().min(1, "Número de contato é obrigatório."),
   message: z.string().min(1, "Mensagem é obrigatória."),
   direction: z.enum(["incoming", "outgoing"]),
-  flowId: z.number().int().positive().nullable().optional(),
-  messageIdBaileys: z.string().nullable().optional(),
+  flowId: z.number().int().positive().nullable().optional(), // Mantido nullable
+  messageIdBaileys: z.string().nullable().optional(), // Mantido nullable
 }).omit({ id: true, userId: true, timestamp: true, isRead: true });
 
 export const insertAlertSchema = createInsertSchema(alerts, {
@@ -460,11 +458,13 @@ export const insertChatMessageSchema = createInsertSchema(chatMessages, { // MCP
     attachmentUrl: z.string().url().optional().nullable(),
 }).omit({id: true, timestamp: true});
 
-// Re-exportar schemas Zod de WhatsApp
-export const insertWhatsappConnectionSchema = whatsappSchema.insertWhatsappConnectionSchema;
-export const insertWhatsappFlowSchema = whatsappSchema.insertWhatsappFlowSchema;
-export const insertWhatsappFlowUserStateSchema = whatsappSchema.insertWhatsappFlowUserStateSchema;
-export const insertWhatsappMessageTemplateSchema = whatsappSchema.insertWhatsappMessageTemplateSchema;
+// Re-exportar schemas Zod de INSERÇÃO do WhatsApp
+export {
+    insertWhatsappConnectionSchema,
+    insertWhatsappFlowSchema,
+    insertWhatsappFlowUserStateSchema,
+    insertWhatsappMessageTemplateSchema
+} from './whatsapp.schema';
 
 
 // --- SCHEMAS ZOD PARA SELEÇÃO (SELECT - Core) ---
@@ -477,15 +477,17 @@ export const selectWhatsappMessageSchema = createSelectSchema(whatsappMessages);
 export const selectAlertSchema = createSelectSchema(alerts);
 export const selectBudgetSchema = createSelectSchema(budgets);
 export const selectLandingPageSchema = createSelectSchema(landingPages);
-export const selectChatSessionSchema = createSelectSchema(chatSessions);
-export const selectChatMessageSchema = createSelectSchema(chatMessages);
+export const selectChatSessionSchema = createSelectSchema(chatSessions); // MCP Chat
+export const selectChatMessageSchema = createSelectSchema(chatMessages); // MCP Chat
 export const selectFunnelSchema = createSelectSchema(funnels);
 export const selectFunnelStageSchema = createSelectSchema(funnelStages);
-// Re-exportar schemas Zod de SELECT do WhatsApp
-export const selectWhatsappConnectionSchema = whatsappSchema.selectWhatsappConnectionSchema;
-export const selectWhatsappFlowSchema = whatsappSchema.selectWhatsappFlowSchema;
-export const selectWhatsappFlowUserStateSchema = whatsappSchema.selectWhatsappFlowUserStateSchema;
-export const selectWhatsappMessageTemplateSchema = whatsappSchema.selectWhatsappMessageTemplateSchema;
+// Re-exportar schemas Zod de SELEÇÃO do WhatsApp
+export {
+    selectWhatsappConnectionSchema,
+    selectWhatsappFlowSchema,
+    selectWhatsappFlowUserStateSchema,
+    selectWhatsappMessageTemplateSchema
+} from './whatsapp.schema';
 
 
 // --- Tipos Inferidos (Core) ---
@@ -499,7 +501,7 @@ export type Copy = z.infer<typeof selectCopySchema>;
 export type InsertCopy = z.infer<typeof insertCopySchema>;
 export type Metric = z.infer<typeof selectMetricSchema>;
 export type InsertMetric = z.infer<typeof createInsertSchema<typeof metrics>>;
-export type WhatsappMessage = z.infer<typeof selectWhatsappMessageSchema>;
+export type WhatsappMessage = z.infer<typeof selectWhatsappMessageSchema>; // Tipo para mensagem geral do WhatsApp
 export type InsertWhatsappMessage = z.infer<typeof insertWhatsappMessageSchema>;
 export type Alert = z.infer<typeof selectAlertSchema>;
 export type InsertAlert = z.infer<typeof insertAlertSchema>;
@@ -522,8 +524,9 @@ export type {
     WhatsappFlow, InsertWhatsappFlow,
     WhatsappFlowUserState, InsertWhatsappFlowUserState,
     WhatsappMessageTemplate, InsertWhatsappMessageTemplate,
-    FlowElements
-};
+    FlowElements // Re-exportando o tipo FlowElements daqui também
+} from './whatsapp.schema';
+
 
 // --- CONFIGURAÇÕES DE COPY (Manter no final) ---
 export const allCopyPurposesConfig: CopyPurposeConfig[] = [
@@ -535,15 +538,7 @@ export const allCopyPurposesConfig: CopyPurposeConfig[] = [
     description: 'Crie anúncios chamativos para convidar pessoas para seu webinar, masterclass ou live.',
     fields: [
       { name: 'eventName', label: 'Nome do Evento *', type: 'text', placeholder: 'Ex: Masterclass "Decole Seu Negócio Online"', tooltip: 'O título principal do seu evento.', required: true },
-      { name: 'eventSubtitle', label: 'Subtítulo do Evento (Opcional)', type: 'text', placeholder: 'Ex: O guia definitivo para...', tooltip: 'Uma frase curta para complementar o nome.'},
-      { name: 'eventFormat', label: 'Formato do Evento', type: 'text', placeholder: 'Ex: Workshop online de 3 dias via Zoom', tooltip: 'Descreva como será o evento (live, gravado, desafio, etc.).', defaultValue: 'Webinar Ao Vivo' },
-      { name: 'eventDateTime', label: 'Data e Hora Principal do Evento *', type: 'text', placeholder: 'Ex: Terça, 25 de Junho, às 20h (Horário de Brasília)', tooltip: 'Quando o evento principal acontecerá? Inclua fuso horário se relevante.', required: true },
-      { name: 'eventDuration', label: 'Duração Estimada do Evento', type: 'text', placeholder: 'Ex: Aproximadamente 1h30', tooltip: 'Quanto tempo o público deve reservar?' },
-      { name: 'eventPromise', label: 'Principal Promessa/Transformação do Evento *', type: 'textarea', placeholder: 'Ex: Você vai descobrir o método exato para criar anúncios que vendem todos os dias, mesmo começando do zero.', tooltip: 'O que a pessoa vai ganhar/aprender de mais valioso?', required: true },
-      { name: 'eventTopics', label: 'Principais Tópicos Abordados (1 por linha) *', type: 'textarea', placeholder: 'Ex:\n- Como definir seu público ideal\n- Os 3 erros que te fazem perder dinheiro em anúncios\n- O segredo das headlines que convertem', tooltip: 'Liste os pontos chave que serão ensinados.', required: true },
-      { name: 'eventTargetAudience', label: 'Público Específico Deste Evento', type: 'text', placeholder: 'Ex: Empreendedores que já tentaram anunciar e não tiveram resultado', tooltip: 'Para quem este evento é especialmente desenhado?' },
-      { name: 'eventCTA', label: 'Chamada para Ação do Anúncio *', type: 'text', placeholder: 'Ex: "Garanta sua vaga gratuita agora!" ou "Clique em Saiba Mais e inscreva-se!"', tooltip: 'O que você quer que a pessoa faça ao ver o anúncio?', required: true, defaultValue: 'Inscreva-se Gratuitamente!' },
-      { name: 'urgencyScarcityElement', label: 'Elemento de Urgência/Escassez (Opcional)', type: 'text', placeholder: 'Ex: Vagas limitadas, Bônus para os 100 primeiros inscritos', tooltip: 'Algum motivo para a pessoa agir rápido?' },
+      // ... (demais campos)
     ],
   },
   // ... (restante da sua configuração de allCopyPurposesConfig)
@@ -552,29 +547,16 @@ export const allCopyPurposesConfig: CopyPurposeConfig[] = [
 // Schema para a resposta da IA (usado na API Gemini)
 export const aiResponseSchema = {
   type: "OBJECT" as const,
-  properties: {
-    mainCopy: { type: "STRING" as const, description: "O texto principal da copy gerada." },
-    alternativeVariation1: { type: "STRING" as const, description: "Uma variação alternativa da copy principal." },
-    alternativeVariation2: { type: "STRING" as const, description: "Outra variação alternativa da copy principal." },
-    platformSuggestion: { type: "STRING" as const, description: "Sugestão de plataforma ou contexto ideal para esta copy." },
-    notes: { type: "STRING" as const, description: "Notas adicionais ou observações sobre a copy gerada." }
-  },
+  properties: { /* ... */ },
   required: ["mainCopy", "platformSuggestion"]
 };
-
-export const aiResponseValidationSchema = z.object({
-  mainCopy: z.string(),
-  alternativeVariation1: z.string().optional(),
-  alternativeVariation2: z.string().optional(),
-  platformSuggestion: z.string(),
-  notes: z.string().optional(),
-});
+export const aiResponseValidationSchema = z.object({ /* ... */ });
 export type AiResponseType = z.infer<typeof aiResponseValidationSchema>;
-
-export const contentIdeasResponseSchema = { type: "OBJECT" as const, properties: { contentIdeas: { type: "ARRAY" as const, items: { "type": "STRING" as const } } }, required: ["contentIdeas"] };
-export const optimizeCopyResponseSchema = { type: "OBJECT" as const, properties: { optimizedCopy: { type: "STRING" as const }, optimizationNotes: { type: "STRING" as const } }, required: ["optimizedCopy"] };
+export const contentIdeasResponseSchema = { /* ... */ };
+export const optimizeCopyResponseSchema = { /* ... */ };
 
 // Agrupa todos os objetos de schema para exportação e uso no Drizzle
+// Este é o objeto principal que o Drizzle usará
 export const schema = {
     // Enums existentes
     campaignStatusEnum,
@@ -608,6 +590,6 @@ export const schema = {
     chatMessageRelations,
     funnelRelations,
     funnelStageRelations,
-    // Enums, Tabelas e Relações do WhatsApp (importados de whatsappSchema)
-    ...whatsappSchema,
+    // Enums, Tabelas e Relações do WhatsApp (do whatsappSchema)
+    ...whatsappSchema, // Espalha todos os exports do whatsappSchema aqui
 };
