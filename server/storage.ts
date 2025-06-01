@@ -80,7 +80,8 @@ export interface IStorage {
   deleteFunnelStage(id: number, userId: number): Promise<boolean>;
 }
 
-const selectedUserFields = {
+// Definindo os campos para seleção explícita para a tabela users
+const userFieldsForSelection = {
   id: users.id,
   username: users.username,
   email: users.email,
@@ -91,73 +92,79 @@ const selectedUserFields = {
 
 export class DatabaseStorage implements IStorage {
   async getUser(id: number): Promise<User | undefined> {
-    console.log(`[STORAGE_GETUSER] Buscando usuário por ID: ${id}`);
-    if (isNaN(id)) {
-        console.warn("[STORAGE_GETUSER] ID inválido fornecido.");
+    console.log(`[STORAGE_GETUSER_V4] Buscando usuário por ID: ${id}`);
+    if (isNaN(id) || id <= 0) {
+        console.warn("[STORAGE_GETUSER_V4] ID inválido fornecido:", id);
         return undefined;
     }
     try {
-      const result = await db.select(selectedUserFields).from(users).where(eq(users.id, id)).limit(1);
+      const result = await db
+        .select(userFieldsForSelection)
+        .from(users)
+        .where(eq(users.id, id))
+        .limit(1);
       return result[0];
     } catch (error) {
-      console.error(`[STORAGE_GETUSER] Erro ao buscar usuário por ID ${id}:`, error);
+      console.error(`[STORAGE_GETUSER_V4] Erro ao buscar usuário por ID ${id}:`, error);
       throw error;
     }
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    console.log(`[STORAGE_GETUSERBYUSERNAME] Buscando usuário por username: ${username}`);
+    console.log(`[STORAGE_GETUSERBYUSERNAME_V4] Buscando usuário por username: ${username}`);
     if (!username || typeof username !== 'string' || username.trim() === '') {
-      console.warn("[STORAGE_GETUSERBYUSERNAME] Tentativa de buscar usuário com username inválido ou ausente.");
+      console.warn("[STORAGE_GETUSERBYUSERNAME_V4] Tentativa de buscar usuário com username inválido ou ausente.");
       return undefined;
     }
     try {
-      const result = await db.select(selectedUserFields).from(users).where(eq(users.username, username.trim())).limit(1);
+      const result = await db
+        .select(userFieldsForSelection)
+        .from(users)
+        .where(eq(users.username, username.trim()))
+        .limit(1);
       return result[0];
     } catch (error) {
-      console.error(`[STORAGE_GETUSERBYUSERNAME] Erro ao buscar usuário por username ${username}:`, error);
+      console.error(`[STORAGE_GETUSERBYUSERNAME_V4] Erro ao buscar usuário por username ${username}:`, error);
       throw error;
     }
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    console.log(`[STORAGE_GETUSERBYEMAIL] Buscando usuário por email: ${email}`);
+    console.log(`[STORAGE_GETUSERBYEMAIL_V4] Buscando usuário por email: ${email}`);
     if (!email || typeof email !== 'string' || email.trim() === '') {
-      console.warn("[STORAGE_GETUSERBYEMAIL] Tentativa de buscar usuário com email inválido ou ausente.");
+      console.warn("[STORAGE_GETUSERBYEMAIL_V4] Tentativa de buscar usuário com email inválido ou ausente:", email);
       return undefined;
     }
     try {
-      const result = await db.select(selectedUserFields).from(users).where(eq(users.email, email.trim())).limit(1);
-      console.log(`[STORAGE_GETUSERBYEMAIL] Resultado para ${email}:`, result[0] ? `Usuário ID ${result[0].id}` : 'Não encontrado');
+      const result = await db
+        .select(userFieldsForSelection)
+        .from(users)
+        .where(eq(users.email, email.trim()))
+        .limit(1);
+      console.log(`[STORAGE_GETUSERBYEMAIL_V4] Resultado para ${email}:`, result[0] ? `Usuário ID ${result[0].id}` : 'Não encontrado');
       return result[0];
     } catch (error) {
-      console.error(`[STORAGE_GETUSERBYEMAIL] Erro ao buscar usuário por email ${email}:`, error);
+      console.error(`[STORAGE_GETUSERBYEMAIL_V4] Erro ao buscar usuário por email ${email}:`, error);
       throw error;
     }
   }
 
   async createUser(userData: InsertUser): Promise<User> {
+    // A verificação de userData.password deve ocorrer na rota antes de chamar createUser
     const hashedPassword = await bcrypt.hash(userData.password, 10);
-    // Seleciona explicitamente os campos ao retornar
-    const [newUser] = await db.insert(users).values({ ...userData, password: hashedPassword }).returning(selectedUserFields);
+    const [newUser] = await db.insert(users).values({ ...userData, password: hashedPassword }).returning(userFieldsForSelection);
     if (!newUser) throw new Error("Falha ao criar usuário.");
     return newUser;
   }
 
   async validatePassword(password: string, hashedPassword: string): Promise<boolean> {
+    if (!password || !hashedPassword) return false; // Adicionada verificação básica
     return bcrypt.compare(password, hashedPassword);
   }
 
-  // ... (restante dos métodos da classe DatabaseStorage mantidos como no seu arquivo anterior) ...
-  // ... (certifique-se de que createCampaign, updateCampaign, etc., usem os schemas corretos
-  //     e que o userId seja injetado/verificado corretamente nas rotas)
-
-  // Exemplo para getCampaigns, mantendo o original mas mostrando como seria com selectedFields
+  // --- Métodos de Campaign (mantidos) ---
   async getCampaigns(userId: number, limit?: number): Promise<Campaign[]> {
-    let query = db.select(/* aqui você poderia usar { ...campaigns } ou campos específicos */)
-                  .from(campaigns)
-                  .where(eq(campaigns.userId, userId))
-                  .orderBy(desc(campaigns.createdAt));
+    let query = db.select().from(campaigns).where(eq(campaigns.userId, userId)).orderBy(desc(campaigns.createdAt));
     if (limit) { return query.limit(limit); }
     return query;
   }
