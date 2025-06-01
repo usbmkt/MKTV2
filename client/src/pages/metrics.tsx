@@ -5,27 +5,28 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { LineChart, BarChart, PieChart } from '@/components/charts'; // Seus componentes de gráfico
+import { LineChart, BarChart, PieChart } from '@/components/charts';
 import {
   TrendingUp,
   TrendingDown,
   Eye,
   MousePointer,
   CreditCard,
-  Users, // Não usado nos exemplos, mas pode ser para dados de audiência
-  DollarSign, // Para ROI e Custo
-  Activity, // Para CTR
+  DollarSign,
+  Activity,
   Download,
-  Filter
+  Filter,
+  AlertCircle // Para erros
 } from 'lucide-react';
-import { useAuth } from '@/contexts/AuthContext'; // Supondo que você tenha um AuthContext
-import { toast } from 'sonner'; // Para notificações de erro
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner'; // Assumindo que foi instalado: npm install sonner
 
 // --- Definição de Tipos para os Dados do Backend ---
+// Estes tipos devem corresponder EXATAMENTE ao que seu endpoint /api/dashboard retorna
 interface KpiMetrics {
   activeCampaigns: number;
-  totalSpent: number;
-  totalCostPeriod: number; // Custo dentro do período selecionado
+  totalSpent: number;        // Gasto total histórico ou do período? Backend decide.
+  totalCostPeriod: number;   // Custo real dentro do timeRange selecionado.
   conversions: number;
   avgROI: number;
   impressions: number;
@@ -34,28 +35,26 @@ interface KpiMetrics {
   cpc: number;
 }
 
-interface CampaignData { // Para a lista de seleção de campanhas
+interface CampaignData {
   id: number;
   name: string;
 }
 
-interface CampaignPerformanceData { // Para a tabela de performance por campanha
+interface CampaignPerformanceData {
   id: number;
   name: string;
-  // platform: string; // Se for uma string única. Se for array, ajuste.
-  platforms: string[]; // Supondo que plataformas seja um array de strings
+  platforms: string[];
   status: string;
-  impressions?: number; // Métricas podem não estar disponíveis para todas as campanhas
+  impressions?: number;
   clicks?: number;
   ctr?: number;
   conversions?: number;
-  conversionRate?: number; // Calcule no backend ou frontend
-  cost?: number; // Custo específico da campanha no período
-  revenue?: number; // Receita específica da campanha no período
-  roi?: number; // ROI específico da campanha no período
-  budget?: number; // Orçamento total da campanha
-  spent?: number; // Gasto total da campanha (pode ser diferente do cost no período)
-  // trend?: 'up' | 'down' | 'stable'; // O backend precisará calcular isso
+  conversionRate?: number; // Backend calcula: (conversions / clicks) * 100
+  cost?: number;          // Custo da campanha NO PERÍODO SELECIONADO
+  revenue?: number;       // Receita da campanha NO PERÍODO SELECIONADO
+  roi?: number;           // ROI da campanha NO PERÍODO SELECIONADO
+  budget?: number;        // Orçamento total definido para a campanha
+  // trend?: 'up' | 'down' | 'stable'; // Backend precisa calcular
 }
 
 interface ChartDataset {
@@ -75,22 +74,24 @@ interface ChartData {
 
 interface DashboardData {
   metrics: KpiMetrics;
-  recentCampaigns: CampaignPerformanceData[]; // Para a aba "Por Campanha" se quiser usar dados do dashboard
+  // Para a aba "Por Campanha", idealmente viria de um fetch separado com paginação/filtros
+  // mas pode vir do dashboard se for uma lista curta "recentes" ou "top".
+  // O backend precisa fornecer os dados de performance por campanha DENTRO DO timeRange.
+  campaignPerformanceDetails: CampaignPerformanceData[];
   alertCount: number;
-  trends: { // Variações percentuais
-    campaignsChange?: number; // Opcional se não conseguir calcular
-    spentChange?: number;
-    conversionsChange?: number;
-    roiChange?: number;
+  trends: {
+    // Backend precisa calcular estas variações percentuais comparando com o período anterior
     impressionsChange?: number;
     clicksChange?: number;
+    conversionsChange?: number;
+    roiChange?: number;
+    // Adicione outros trends se necessário (ex: spentChange)
   };
-  // Dados para os gráficos
-  timeSeriesData: ChartData; // Impressões e Cliques ao longo do tempo
-  channelPerformanceData: ChartData; // Distribuição (ex: conversões por plataforma)
-  conversionData: ChartData; // Conversões ao longo do tempo
-  roiData: ChartData; // ROI por categoria (ex: por mês ou campanha)
-  // Você pode adicionar mais como audienceDemographicsData, audienceGeoData etc.
+  // Backend precisa preencher estes com dados reais agregados
+  timeSeriesData: ChartData;        // Ex: Impressões e Cliques por dia/semana/mês
+  channelPerformanceData: ChartData;  // Ex: Conversões (ou Custo, ou Receita) por Plataforma
+  // conversionData: ChartData;     // Se for um gráfico diferente de timeSeriesData para conversões
+  roiData: ChartData;               // Ex: ROI por Campanha ou por Mês
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
@@ -98,122 +99,108 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 export default function MetricsPage() {
   const { token } = useAuth();
   const [selectedPeriod, setSelectedPeriod] = useState('30d');
-  const [selectedCampaignId, setSelectedCampaignId] = useState<string>('all'); // 'all' ou ID da campanha
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string>('all');
 
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
-  const [campaignsList, setCampaignsList] = useState<CampaignData[]>([]); // Para o seletor de campanhas
-  const [campaignPerformanceList, setCampaignPerformanceList] = useState<CampaignPerformanceData[]>([]); // Para a aba de campanhas
+  const [campaignsList, setCampaignsList] = useState<CampaignData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Busca a lista de campanhas para o seletor
+  // Busca a lista de todas as campanhas para o seletor
   useEffect(() => {
     if (!token) return;
-    setIsLoading(true);
-    fetch(`${API_BASE_URL}/campaigns`, { // Supondo que /api/campaigns retorne {id, name}
+    // Não precisa de setIsLoading(true) aqui se o fetch principal já o faz
+    fetch(`${API_BASE_URL}/campaigns`, { // Este endpoint deve retornar apenas {id, name}
       headers: { 'Authorization': `Bearer ${token}` },
     })
       .then(res => {
-        if (!res.ok) throw new Error(`Falha ao buscar campanhas: ${res.statusText}`);
+        if (!res.ok) throw new Error(`Falha ao buscar lista de campanhas: ${res.status}`);
         return res.json();
       })
-      .then((data: CampaignData[]) => {
-        setCampaignsList(data || []);
-      })
+      .then((data: CampaignData[]) => setCampaignsList(data || []))
       .catch(err => {
         console.error("Erro ao buscar lista de campanhas:", err);
-        setError("Não foi possível carregar a lista de campanhas.");
-        toast.error("Erro ao carregar lista de campanhas.");
-      })
-      .finally(() => setIsLoading(false)); // Set loading false aqui ou no fetch principal
+        toast.error("Erro ao carregar lista de campanhas.", { description: err.message });
+      });
   }, [token]);
 
-  // Busca os dados principais do dashboard e/ou dados de performance de campanha
+  // Busca os dados principais do dashboard
   useEffect(() => {
-    if (!token) return;
+    if (!token) {
+      setIsLoading(false); // Garante que loading para se não houver token
+      return;
+    }
 
-    // Determina qual endpoint chamar ou como modificar a query
-    // Para este exemplo, vamos focar em um endpoint de dashboard que pode ser filtrado.
-    // O backend /api/dashboard precisaria aceitar 'campaignId' como query param.
+    // O backend /api/dashboard precisa aceitar 'timeRange' e 'campaignId' (opcional)
+    // e retornar TODOS os dados necessários, incluindo os agregados para os gráficos.
     const fetchUrl = `${API_BASE_URL}/dashboard?timeRange=${selectedPeriod}${selectedCampaignId !== 'all' ? `&campaignId=${selectedCampaignId}` : ''}`;
 
     setIsLoading(true);
     setError(null);
+    console.log(`[MetricsPage] Fetching dashboard data from: ${fetchUrl}`);
 
     fetch(fetchUrl, {
       headers: { 'Authorization': `Bearer ${token}` },
     })
       .then(res => {
-        if (!res.ok) throw new Error(`Falha ao buscar dados do dashboard: ${res.status} ${res.statusText}`);
+        if (!res.ok) {
+          return res.json().then(errData => { // Tenta pegar corpo do erro se JSON
+            throw new Error(`Falha ao buscar dados: ${res.status} - ${errData.error || res.statusText}`);
+          }).catch(() => { // Se o corpo não for JSON
+            throw new Error(`Falha ao buscar dados: ${res.status} - ${res.statusText}`);
+          });
+        }
         return res.json();
       })
       .then((data: DashboardData) => {
+        console.log('[MetricsPage] Dashboard data received:', data);
         setDashboardData(data);
-        // Se o endpoint /api/dashboard também retornar a lista detalhada de campanhas para a aba "Por Campanha"
-        // você pode setar aqui. Caso contrário, você precisaria de outro fetch.
-        // Por simplicidade, vamos assumir que `data.recentCampaigns` é o que queremos para a lista.
-        setCampaignPerformanceList(data.recentCampaigns || []);
       })
       .catch(err => {
-        console.error("Erro ao buscar dados do dashboard:", err);
-        setError("Não foi possível carregar os dados de métricas.");
-        toast.error("Erro ao carregar dados de métricas.");
-        setDashboardData(null); // Limpar dados antigos em caso de erro
+        console.error("[MetricsPage] Erro ao buscar dados do dashboard:", err);
+        const errorMessage = err.message || "Não foi possível carregar os dados de métricas.";
+        setError(errorMessage);
+        toast.error("Erro ao carregar métricas.", { description: errorMessage });
+        setDashboardData(null);
       })
       .finally(() => setIsLoading(false));
 
   }, [token, selectedPeriod, selectedCampaignId]);
 
+  // Funções de formatação (mantidas)
+  const formatCurrency = (value?: number) => { if (value === undefined || value === null || isNaN(value)) return 'N/A'; return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value); };
+  const formatPercentage = (value?: number) => { if (value === undefined || value === null || isNaN(value)) return 'N/A'; return `${value.toFixed(2)}%`; };
+  const formatNumber = (value?: number) => { if (value === undefined || value === null || isNaN(value)) return 'N/A'; return value.toLocaleString('pt-BR'); };
+  const getTrendComponent = (value?: number) => { if (value === undefined || value === null || isNaN(value)) return null; if (value > 0) return <TrendingUp className="w-3 h-3 mr-1 text-green-500" />; if (value < 0) return <TrendingDown className="w-3 h-3 mr-1 text-red-500" />; return <span className="w-3 h-3 mr-1 text-muted-foreground">-</span>; };
 
-  const formatCurrency = (value?: number) => {
-    if (value === undefined || value === null) return 'N/A';
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL'
-    }).format(value);
-  };
-
-  const formatPercentage = (value?: number) => {
-    if (value === undefined || value === null) return 'N/A';
-    return `${value.toFixed(2)}%`;
-  };
-
-  const formatNumber = (value?: number) => {
-    if (value === undefined || value === null) return 'N/A';
-    return value.toLocaleString('pt-BR');
-  };
-
-  const getTrendComponent = (value?: number) => {
-    if (value === undefined || value === null) return null;
-    if (value > 0) return <TrendingUp className="w-3 h-3 mr-1 text-green-500" />;
-    if (value < 0) return <TrendingDown className="w-3 h-3 mr-1 text-red-500" />;
-    return <span className="w-3 h-3 mr-1 text-muted-foreground">-</span>; // Para estável
-  };
-  
-  // Memoize os dados dos gráficos para evitar recálculos desnecessários
-  // Os dados para os gráficos (timeSeriesData, channelPerformanceData, etc.)
-  // devem vir do dashboardData e já estar no formato que os componentes de gráfico esperam.
+  // Memoização dos dados para gráficos
   const memoizedTimeSeriesData = useMemo(() => dashboardData?.timeSeriesData || { labels: [], datasets: [] }, [dashboardData]);
   const memoizedChannelData = useMemo(() => dashboardData?.channelPerformanceData || { labels: [], datasets: [] }, [dashboardData]);
   const memoizedRoiData = useMemo(() => dashboardData?.roiData || { labels: [], datasets: [] }, [dashboardData]);
-  // const memoizedConversionData = useMemo(() => dashboardData?.conversionData || { labels: [], datasets: [] }, [dashboardData]);
-
+  // const memoizedConversionData = useMemo(() => dashboardData?.conversionData || { labels: [], datasets: [] }, [dashboardData]); // Se tiver um gráfico separado para conversões
 
   if (isLoading) {
-    return <div className="flex justify-center items-center h-64">Carregando métricas...</div>;
+    return <div className="flex justify-center items-center h-screen"><p>Carregando métricas...</p></div>;
   }
 
-  if (error && !dashboardData) { // Mostrar erro apenas se não houver dados antigos para exibir
-    return <div className="text-red-500 text-center p-4">{error}</div>;
+  if (error && !dashboardData) {
+    return (
+      <div className="flex flex-col justify-center items-center h-screen text-red-600 p-4">
+        <AlertCircle className="w-12 h-12 mb-4" />
+        <h2 className="text-xl font-semibold mb-2">Erro ao Carregar Métricas</h2>
+        <p className="text-center">{error}</p>
+        <Button onClick={() => window.location.reload()} className="mt-6">Tentar Novamente</Button>
+      </div>
+    );
   }
 
-  // Se não houver dados após o carregamento (e sem erro que impediu o fetch inicial)
   if (!dashboardData) {
-    return <div className="text-center p-4">Nenhuma métrica disponível.</div>;
+    return <div className="text-center p-4 pt-10">Nenhuma métrica disponível para os filtros selecionados.</div>;
   }
 
   const kpis = dashboardData.metrics;
   const trends = dashboardData.trends;
+  const campaignPerformanceDetails = dashboardData.campaignPerformanceDetails || []; // Usa o novo campo
 
   return (
     <div className="space-y-6 p-4 md:p-6">
@@ -224,19 +211,9 @@ export default function MetricsPage() {
             Análise detalhada de performance das suas campanhas e marketing.
           </p>
         </div>
-        <div className="flex space-x-2">
-          <Button variant="outline">
-            <Filter className="w-4 h-4 mr-2" />
-            Filtros (Em breve)
-          </Button>
-          <Button>
-            <Download className="w-4 h-4 mr-2" />
-            Exportar (Em breve)
-          </Button>
-        </div>
+        {/* Botões de Filtros e Exportar podem ser implementados futuramente */}
       </div>
 
-      {/* Filtros */}
       <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">
         <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
           <SelectTrigger className="w-full sm:w-48">
@@ -246,7 +223,6 @@ export default function MetricsPage() {
             <SelectItem value="7d">Últimos 7 dias</SelectItem>
             <SelectItem value="30d">Últimos 30 dias</SelectItem>
             <SelectItem value="90d">Últimos 90 dias</SelectItem>
-            {/* <SelectItem value="365d">Último ano</SelectItem> */}
           </SelectContent>
         </Select>
 
@@ -264,159 +240,42 @@ export default function MetricsPage() {
           </SelectContent>
         </Select>
       </div>
-      {error && <p className="text-sm text-red-500">{error}</p>}
-
+      {/* Se houver um erro mas dados antigos são mostrados, pode exibir aqui */}
+      {error && dashboardData && <p className="text-sm text-red-500 mt-2">Aviso: {error}</p>}
 
       <Tabs defaultValue="overview" className="space-y-4">
         <TabsList>
           <TabsTrigger value="overview">Visão Geral</TabsTrigger>
           <TabsTrigger value="campaigns">Por Campanha</TabsTrigger>
           <TabsTrigger value="platforms">Por Plataforma</TabsTrigger>
-          {/* <TabsTrigger value="audience">Audiência</TabsTrigger> */}
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Impressões</CardTitle>
-                <Eye className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{formatNumber(kpis.impressions)}</div>
-                {trends.impressionsChange !== undefined && (
-                  <p className="text-xs text-muted-foreground flex items-center">
-                    {getTrendComponent(trends.impressionsChange)}
-                    {trends.impressionsChange > 0 ? '+' : ''}{formatPercentage(trends.impressionsChange)} vs. período anterior
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Cliques</CardTitle>
-                <MousePointer className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{formatNumber(kpis.clicks)}</div>
-                 {trends.clicksChange !== undefined && (
-                  <p className="text-xs text-muted-foreground flex items-center">
-                    {getTrendComponent(trends.clicksChange)}
-                    {trends.clicksChange > 0 ? '+' : ''}{formatPercentage(trends.clicksChange)} vs. período anterior
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Conversões</CardTitle>
-                <CreditCard className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{formatNumber(kpis.conversions)}</div>
-                {trends.conversionsChange !== undefined && (
-                  <p className="text-xs text-muted-foreground flex items-center">
-                    {getTrendComponent(trends.conversionsChange)}
-                     {trends.conversionsChange > 0 ? '+' : ''}{formatPercentage(trends.conversionsChange)} vs. período anterior
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">ROI Médio</CardTitle>
-                <DollarSign className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{formatPercentage(kpis.avgROI)}</div>
-                {trends.roiChange !== undefined && (
-                  <p className="text-xs text-muted-foreground flex items-center">
-                     {getTrendComponent(trends.roiChange)}
-                     {trends.roiChange > 0 ? '+' : ''}{formatPercentage(trends.roiChange)} vs. período anterior
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-             <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">CTR</CardTitle>
-                <Activity className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{formatPercentage(kpis.ctr)}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">CPC Médio</CardTitle>
-                <DollarSign className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{formatCurrency(kpis.cpc)}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Custo (Período)</CardTitle>
-                <DollarSign className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{formatCurrency(kpis.totalCostPeriod)}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Campanhas Ativas</CardTitle>
-                <Activity className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{formatNumber(kpis.activeCampaigns)}</div>
-              </CardContent>
-            </Card>
+            {/* KPIs */}
+            <Card><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-sm font-medium">Impressões</CardTitle><Eye className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">{formatNumber(kpis.impressions)}</div>{trends.impressionsChange !== undefined && (<p className="text-xs text-muted-foreground flex items-center">{getTrendComponent(trends.impressionsChange)}{trends.impressionsChange > 0 ? '+' : ''}{formatPercentage(trends.impressionsChange)}</p>)}</CardContent></Card>
+            <Card><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-sm font-medium">Cliques</CardTitle><MousePointer className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">{formatNumber(kpis.clicks)}</div>{trends.clicksChange !== undefined && (<p className="text-xs text-muted-foreground flex items-center">{getTrendComponent(trends.clicksChange)}{trends.clicksChange > 0 ? '+' : ''}{formatPercentage(trends.clicksChange)}</p>)}</CardContent></Card>
+            <Card><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-sm font-medium">Conversões</CardTitle><CreditCard className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">{formatNumber(kpis.conversions)}</div>{trends.conversionsChange !== undefined && (<p className="text-xs text-muted-foreground flex items-center">{getTrendComponent(trends.conversionsChange)}{trends.conversionsChange > 0 ? '+' : ''}{formatPercentage(trends.conversionsChange)}</p>)}</CardContent></Card>
+            <Card><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-sm font-medium">ROI Médio</CardTitle><DollarSign className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">{formatPercentage(kpis.avgROI)}</div>{trends.roiChange !== undefined && (<p className="text-xs text-muted-foreground flex items-center">{getTrendComponent(trends.roiChange)}{trends.roiChange > 0 ? '+' : ''}{formatPercentage(trends.roiChange)}</p>)}</CardContent></Card>
+            <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">CTR</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{formatPercentage(kpis.ctr)}</div></CardContent></Card>
+            <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">CPC Médio</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{formatCurrency(kpis.cpc)}</div></CardContent></Card>
+            <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Custo (Período)</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{formatCurrency(kpis.totalCostPeriod)}</div></CardContent></Card>
+            <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Campanhas Ativas</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{formatNumber(kpis.activeCampaigns)}</div></CardContent></Card>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Performance ao Longo do Tempo</CardTitle>
-                <CardDescription>Métricas chave do período selecionado</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <LineChart data={memoizedTimeSeriesData} className="h-80" />
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle>Desempenho por Canal</CardTitle>
-                <CardDescription>Performance agregada por plataforma/canal</CardDescription>
-              </CardHeader>
-              <CardContent>
-                 <PieChart data={memoizedChannelData} className="h-80" />
-              </CardContent>
-            </Card>
+            <Card><CardHeader><CardTitle>Performance ao Longo do Tempo</CardTitle><CardDescription>Impressões e cliques no período</CardDescription></CardHeader><CardContent><LineChart data={memoizedTimeSeriesData} className="h-80" /></CardContent></Card>
+            <Card><CardHeader><CardTitle>Desempenho por Canal</CardTitle><CardDescription>Contribuição por plataforma</CardDescription></CardHeader><CardContent><PieChart data={memoizedChannelData} className="h-80" /></CardContent></Card>
           </div>
-           <Card>
-            <CardHeader>
-              <CardTitle>ROI por Campanha (Top 5)</CardTitle> {/* Ou por Mês, ajuste no backend */}
-              <CardDescription>Retorno sobre investimento das principais campanhas</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <BarChart data={memoizedRoiData} className="h-80" />
-            </CardContent>
-          </Card>
+          <Card><CardHeader><CardTitle>ROI Agregado</CardTitle><CardDescription>Retorno sobre investimento (detalhar dimensão no backend)</CardDescription></CardHeader><CardContent><BarChart data={memoizedRoiData} className="h-80" /></CardContent></Card>
         </TabsContent>
 
         <TabsContent value="campaigns" className="space-y-4">
           <Card>
-            <CardHeader>
-              <CardTitle>Performance Detalhada por Campanha</CardTitle>
-              <CardDescription>
-                Métricas detalhadas de cada campanha no período selecionado.
-              </CardDescription>
-            </CardHeader>
+            <CardHeader><CardTitle>Performance Detalhada por Campanha</CardTitle><CardDescription>Métricas por campanha no período selecionado</CardDescription></CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {campaignPerformanceList.length > 0 ? campaignPerformanceList.map((campaign) => (
+                {campaignPerformanceDetails.length > 0 ? campaignPerformanceDetails.map((campaign) => (
                   <div key={campaign.id} className="border rounded-lg p-4">
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-2">
                       <div>
@@ -426,42 +285,37 @@ export default function MetricsPage() {
                             <Badge variant={campaign.status === 'active' ? 'default' : 'outline'}>{campaign.status}</Badge>
                         </div>
                       </div>
-                      <Badge 
-                        variant={ (campaign.roi || 0) > 100 ? 'success' : (campaign.roi || 0) > 0 ? 'default' : 'destructive'} 
-                        className="text-sm"
-                      >
-                        ROI: {formatPercentage(campaign.roi)}
-                      </Badge>
+                      <Badge variant={(campaign.roi || 0) > 100 ? 'success' : (campaign.roi || 0) > 0 ? 'default' : 'destructive'} className="text-sm">ROI: {formatPercentage(campaign.roi)}</Badge>
                     </div>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7 gap-4 text-sm">
                       <div><p className="text-muted-foreground">Impressões</p><p className="font-semibold">{formatNumber(campaign.impressions)}</p></div>
                       <div><p className="text-muted-foreground">Cliques</p><p className="font-semibold">{formatNumber(campaign.clicks)}</p></div>
                       <div><p className="text-muted-foreground">CTR</p><p className="font-semibold">{formatPercentage(campaign.ctr)}</p></div>
                       <div><p className="text-muted-foreground">Conversões</p><p className="font-semibold">{formatNumber(campaign.conversions)}</p></div>
-                      <div><p className="text-muted-foreground">Custo</p><p className="font-semibold">{formatCurrency(campaign.cost)}</p></div>
-                      <div><p className="text-muted-foreground">Receita</p><p className="font-semibold text-green-600">{formatCurrency(campaign.revenue)}</p></div>
-                       <div><p className="text-muted-foreground">Orçamento Total</p><p className="font-semibold">{formatCurrency(campaign.budget)}</p></div>
+                      <div><p className="text-muted-foreground">Custo (Per.)</p><p className="font-semibold">{formatCurrency(campaign.cost)}</p></div>
+                      <div><p className="text-muted-foreground">Receita (Per.)</p><p className="font-semibold text-green-600">{formatCurrency(campaign.revenue)}</p></div>
+                      <div><p className="text-muted-foreground">Orçamento</p><p className="font-semibold">{formatCurrency(campaign.budget)}</p></div>
                     </div>
                   </div>
-                )) : <p>Nenhuma campanha para exibir com os filtros selecionados.</p>}
+                )) : <p>Nenhuma campanha para exibir com os filtros selecionados ou nenhuma campanha retornada.</p>}
               </div>
             </CardContent>
           </Card>
         </TabsContent>
 
         <TabsContent value="platforms" className="space-y-4">
-            {/* Aqui você precisaria de dados específicos por plataforma */}
-            {/* Similar à aba "Visão Geral" (channelPerformanceData), mas talvez mais detalhado */}
             <Card>
-                <CardHeader><CardTitle>Performance por Plataforma (Detalhado)</CardTitle></CardHeader>
+                <CardHeader><CardTitle>Performance Detalhada por Plataforma</CardTitle><CardDescription>O backend precisa fornecer esses dados agregados</CardDescription></CardHeader>
                 <CardContent>
-                    <p>Dados detalhados por plataforma virão aqui.</p>
-                    <PieChart data={memoizedChannelData} className="h-80" />
+                    <p className="text-muted-foreground">Gráfico de exemplo, dados reais virão do backend.</p>
+                    {memoizedChannelData.datasets.length > 0 && memoizedChannelData.datasets[0].data.length > 0 ? (
+                       <PieChart data={memoizedChannelData} className="h-80" />
+                    ) : (
+                       <p>Dados de performance por plataforma não disponíveis.</p>
+                    )}
                 </CardContent>
             </Card>
         </TabsContent>
-
-        {/* <TabsContent value="audience" className="space-y-4"> ... (Seu código mockado para audiência) ... </TabsContent> */}
       </Tabs>
     </div>
   );
