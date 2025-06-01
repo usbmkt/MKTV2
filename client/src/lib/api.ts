@@ -1,13 +1,27 @@
 // client/src/lib/api.ts
 import { useAuthStore } from './auth';
 
+// Helper para construir a URL completa da API
+function getApiUrl(path: string): string {
+  const apiUrlFromEnv = import.meta.env.VITE_API_URL;
+  if (apiUrlFromEnv && typeof apiUrlFromEnv === 'string' && apiUrlFromEnv.trim() !== '') {
+    // Remove barras extras e junta
+    const base = apiUrlFromEnv.replace(/\/$/, '');
+    const endpoint = path.startsWith('/') ? path : `/${path}`;
+    return `${base}${endpoint}`;
+  }
+  // Se VITE_API_URL não estiver definida, assume que a URL já é completa ou relativa à origem (para proxy)
+  return path;
+}
+
 export async function apiRequest(
   method: string,
-  url: string,
+  url: string, // url agora é o PATH da API, ex: /auth/login
   data?: unknown,
   isFormData: boolean = false
 ): Promise<Response> {
   const { token } = useAuthStore.getState();
+  const fullApiUrl = getApiUrl(url); // Constrói a URL completa
 
   const headers: Record<string, string> = {};
 
@@ -28,7 +42,7 @@ export async function apiRequest(
     body = undefined;
   }
 
-  const response = await fetch(url, {
+  const response = await fetch(fullApiUrl, { // Usa fullApiUrl
     method,
     headers,
     body,
@@ -64,15 +78,16 @@ export async function apiRequest(
 }
 
 export async function uploadFile(
-  url: string,
+  url: string, // url agora é o PATH da API, ex: /creatives
   file: File,
   additionalData?: Record<string, string>,
-  method: string = 'POST' // Adicionado método para permitir PUT/PATCH
+  method: string = 'POST'
 ): Promise<Response> {
   const { token } = useAuthStore.getState();
+  const fullApiUrl = getApiUrl(url); // Constrói a URL completa
 
   const formData = new FormData();
-  formData.append('file', file); // 'file' é o nome do campo esperado pelo Multer
+  formData.append('file', file); 
 
   if (additionalData) {
     Object.entries(additionalData).forEach(([key, value]) => {
@@ -86,9 +101,9 @@ export async function uploadFile(
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const response = await fetch(url, {
-    method: method, // Usar o método passado
-    headers, // Content-Type é definido automaticamente pelo browser para FormData
+  const response = await fetch(fullApiUrl, { // Usa fullApiUrl
+    method: method,
+    headers,
     body: formData,
   });
 
