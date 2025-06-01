@@ -159,7 +159,7 @@ if (GEMINI_API_KEY && GEMINI_API_KEY !== "SUA_CHAVE_API_GEMINI_AQUI" && GEMINI_A
 
 
 // Função para registrar as rotas
-export async function registerRoutes(app: Express): Promise<HttpServer> {
+async function doRegisterRoutes(app: Express): Promise<HttpServer> {
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
@@ -842,3 +842,8 @@ Observações importantes para sua geração:
   const httpServer = createServer(app);
   return httpServer;
 }
+
+// Exporta a função de setup das rotas (como no seu original, para ser chamada no index.ts)
+export const RouterSetup = {
+  registerRoutes: doRegisterRoutes
+};
