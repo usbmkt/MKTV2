@@ -35,42 +35,36 @@ interface ExportTemplate {
 }
 
 interface AvailableField {
-  id: keyof FormattedCampaignDataRow; // Chaves do objeto de dados que será exportado
+  id: keyof FormattedCampaignDataRow;
   label: string;
   category: string;
 }
 
-// Define a estrutura da linha de dados para exportação
 interface FormattedCampaignDataRow {
   campaignId?: number;
   campaignName?: string;
   status?: string;
   startDate?: string;
   endDate?: string;
-  budget?: string; // Formatado como string
-  spentAmount?: string; // Formatado como string, pode vir do dashboard.recentCampaigns.spent
-  // Campos de métricas (alguns podem ser agregados ou de recentCampaigns)
+  budget?: string; 
+  spentAmount?: string; 
   impressions?: number | string;
   clicks?: number | string;
-  ctr?: string; // ex: "2.5%"
+  ctr?: string; 
   conversions?: number | string;
-  cost?: string; // Custo de ads, formatado
-  revenue?: string; // Receita de ads, formatado
-  roi?: string; // ex: "3.2x" ou "320%"
-  cpa?: string; // Custo por aquisição, formatado
+  cost?: string; 
+  revenue?: string; 
+  roi?: string; 
+  cpa?: string; 
   leads?: number | string;
-  // Campos de audiência (exemplos, não temos dados reais para eles)
   ageRange?: string;
   gender?: string;
   location?: string;
   interests?: string;
   device?: string;
-  // Adicionar mais campos conforme necessário
-  platforms?: string; // Formatado como string
+  platforms?: string;
 }
 
-
-// Esta lista define as OPÇÕES de templates.
 const exportTemplates: ExportTemplate[] = [
   {
     id: 'campaign-performance-summary',
@@ -92,7 +86,6 @@ const exportTemplates: ExportTemplate[] = [
   },
 ];
 
-// Esta lista define as OPÇÕES de campos selecionáveis.
 const availableFields: AvailableField[] = [
   { id: 'campaignName', label: 'Nome da Campanha', category: 'Informações da Campanha' },
   { id: 'status', label: 'Status', category: 'Informações da Campanha' },
@@ -114,23 +107,18 @@ const availableFields: AvailableField[] = [
   { id: 'leads', label: 'Leads (Agregado)', category: 'Métricas de Performance' },
 ];
 
-// Função para converter dados para CSV
-function convertToCSV(data: FormattedCampaignDataRow[], fields: AvailableField[]): string {
-  if (!data || data.length === 0 || !fields || fields.length === 0) {
+function convertToCSV(data: FormattedCampaignDataRow[], fieldObjects: AvailableField[]): string {
+  if (!data || data.length === 0 || !fieldObjects || fieldObjects.length === 0) {
     return "";
   }
-
-  const selectedFieldIds = fields.map(f => f.id);
-  const selectedFieldLabels = fields.map(f => f.label);
   
-  const header = selectedFieldLabels.join(';');
+  const header = fieldObjects.map(f => f.label).join(';');
   const rows = data.map(row => {
-    return selectedFieldIds.map(fieldId => {
-      let value = row[fieldId];
+    return fieldObjects.map(fieldObj => {
+      let value = row[fieldObj.id];
       if (value === null || value === undefined) {
         value = '';
       }
-      // Escapar aspas e tratar quebras de linha para CSV
       const stringValue = String(value).replace(/"/g, '""');
       if (stringValue.includes(';') || stringValue.includes('\n') || stringValue.includes(',')) {
         return `"${stringValue}"`;
@@ -143,7 +131,7 @@ function convertToCSV(data: FormattedCampaignDataRow[], fields: AvailableField[]
 }
 
 function downloadCSV(csvData: string, filename: string) {
-  const blob = new Blob([`\uFEFF${csvData}`], { type: 'text/csv;charset=utf-8;' }); // BOM para Excel
+  const blob = new Blob([`\uFEFF${csvData}`], { type: 'text/csv;charset=utf-8;' });
   const link = document.createElement("a");
   if (link.download !== undefined) {
     const url = URL.createObjectURL(blob);
@@ -157,13 +145,12 @@ function downloadCSV(csvData: string, filename: string) {
   }
 }
 
-
 export default function ExportPage() {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
   const [selectedCampaignIds, setSelectedCampaignIds] = useState<string[]>([]);
-  const [selectedFieldIds, setSelectedFieldIds] = useState<string[]>([]); // Agora armazena IDs
+  const [selectedFieldIds, setSelectedFieldIds] = useState<string[]>([]);
   const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>({ from: subDays(new Date(), 30), to: new Date()});
-  const [exportFormat, setExportFormat] = useState<string>('csv'); // Foco no CSV
+  const [exportFormat, setExportFormat] = useState<string>('csv');
   const { toast } = useToast();
   const [isExporting, setIsExporting] = useState(false);
 
@@ -176,14 +163,17 @@ export default function ExportPage() {
     },
   });
 
-  // Query para dados agregados do dashboard que podem ser usados no relatório
-  const { data: dashboardApiData, isLoading: isLoadingDashboardData } = useQuery({
+  const { data: dashboardApiData, isLoading: isLoadingDashboardData } = useQuery<any>({
     queryKey: ['dashboardDataForExport', dateRange.from?.toISOString(), dateRange.to?.toISOString()],
     queryFn: async () => {
       if (!dateRange.from || !dateRange.to) return null;
-      const range = `${Math.floor((dateRange.to.getTime() - dateRange.from.getTime()) / (1000 * 3600 * 24))}d`;
-      const response = await apiRequest('GET', `/api/dashboard?timeRange=${range}`); // O backend pode não usar esse range exato.
-      if (!response.ok) return null; // Não tratar como erro fatal aqui, exportação pode prosseguir com menos dados.
+      const daysDiff = Math.max(1, Math.ceil((dateRange.to.getTime() - dateRange.from.getTime()) / (1000 * 3600 * 24)));
+      const rangeParam = `${daysDiff}d`;
+      const response = await apiRequest('GET', `/api/dashboard?timeRange=${rangeParam}`);
+      if (!response.ok) {
+        console.warn("Não foi possível carregar dados agregados do dashboard para exportação.");
+        return null;
+      }
       return response.json();
     },
     enabled: !!dateRange.from && !!dateRange.to,
@@ -194,10 +184,9 @@ export default function ExportPage() {
     if (template) {
       setSelectedTemplateId(templateId);
       setSelectedFieldIds(template.fields as (keyof FormattedCampaignDataRow)[]);
-      setExportFormat(template.type === 'csv' || template.type === 'excel' ? template.type : 'csv'); // Prioriza CSV/Excel
+      setExportFormat(template.type === 'csv' || template.type === 'excel' ? template.type : 'csv');
     } else {
       setSelectedTemplateId('');
-      // Não limpar selectedFieldIds aqui, para permitir personalização mesmo após desmarcar template
     }
   };
 
@@ -217,10 +206,32 @@ export default function ExportPage() {
     );
     setSelectedTemplateId(''); 
   };
+  
+  const formatCurrency = (value?: string | number | null) => {
+    if (value === null || value === undefined || String(value).trim() === "") return "N/A";
+    const numValue = parseFloat(String(value));
+    if (isNaN(numValue)) return "N/A";
+    return `R$ ${numValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
 
+  const formatNumber = (value?: number | string | null) => {
+    if (value === null || value === undefined) return "N/A";
+    const numValue = typeof value === 'string' ? parseFloat(value) : value;
+    if (isNaN(numValue)) return "0";
+    return numValue.toLocaleString('pt-BR');
+  };
+  
   const handleExport = async () => {
-    if (selectedCampaignIds.length === 0 || selectedFields.length === 0 || !dateRange.from || !dateRange.to) {
-      toast({ title: "Campos Obrigatórios", description: "Selecione campanhas, campos e período.", variant: "destructive" });
+    if (selectedCampaignIds.length === 0) {
+      toast({ title: "Seleção Necessária", description: "Por favor, selecione ao menos uma campanha.", variant: "destructive" });
+      return;
+    }
+    if (selectedFieldIds.length === 0) {
+      toast({ title: "Seleção Necessária", description: "Por favor, selecione ao menos um campo para exportar.", variant: "destructive" });
+      return;
+    }
+    if (!dateRange.from || !dateRange.to) {
+      toast({ title: "Seleção Necessária", description: "Por favor, selecione um período de datas.", variant: "destructive" });
       return;
     }
     setIsExporting(true);
@@ -228,65 +239,69 @@ export default function ExportPage() {
     const selectedCampaignObjects = campaigns.filter(c => selectedCampaignIds.includes(String(c.id)));
     const dataToExport: FormattedCampaignDataRow[] = [];
     const dashboardMetrics = dashboardApiData?.metrics;
+    const recentCampaignsFromDashboard = dashboardApiData?.recentCampaigns || [];
 
     for (const campaign of selectedCampaignObjects) {
       const row: FormattedCampaignDataRow = {};
-      const recentCampaignData = dashboardApiData?.recentCampaigns?.find((rc: any) => rc.id === campaign.id);
+      const recentCampaignData = recentCampaignsFromDashboard.find((rc: any) => rc.id === campaign.id);
 
       for (const fieldId of selectedFieldIds as (keyof FormattedCampaignDataRow)[]) {
         switch (fieldId) {
           case 'campaignId': row[fieldId] = campaign.id; break;
           case 'campaignName': row[fieldId] = campaign.name; break;
           case 'status': row[fieldId] = campaign.status; break;
-          case 'startDate': row[fieldId] = campaign.startDate ? format(parseISO(String(campaign.startDate)), 'dd/MM/yyyy') : 'N/A'; break;
-          case 'endDate': row[fieldId] = campaign.endDate ? format(parseISO(String(campaign.endDate)), 'dd/MM/yyyy') : 'N/A'; break;
+          case 'startDate': row[fieldId] = campaign.startDate && isValid(parseISO(String(campaign.startDate))) ? format(parseISO(String(campaign.startDate)), 'dd/MM/yyyy', { locale: ptBR }) : 'N/A'; break;
+          case 'endDate': row[fieldId] = campaign.endDate && isValid(parseISO(String(campaign.endDate))) ? format(parseISO(String(campaign.endDate)), 'dd/MM/yyyy', { locale: ptBR }) : 'N/A'; break;
           case 'platforms': row[fieldId] = campaign.platforms?.join(', '); break;
           case 'targetAudience': row[fieldId] = campaign.targetAudience; break;
           case 'industry': row[fieldId] = campaign.industry; break;
           case 'budget': row[fieldId] = formatCurrency(campaign.budget); break;
-          case 'spentAmount': row[fieldId] = formatCurrency(recentCampaignData?.spent ?? (selectedCampaignObjects.length === 1 ? dashboardMetrics?.totalCostPeriod : 'N/A')); break; // Usa spent de recentCampaigns se disponível
+          case 'spentAmount': row[fieldId] = formatCurrency(recentCampaignData?.spent ?? (selectedCampaignObjects.length === 1 ? dashboardMetrics?.totalCostPeriod : 'N/A (Agregado)')); break;
           
-          // Métricas agregadas (usadas se for relatório geral ou se não houver dados por campanha)
-          case 'impressions': row[fieldId] = selectedCampaignObjects.length === 1 && recentCampaignData ? 'N/A (Use Agregado)' : formatNumber(dashboardMetrics?.impressions) ; break;
-          case 'clicks': row[fieldId] = selectedCampaignObjects.length === 1 && recentCampaignData ? 'N/A (Use Agregado)' : formatNumber(dashboardMetrics?.clicks); break;
-          case 'ctr': row[fieldId] = selectedCampaignObjects.length === 1 && recentCampaignData ? 'N/A (Use Agregado)' : `${dashboardMetrics?.ctr?.toFixed(2) || '0.00'}%`; break;
-          case 'conversions': row[fieldId] = selectedCampaignObjects.length === 1 && recentCampaignData ? 'N/A (Use Agregado)' : formatNumber(dashboardMetrics?.conversions); break;
-          case 'cost': row[fieldId] = selectedCampaignObjects.length === 1 && recentCampaignData ? 'N/A (Use Agregado)' : formatCurrency(dashboardMetrics?.totalCostPeriod); break; // Custo total do período
-          case 'revenue': row[fieldId] = 'N/A (Dado Indisponível)'; break; // Não temos revenue granular
-          case 'roi': row[fieldId] = selectedCampaignObjects.length === 1 && recentCampaignData ? 'N/A (Use Agregado)' : `${dashboardMetrics?.avgROI?.toFixed(1) || '0.0'}x`; break;
-          case 'cpa': row[fieldId] = 'N/A (Dado Indisponível)'; break;
-          case 'leads': row[fieldId] = 'N/A (Dado Indisponível)'; break;
-          default: row[fieldId] = 'N/A';
+          case 'impressions': row[fieldId] = formatNumber(dashboardMetrics?.impressions); break;
+          case 'clicks': row[fieldId] = formatNumber(dashboardMetrics?.clicks); break;
+          case 'ctr': row[fieldId] = `${dashboardMetrics?.ctr?.toFixed(2) ?? '0.00'}%`; break;
+          case 'conversions': row[fieldId] = formatNumber(dashboardMetrics?.conversions); break;
+          case 'cost': row[fieldId] = formatCurrency(dashboardMetrics?.totalCostPeriod); break;
+          case 'revenue': row[fieldId] = 'N/A'; break; 
+          case 'roi': row[fieldId] = `${dashboardMetrics?.avgROI?.toFixed(1) ?? '0.0'}x`; break;
+          case 'cpa': row[fieldId] = 'N/A'; break;
+          case 'leads': row[fieldId] = 'N/A'; break;
+          default: row[fieldId] = campaign[fieldId as keyof CampaignType] !== undefined && campaign[fieldId as keyof CampaignType] !== null ? String(campaign[fieldId as keyof CampaignType]) : 'N/A';
         }
       }
       dataToExport.push(row);
     }
     
-    // Adicionar linha de totais/agregados se múltiplos campos de métricas selecionados
-    if (dataToExport.length > 1 && selectedFields.some(sf => ['impressions', 'clicks', 'conversions', 'cost', 'spentAmount'].includes(sf))) {
-        const totalsRow: FormattedCampaignDataRow = { campaignName: "TOTAIS (Agregado do Período)" };
-        if (selectedFields.includes('impressions')) totalsRow.impressions = formatNumber(dashboardMetrics?.impressions);
-        if (selectedFields.includes('clicks')) totalsRow.clicks = formatNumber(dashboardMetrics?.clicks);
-        if (selectedFields.includes('conversions')) totalsRow.conversions = formatNumber(dashboardMetrics?.conversions);
-        if (selectedFields.includes('cost')) totalsRow.cost = formatCurrency(dashboardMetrics?.totalCostPeriod);
-        if (selectedFields.includes('spentAmount')) totalsRow.spentAmount = formatCurrency(dashboardMetrics?.totalSpent); // Gasto total geral
+    if (selectedCampaignObjects.length > 1 && selectedFieldIds.some(sf => ['impressions', 'clicks', 'conversions', 'cost', 'spentAmount'].includes(sf))) {
+        const totalsRow: FormattedCampaignDataRow = { campaignName: "TOTAIS (Agregado do Período Selecionado)" };
+        if (selectedFieldIds.includes('impressions')) totalsRow.impressions = formatNumber(dashboardMetrics?.impressions);
+        if (selectedFieldIds.includes('clicks')) totalsRow.clicks = formatNumber(dashboardMetrics?.clicks);
+        if (selectedFieldIds.includes('conversions')) totalsRow.conversions = formatNumber(dashboardMetrics?.conversions);
+        if (selectedFieldIds.includes('cost')) totalsRow.cost = formatCurrency(dashboardMetrics?.totalCostPeriod); // Custo total do período para ads
+        if (selectedFieldIds.includes('spentAmount')) totalsRow.spentAmount = formatCurrency(dashboardMetrics?.totalSpent); // Gasto total geral das campanhas
         dataToExport.push(totalsRow);
     }
 
+    const finalSelectedFieldObjects = availableFields.filter(f => selectedFieldIds.includes(f.id));
 
     if (exportFormat === 'csv') {
-      const selectedFieldObjects = availableFields.filter(f => selectedFieldIds.includes(f.id));
-      const csvData = convertToCSV(dataToExport, selectedFieldObjects);
-      downloadCSV(csvData, `relatorio_mktv2_${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`);
-      toast({ title: "Exportação CSV Concluída", description: "Seu relatório foi gerado e baixado." });
+      const csvData = convertToCSV(dataToExport, finalSelectedFieldObjects);
+      if(csvData) {
+        downloadCSV(csvData, `relatorio_mktv2_${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`);
+        toast({ title: "Exportação CSV Concluída", description: "Seu relatório foi gerado e baixado." });
+      } else {
+        toast({ title: "Exportação Falhou", description: "Não foi possível gerar os dados para o CSV.", variant: "destructive" });
+      }
     } else {
-      toast({ title: "Formato Indisponível", description: `A exportação para ${exportFormat.toUpperCase()} ainda não está implementada. Gerando CSV como alternativa.`, variant: "default" });
-      // Fallback para CSV se outro formato for selecionado
-      const selectedFieldObjects = availableFields.filter(f => selectedFieldIds.includes(f.id));
-      const csvData = convertToCSV(dataToExport, selectedFieldObjects);
-      downloadCSV(csvData, `relatorio_mktv2_${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`);
+      toast({ title: "Formato Indisponível", description: `A exportação para ${exportFormat.toUpperCase()} ainda não está implementada. Gerando CSV.`, variant: "default" });
+      const csvData = convertToCSV(dataToExport, finalSelectedFieldObjects);
+      if(csvData) {
+        downloadCSV(csvData, `relatorio_mktv2_${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`);
+      } else {
+        toast({ title: "Exportação Falhou", description: "Não foi possível gerar os dados para o CSV.", variant: "destructive" });
+      }
     }
-
     setIsExporting(false);
   };
 
@@ -306,8 +321,7 @@ export default function ExportPage() {
     return acc;
   }, {} as Record<string, AvailableField[]>);
 
-
-  if (isLoadingCampaigns || isLoadingDashboardData) {
+  if (isLoadingCampaigns || isLoadingDashboardData && !dashboardApiData) { // Mostrar loading se ambos ou o principal estiver carregando
     return <div className="p-8 text-center"><Loader2 className="h-12 w-12 animate-spin text-primary mx-auto" /> Carregando dados para exportação...</div>;
   }
 
@@ -326,7 +340,7 @@ export default function ExportPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Exportar Relatórios</h1>
           <p className="text-muted-foreground">
-            Gere relatórios personalizados das suas campanhas (CSV)
+            Gere relatórios CSV personalizados das suas campanhas.
           </p>
         </div>
         <Button 
@@ -335,7 +349,7 @@ export default function ExportPage() {
           className="neu-button"
         >
           {isExporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
-          {isExporting ? "Exportando..." : "Exportar Relatório"}
+          {isExporting ? "Exportando..." : "Gerar CSV"}
         </Button>
       </div>
 
@@ -345,7 +359,7 @@ export default function ExportPage() {
             <CardHeader>
               <CardTitle>1. Escolher Template (Opcional)</CardTitle>
               <CardDescription>
-                Selecione um template ou personalize os campos abaixo. Formato será CSV.
+                Templates pré-definem os campos. A exportação será em CSV.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -405,7 +419,7 @@ export default function ExportPage() {
                       {campaign.name}
                     </label>
                   </div>
-                )) : <p className="text-sm text-muted-foreground">Nenhuma campanha disponível.</p>}
+                )) : <p className="text-sm text-muted-foreground">Nenhuma campanha encontrada.</p>}
               </div>
             </CardContent>
           </Card>
@@ -449,11 +463,11 @@ export default function ExportPage() {
               <CardDescription>Métricas para o relatório CSV.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 max-h-[30rem] overflow-y-auto custom-scrollbar">
-              {Object.entries(groupedFields).map(([category, fields]) => (
+              {Object.entries(groupedFields).map(([category, fieldsInCategory]) => (
                 <div key={category}>
                   <h4 className="text-sm font-semibold mb-2 text-primary">{category}</h4>
                   <div className="space-y-2">
-                    {fields.map((field) => (
+                    {fieldsInCategory.map((field) => (
                       <div key={field.id} className="flex items-center space-x-2">
                         <Checkbox
                           id={`field-export-${field.id}`}
