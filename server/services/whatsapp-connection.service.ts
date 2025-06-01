@@ -1,254 +1,255 @@
-// server/services/whatsapp-connection.service.ts
 import makeWASocket, {
-    DisconnectReason,
-    fetchLatestBaileysVersion,
-    makeCacheableSignalKeyStore,
-    useMultiFileAuthState,
-    type WAConnectionState,
-    type ConnectionState,
-    type BaileysEventEmitter,
-    type WAMessageKey,
-    Browsers
+  DisconnectReason,
+  fetchLatestBaileysVersion,
+  makeCacheableSignalKeyStore,
+  useMultiFileAuthState,
+  Browsers,
+  WAMessage,
+  WASocket,
 } from '@whiskeysockets/baileys';
 import pino from 'pino';
-import path from 'path';
-import fs from 'fs-extra';
+import fs from 'node:fs';
+import path from 'node:path';
 import { Boom } from '@hapi/boom';
-// Caminho corrigido para shared/schema (subindo dois níveis: services -> server -> shared)
-import { users, whatsappConnections as whatsappConnectionsTable, type InsertWhatsappConnection, type WhatsappConnection } from '../../shared/schema';
-// Caminho corrigido para storage (subindo um nível: services -> server)
-import { storage } from '../storage';
-// Caminho corrigido para db (subindo um nível: services -> server)
-import { db as drizzleDB } from '../db';
-import { eq } from 'drizzle-orm';
 
-const SESSIONS_DIR = path.resolve(process.cwd(), 'whatsapp_sessions');
-fs.ensureDirSync(SESSIONS_DIR);
+// Define um diretório para armazenar arquivos de sessão, dentro de server/
+const SESSIONS_DIR = path.join(process.cwd(), 'server', 'sessions');
 
-interface WhatsappClient {
-    socket: ReturnType<typeof makeWASocket> | null;
-    eventEmitter: BaileysEventEmitter | null;
-    userId: number;
-    status: WAConnectionState;
-    qrCode?: string;
-    logger: pino.Logger;
+// Garante que o diretório base de sessões exista
+if (!fs.existsSync(SESSIONS_DIR)) {
+  fs.mkdirSync(SESSIONS_DIR, { recursive: true });
 }
 
-const clients = new Map<number, WhatsappClient>();
-const mainLogger = pino({ level: process.env.LOG_LEVEL || 'info' });
+// Configuração do Logger
+// Em produção, considere um nível mais alto como 'warn' ou 'error'
+// Para Baileys, 'debug' é muito verboso mas útil para desenvolvimento.
+const PINO_LOGGER_LEVEL = process.env.WHATSAPP_LOG_LEVEL || 'silent';
+const logger = pino({ level: PINO_LOGGER_LEVEL }).child({ class: 'WhatsappConnectionService' });
 
-async function getAuthState(userId: number): Promise<{ state: any; saveCreds: () => Promise<void> }> {
-    const sessionDir = path.join(SESSIONS_DIR, `user_${userId}`);
-    await fs.ensureDir(sessionDir);
-    return useMultiFileAuthState(sessionDir);
+export interface WhatsappConnectionStatus {
+  status: 'disconnected' | 'connecting' | 'connected' | 'qr_code_needed' | 'auth_failure' | 'error' | 'disconnected_logged_out';
+  qrCode: string | null;
+  connectedPhoneNumber?: string;
+  lastError?: string;
+  userId: number;
 }
 
-async function createWhatsappClient(userId: number): Promise<WhatsappClient> {
-    const clientLogger = mainLogger.child({ module: 'baileys', userId });
-    const { state, saveCreds } = await getAuthState(userId);
-    const { version, isLatest } = await fetchLatestBaileysVersion();
-    clientLogger.info(`Usando Baileys v${version.join('.')}, é a mais recente: ${isLatest}`);
+// Armazenamento em memória para conexões ativas e seus status
+// A chave é o userId
+const activeConnections = new Map<number, { sock: WASocket | null; statusDetails: WhatsappConnectionStatus }>();
 
-    const socket = makeWASocket({
-        version,
-        auth: {
-            creds: state.creds,
-            keys: makeCacheableSignalKeyStore(state.keys, clientLogger),
-        },
-        logger: clientLogger,
-        printQRInTerminal: false,
-        browser: Browsers.macOS('Desktop'),
-        syncFullHistory: true,
-        msgRetryCounterMap: {},
-        shouldIgnoreJid: () => false,
-    });
+export class WhatsappConnectionService {
+  private userId: number;
+  private userSessionDir: string;
+  private currentStatusDetails: WhatsappConnectionStatus;
+  private sock: WASocket | null = null;
 
-    const client: WhatsappClient = {
-        socket,
-        eventEmitter: socket.ev,
-        userId,
-        status: 'close',
-        logger: clientLogger,
+  constructor(userId: number) {
+    this.userId = userId;
+    this.userSessionDir = path.join(SESSIONS_DIR, `user_${this.userId}`);
+    if (!fs.existsSync(this.userSessionDir)) {
+      fs.mkdirSync(this.userSessionDir, { recursive: true });
+    }
+
+    this.currentStatusDetails = {
+      userId: this.userId,
+      status: 'disconnected',
+      qrCode: null,
     };
-    clients.set(userId, client);
+    // Atualiza o mapa global com a instância inicial ou recupera uma existente
+    // (simplificado aqui, uma gestão mais robusta de instâncias pode ser necessária)
+    activeConnections.set(this.userId, { sock: null, statusDetails: this.currentStatusDetails });
+  }
 
-    socket.ev.on('connection.update', async (update: Partial<ConnectionState>) => {
+  private updateGlobalStatus(partialUpdate: Partial<WhatsappConnectionStatus>) {
+    const existingEntry = activeConnections.get(this.userId) || { sock: this.sock, statusDetails: {} as WhatsappConnectionStatus };
+    this.currentStatusDetails = {
+        ...existingEntry.statusDetails,
+        ...partialUpdate,
+        userId: this.userId // garantir que userId esteja sempre presente
+    };
+    activeConnections.set(this.userId, { sock: this.sock, statusDetails: this.currentStatusDetails });
+    logger.info({ userId: this.userId, newStatus: this.currentStatusDetails.status }, 'Global connection status updated');
+  }
+
+
+  public async connectToWhatsApp(): Promise<WhatsappConnectionStatus> {
+    logger.info({ userId: this.userId }, 'Tentando conectar ao WhatsApp...');
+    this.updateGlobalStatus({ status: 'connecting', qrCode: null });
+
+    // Limpa arquivos de sessão antigos se for reconectar forçadamente ou após falha de autenticação
+    // this.cleanSessionFilesIfNeeded(); // Adicionar lógica se necessário
+
+    const { state, saveCreds } = await useMultiFileAuthState(
+      path.join(this.userSessionDir, 'auth_info_baileys')
+    );
+    const { version, isLatest } = await fetchLatestBaileysVersion();
+    logger.info( { userId: this.userId, version: version.join('.'), isLatest }, `Usando WA v${version.join('.')}, é a mais recente: ${isLatest}`);
+
+    this.sock = makeWASocket({
+      version,
+      logger: logger.child({ subtype: 'baileys', userId: this.userId }), // Logger específico para a instância Baileys
+      printQRInTerminal: false, // O QR será tratado manualmente para exposição via API
+      auth: {
+        creds: state.creds,
+        keys: makeCacheableSignalKeyStore(state.keys, logger.child({ subtype: 'baileys-keys', userId: this.userId })),
+      },
+      generateHighQualityLinkPreview: true,
+      browser: Browsers.ubuntu('Desktop'), // Simula um navegador para melhor compatibilidade
+      shouldIgnoreJid: (jid) => jid?.endsWith('@broadcast') || jid?.endsWith('@newsletter'),
+      // Outras opções podem ser adicionadas conforme necessário
+    });
+    
+    // Atualiza o socket no mapa global
+    const currentEntry = activeConnections.get(this.userId);
+    if (currentEntry) {
+        activeConnections.set(this.userId, { ...currentEntry, sock: this.sock });
+    } else {
+        activeConnections.set(this.userId, { sock: this.sock, statusDetails: this.currentStatusDetails });
+    }
+
+
+    this.sock.ev.process(async (events) => {
+      if (events['connection.update']) {
+        const update = events['connection.update'];
         const { connection, lastDisconnect, qr } = update;
-        client.status = connection || client.status;
-        client.qrCode = qr; // Sempre atualiza o QR code no cliente em memória
+        logger.info({ userId: this.userId, connection, qr: !!qr, lastDisconnectError: lastDisconnect?.error }, 'Evento connection.update');
 
-        let connectionStatusForDb: WhatsappConnection['connectionStatus'] = 'disconnected';
-        let lastErrorForDb: string | null = null;
+        if (qr) {
+          this.updateGlobalStatus({ status: 'qr_code_needed', qrCode: qr });
+          console.log(`[User ${this.userId}] QR Code disponível no terminal (primeiros 30 chars): ${qr.substring(0, 30)}...`);
+          // Para fins de debug, o QR completo pode ser logado:
+          // logger.debug({ userId: this.userId, qrCode: qr }, 'QR Code completo recebido.');
+        }
 
         if (connection === 'close') {
-            const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
-            connectionStatusForDb = 'disconnected';
-            lastErrorForDb = lastDisconnect?.error?.message || `Desconectado. Código: ${statusCode}`;
-            client.logger.warn(`Conexão fechada. Razão: ${DisconnectReason[statusCode as number] || 'Desconhecido'}. Reconectando: ${statusCode !== DisconnectReason.loggedOut}`);
-            
-            if (statusCode === DisconnectReason.loggedOut) {
-                client.logger.info('Usuário deslogado, limpando sessão.');
-                await clearSession(userId);
-                clients.delete(userId);
-                // No DB, já está como 'disconnected', mas podemos limpar o QR e telefone
-                await storage.updateWhatsappConnection(userId, {
-                    connectionStatus: 'disconnected',
-                    qrCodeData: null,
-                    connectedPhoneNumber: null,
-                    lastError: 'Usuário deslogado do WhatsApp.',
-                    sessionPath: null, // Limpa o caminho da sessão
-                });
-                return; // Interrompe aqui para logout
-            }
-            // Para outras razões de 'close', tentará reconectar ou já está no processo
+          const boomError = lastDisconnect?.error as Boom | undefined;
+          const statusCode = boomError?.output?.statusCode;
+          
+          logger.warn({ userId: this.userId, statusCode, error: boomError?.message }, 'Conexão fechada.');
+
+          if (statusCode === DisconnectReason.loggedOut) {
+            logger.info({ userId: this.userId }, 'Deslogado pelo WhatsApp. Limpando arquivos de sessão.');
+            this.cleanSessionFiles();
+            this.updateGlobalStatus({ status: 'disconnected_logged_out', qrCode: null, connectedPhoneNumber: undefined });
+          } else if (statusCode === DisconnectReason.connectionLost) {
+             logger.warn({ userId: this.userId }, 'Conexão perdida com o servidor. Tentando reconectar em breve...');
+             this.updateGlobalStatus({ status: 'connecting', qrCode: null }); // Status para indicar tentativa de reconexão
+             // O Baileys geralmente tenta reconectar automaticamente; podemos adicionar lógica extra se necessário
+          } else if (statusCode === DisconnectReason.restartRequired) {
+            logger.warn({ userId: this.userId }, 'Reinício necessário. Tentando reconectar...');
+            this.updateGlobalStatus({ status: 'connecting', qrCode: null });
+            // Não é necessário chamar connectToWhatsApp() explicitamente aqui, Baileys pode tentar.
+            // Se persistir, uma intervenção manual/lógica mais robusta pode ser necessária.
+          } else if (statusCode === DisconnectReason.timedOut) {
+            logger.warn({ userId: this.userId }, 'Timeout na conexão. Verifique a rede.');
+            this.updateGlobalStatus({ status: 'error', lastError: 'Timeout na conexão', qrCode: null });
+          } else if (statusCode === DisconnectReason.multideviceMismatch) {
+            logger.error({ userId: this.userId }, 'Mismatch de múltiplos dispositivos. Deslogue e tente novamente.');
+            this.cleanSessionFiles();
+            this.updateGlobalStatus({ status: 'auth_failure', lastError: 'Mismatch de múltiplos dispositivos', qrCode: null });
+          }
+          else {
+            logger.error({ userId: this.userId, error: lastDisconnect?.error }, 'Conexão fechada devido a um erro desconhecido ou não tratado.');
+            this.updateGlobalStatus({ status: 'error', lastError: boomError?.message || 'Erro desconhecido', qrCode: null });
+          }
+          this.sock = null; // Limpa o socket interno da instância
+          const entry = activeConnections.get(this.userId);
+          if(entry) activeConnections.set(this.userId, {...entry, sock: null});
         } else if (connection === 'open') {
-            connectionStatusForDb = 'connected';
-            client.logger.info('Conexão aberta com sucesso!');
-        } else if (qr) {
-            connectionStatusForDb = 'qr_code_needed';
-            client.logger.info('QR Code recebido, aguardando scan.');
-        } else if (connection === 'connecting') {
-            connectionStatusForDb = 'connecting';
-            client.logger.info('Conectando ao WhatsApp...');
+          const connectedPhoneNumber = this.sock?.user?.id?.split(':')[0];
+          this.updateGlobalStatus({ status: 'connected', qrCode: null, connectedPhoneNumber });
+          logger.info({ userId: this.userId, jid: this.sock?.user?.id, phone: connectedPhoneNumber }, 'Conexão aberta com sucesso.');
         }
-        
-        // Atualiza o banco de dados
-        await storage.updateWhatsappConnection(userId, {
-            connectionStatus: connectionStatusForDb,
-            qrCodeData: qr || null, // Salva novo QR ou limpa o antigo se conexão abrir/fechar
-            connectedPhoneNumber: connection === 'open' ? socket.authState.creds.me?.id.split(':')[0] : null,
-            lastConnectedAt: connection === 'open' ? new Date() : undefined, // undefined não atualiza
-            lastError: lastErrorForDb,
-            sessionPath: path.join(SESSIONS_DIR, `user_${userId}`), // Atualiza o caminho da sessão
-        });
+      }
+
+      if (events['creds.update']) {
+        await saveCreds();
+        logger.info({ userId: this.userId }, 'Credenciais atualizadas e salvas.');
+      }
+
+      // Placeholder para Task 3.1.6: Recebimento de Mensagens
+      if (events['messages.upsert']) {
+        const { messages, type } = events['messages.upsert'];
+        if (type === 'notify') { // Process only new messages
+          logger.info({ userId: this.userId, count: messages.length }, 'Novas mensagens recebidas.');
+          messages.forEach(msg => {
+            // Aqui as mensagens seriam encaminhadas para o WhatsappWebhookHandler/WhatsappFlowEngine
+            // Ex: this.handleIncomingMessage(msg);
+             logger.debug({ userId: this.userId, msg }, 'Detalhes da mensagem recebida');
+          });
+        }
+      }
     });
-
-    socket.ev.on('creds.update', saveCreds);
-
-    socket.ev.on('messages.upsert', async (m) => {
-        client.logger.info({ msg: "Nova mensagem recebida", data: m }, `Mensagem recebida: ${m.messages[0]?.key?.remoteJid}`);
-        // TODO: Implementar lógica de encaminhamento para WhatsappWebhookHandler -> WhatsappFlowEngine
-    });
-
-    return client;
-}
-
-async function clearSession(userId: number) {
-    const sessionDir = path.join(SESSIONS_DIR, `user_${userId}`);
-    try {
-        await fs.remove(sessionDir);
-        mainLogger.info(`Sessão para userId ${userId} limpa do sistema de arquivos.`);
-    } catch (error) {
-        mainLogger.error({ err: error }, `Erro ao limpar sessão para userId ${userId}.`);
-    }
-}
-
-export const WhatsappConnectionService = {
-    getClient: (userId: number): WhatsappClient | undefined => clients.get(userId),
-
-    connect: async (userId: number): Promise<WhatsappClient> => {
-        let client = clients.get(userId);
-        if (client?.socket && (client.status === 'open' || client.status === 'connecting')) {
-            client.logger.info('Cliente já existe e está conectado ou conectando.');
-            return client;
-        }
-        client?.logger.info('Criando novo cliente WhatsApp ou reconectando...');
-        
-        let connRecord = await storage.getWhatsappConnection(userId);
-        const sessionDir = path.join(SESSIONS_DIR, `user_${userId}`);
-
-        if (!connRecord) {
-            connRecord = await storage.createWhatsappConnection({ userId, connectionStatus: 'connecting', sessionPath: sessionDir });
-        } else {
-             await storage.updateWhatsappConnection(userId, { 
-                connectionStatus: 'connecting', 
-                qrCodeData: null, // Limpa QR antigo ao tentar nova conexão
-                sessionPath: sessionDir 
-            });
-        }
-        return createWhatsappClient(userId);
-    },
-
-    disconnect: async (userId: number): Promise<void> => {
-        const client = clients.get(userId);
-        mainLogger.info({ userId }, `Solicitação de desconexão para userId ${userId}`);
-        if (client?.socket) {
-            client.logger.info('Desconectando cliente WhatsApp...');
-            await client.socket.logout(); // Isso deve disparar o 'connection.update' com 'close' e loggedOut
-        }
-        // A lógica em 'connection.update' com DisconnectReason.loggedOut já deve limpar a sessão e o DB.
-        // Adicionamos uma limpeza extra aqui para garantir.
-        await clearSession(userId);
-        await storage.updateWhatsappConnection(userId, {
-            connectionStatus: 'disconnected',
-            qrCodeData: null,
-            connectedPhoneNumber: null,
-            sessionPath: null,
-            lastError: 'Desconectado pelo usuário.',
-        });
-        clients.delete(userId);
-        mainLogger.info(`Cliente para userId ${userId} finalizou desconexão e sessão limpa.`);
-    },
-
-    getConnectionStatus: async (userId: number): Promise<Partial<WhatsappConnection>> => {
-        const client = clients.get(userId);
-        const dbStatus = await storage.getWhatsappConnection(userId);
-
-        if (client?.socket) { // Se existe uma instância Baileys ativa
-            return {
-                userId,
-                connectionStatus: client.status, // Pega o status mais recente do socket
-                qrCodeData: client.qrCode, // Pega o QR mais recente do socket
-                connectedPhoneNumber: client.socket.authState.creds.me?.id.split(':')[0]?.split('@')[0] || dbStatus?.connectedPhoneNumber,
-                sessionPath: dbStatus?.sessionPath, // O caminho é mais estático
-            };
-        }
-        // Se não há cliente ativo, retorna o que está no banco
-        return dbStatus || { userId, connectionStatus: 'disconnected' };
-    },
-
-    sendMessage: async (userId: number, jid: string, messageContent: any): Promise<any> => {
-        const client = clients.get(userId);
-        if (!client?.socket || client.status !== 'open') {
-            client?.logger.error({ jid }, 'Tentativa de enviar mensagem sem conexão ativa.');
-            throw new Error('WhatsApp não conectado.');
-        }
-        try {
-            client.logger.info({ jid, msgContentKeys: Object.keys(messageContent) }, `Enviando mensagem para ${jid}`);
-            const sentMsg = await client.socket.sendMessage(jid, messageContent);
-            client.logger.info({ msgId: sentMsg?.key?.id, jid }, `Mensagem enviada com ID: ${sentMsg?.key?.id}`);
-            return sentMsg;
-        } catch (error) {
-            client.logger.error({ err: error, jid }, `Erro ao enviar mensagem para ${jid}.`);
-            throw error;
-        }
-    },
     
-    initializeExistingConnections: async () => {
-        mainLogger.info('Inicializando conexões WhatsApp existentes que estavam conectadas...');
-        const connectionsToRestore = await drizzleDB.select()
-            .from(whatsappConnectionsTable)
-            .where(eq(whatsappConnectionsTable.connectionStatus, 'connected')); // Ou outros status que indicam sessão válida
+    return this.currentStatusDetails;
+  }
 
-        for (const conn of connectionsToRestore) {
-            mainLogger.info({ userId: conn.userId }, `Tentando restaurar conexão para usuário ${conn.userId}`);
-            try {
-                // Verifica se já existe uma sessão de arquivos válida antes de tentar conectar
-                const sessionDir = path.join(SESSIONS_DIR, `user_${conn.userId}`);
-                if (await fs.pathExists(path.join(sessionDir, 'creds.json'))) {
-                    await WhatsappConnectionService.connect(conn.userId);
-                } else {
-                    mainLogger.warn({ userId: conn.userId }, `Arquivos de sessão não encontrados em ${sessionDir}. Conexão não será restaurada automaticamente.`);
-                    await storage.updateWhatsappConnection(conn.userId, { connectionStatus: 'disconnected', qrCodeData: null, lastError: 'Sessão anterior inválida ou não encontrada.' });
-                }
-            } catch (error) {
-                mainLogger.error({ err: error, userId: conn.userId }, `Falha ao restaurar conexão para usuário ${conn.userId}.`);
-                await storage.updateWhatsappConnection(conn.userId, { connectionStatus: 'error', lastError: (error as Error).message });
-            }
-        }
+  public static getStatus(userId: number): WhatsappConnectionStatus | undefined {
+    const connection = activeConnections.get(userId);
+    return connection?.statusDetails;
+  }
+  
+  public static getSocket(userId: number): WASocket | null | undefined {
+    return activeConnections.get(userId)?.sock;
+  }
+
+  private cleanSessionFiles() {
+    logger.warn({ userId: this.userId, sessionDir: this.userSessionDir }, 'Limpando arquivos de sessão.');
+    if (fs.existsSync(this.userSessionDir)) {
+      try {
+        fs.rmSync(this.userSessionDir, { recursive: true, force: true });
+        logger.info({ userId: this.userId }, 'Arquivos de sessão removidos com sucesso.');
+        // Recria o diretório para sessões futuras
+        fs.mkdirSync(this.userSessionDir, { recursive: true });
+      } catch (error) {
+        logger.error({ userId: this.userId, error }, 'Erro ao limpar arquivos de sessão.');
+      }
     }
-};
+  }
 
-// Inicializar conexões existentes ao iniciar o servidor (opcional, mas bom para persistência)
-// Adie a chamada para após a exportação completa do objeto.
-// setTimeout(() => WhatsappConnectionService.initializeExistingConnections(), 5000); // Pequeno delay para garantir que tudo esteja pronto
+  public async disconnectWhatsApp(): Promise<void> {
+    const connection = activeConnections.get(this.userId);
+    if (connection?.sock) {
+      logger.info({ userId: this.userId }, 'Desconectando a sessão WhatsApp...');
+      try {
+        await connection.sock.logout(); // Deve acionar 'connection.close' com DisconnectReason.loggedOut
+        logger.info({ userId: this.userId }, 'Comando de logout enviado.');
+      } catch (error) {
+        logger.error({ userId: this.userId, error }, 'Erro ao tentar deslogar.');
+      }
+      // A limpeza da sessão e atualização de status deve ser tratada pelo evento 'connection.update'
+    } else {
+      logger.warn({ userId: this.userId }, 'Nenhuma conexão ativa para desconectar. Limpando arquivos de sessão por precaução.');
+      this.cleanSessionFiles(); // Garante a limpeza se o socket já estiver nulo
+      this.updateGlobalStatus({ status: 'disconnected', qrCode: null, connectedPhoneNumber: undefined });
+    }
+  }
+
+  // Placeholder para Task 3.1.5: Envio de Mensagens
+  public async sendMessage(jid: string, messagePayload: any): Promise<WAMessage | undefined> {
+    const connection = activeConnections.get(this.userId);
+    if (connection?.sock && connection.statusDetails.status === 'connected') {
+      logger.info({ userId: this.userId, jid, payloadKeys: Object.keys(messagePayload) }, 'Enviando mensagem...');
+      try {
+        const sentMsg = await connection.sock.sendMessage(jid, messagePayload);
+        logger.info({ userId: this.userId, msgId: sentMsg?.key.id }, 'Mensagem enviada com sucesso.');
+        return sentMsg;
+      } catch (error) {
+        logger.error({ userId: this.userId, error }, 'Falha ao enviar mensagem.');
+        throw error;
+      }
+    } else {
+      const errorMsg = 'Não é possível enviar mensagem, WhatsApp não conectado ou socket indisponível.';
+      logger.warn({ userId: this.userId, status: connection?.statusDetails.status }, errorMsg);
+      throw new Error(errorMsg);
+    }
+  }
+}
+
+// Para usar este serviço:
+// 1. Crie uma instância: const whatsappService = new WhatsappConnectionService(userId);
+// 2. Conecte: await whatsappService.connectToWhatsApp();
+// 3. Obtenha status: WhatsappConnectionService.getStatus(userId);
+// 4. Envie mensagens: await whatsappService.sendMessage(jid, payload);
+// 5. Desconecte: await whatsappService.disconnectWhatsApp();
