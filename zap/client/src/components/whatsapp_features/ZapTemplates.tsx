@@ -1,4 +1,3 @@
-// zap/client/src/components/whatsapp_features/ZapTemplates.tsx
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -145,7 +144,7 @@ export default function ZapTemplates() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['zapTemplates'] });
       toast({ title: "Template enviado para aprovação!", variant: "default" });
-      setIsModalOpen(false); // Isso irá acionar handleModalOpenChange para resetar
+      setIsModalOpen(false);
     },
     onError: (err: Error) => {
       toast({ title: "Erro ao criar template", description: err.message, variant: "destructive" });
@@ -201,7 +200,7 @@ export default function ZapTemplates() {
   const handleButtonChange = (compIndex: number, btnIndex: number, field: keyof TemplateButton, value: string) => {
     setNewTemplateData(prev => {
       const components = JSON.parse(JSON.stringify(prev.components || [])); 
-      if (components[compIndex] && components[compIndex].buttons) {
+      if (components[compIndex]?.buttons) {
         (components[compIndex].buttons[btnIndex] as any)[field] = value;
       }
       return { ...prev, components };
@@ -211,7 +210,7 @@ export default function ZapTemplates() {
   const addTemplateButton = (compIndex: number) => {
     setNewTemplateData(prev => {
       const components = JSON.parse(JSON.stringify(prev.components || []));
-      if (components[compIndex] && components[compIndex].buttons) {
+      if (components[compIndex]?.buttons) {
         components[compIndex].buttons.push({ type: 'QUICK_REPLY', text: 'Nova Resposta' });
       } else if (components[compIndex]) {
         components[compIndex].buttons = [{ type: 'QUICK_REPLY', text: 'Nova Resposta' }];
@@ -223,7 +222,7 @@ export default function ZapTemplates() {
   const removeTemplateButton = (compIndex: number, btnIndex: number) => {
     setNewTemplateData(prev => {
       const components = JSON.parse(JSON.stringify(prev.components || []));
-      if (components[compIndex] && components[compIndex].buttons) {
+      if (components[compIndex]?.buttons) {
         components[compIndex].buttons.splice(btnIndex, 1);
       }
       return { ...prev, components };
@@ -268,7 +267,6 @@ export default function ZapTemplates() {
       setEditingTemplate(null); 
       setNewTemplateData(defaultNewTemplateDataState); 
     }
-    // Se estiver abrindo, o useEffect cuidará de popular/resetar newTemplateData
   };
 
   useEffect(() => {
@@ -279,12 +277,9 @@ export default function ZapTemplates() {
         setNewTemplateData(defaultNewTemplateDataState); 
       }
     } else {
-        // Se o modal foi fechado, ensure newTemplateData é resetado para o estado padrão
-        // Isso pode ser redundante se handleModalOpenChange já faz isso, mas garante.
         setNewTemplateData(defaultNewTemplateDataState);
     }
   }, [editingTemplate, isModalOpen]);
-
 
   if (isLoading) return <div className="p-4 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto" /> Carregando templates...</div>;
   if (error) return <div className="p-4 text-center text-red-500"><AlertTriangle className="w-6 h-6 mx-auto mb-2"/>Erro ao carregar templates: {(error as Error).message}</div>;
@@ -299,7 +294,6 @@ export default function ZapTemplates() {
         <Button 
           onClick={() => { 
             setEditingTemplate(null); 
-            // setNewTemplateData(defaultNewTemplateDataState); // Movido para useEffect/handleModalOpenChange
             setIsModalOpen(true); 
           }} 
           className="neu-button"
@@ -379,7 +373,6 @@ export default function ZapTemplates() {
         </CardContent>
       </Card>
 
-      {/* Esta é a linha que está causando erro (agora ~511, era 503, 507, 491) */}
       <Dialog open={isModalOpen} onOpenChange={handleModalOpenChange}>
         <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
           <DialogHeader className="p-6 pb-4 border-b">
@@ -389,7 +382,6 @@ export default function ZapTemplates() {
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="flex-grow overflow-y-auto p-6 space-y-4 custom-scrollbar">
-            {/* Campos do formulário */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-1.5">
                     <Label htmlFor="template-name">Nome do Template*</Label>
@@ -426,70 +418,141 @@ export default function ZapTemplates() {
                 <CardDescription className="text-xs">Defina o conteúdo da sua mensagem.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                {(newTemplateData.components || []).map((comp, compIndex) => (
-                  <div key={compIndex} className="p-3 border rounded bg-card space-y-2">
-                    <div className="flex justify-between items-center">
-                      <Badge variant="secondary">{comp.type}</Badge>
-                      {comp.type !== 'BODY' && <Button type="button" variant="ghost" size="sm" className="h-6 p-1 text-red-500" onClick={() => removeComponent(compIndex)}><XCircle className="w-3.5 h-3.5"/></Button>}
-                    </div>
-                    {comp.type === 'HEADER' && (
-                      <Select value={comp.format || 'TEXT'} onValueChange={(v) => handleComponentChange(compIndex, 'format', v)}>
-                          <SelectTrigger className="text-xs neu-input h-8"><SelectValue/></SelectTrigger>
-                          <SelectContent><SelectItem value="TEXT">Texto</SelectItem><SelectItem value="IMAGE">Imagem</SelectItem><SelectItem value="VIDEO">Vídeo</SelectItem><SelectItem value="DOCUMENT">Documento</SelectItem></SelectContent>
-                      </Select>
-                    )}
-                    {((comp.type === 'HEADER' && comp.format === 'TEXT') || comp.type === 'BODY' || comp.type === 'FOOTER') ? (
-                       <Textarea placeholder={`Conteúdo para ${comp.type.toLowerCase()}... Use {{1}}, {{2}} para variáveis.`} value={comp.text || ''} onChange={(e) => handleComponentChange(compIndex, 'text', e.target.value)} rows={comp.type==='BODY' ? 4: 2} className="text-sm neu-input"/>
-) : null
-                    )}
-                    {comp.type === 'HEADER' && (comp.format === 'IMAGE' || comp.format === 'VIDEO' || comp.format === 'DOCUMENT') && (
-                        <div className="text-xs text-muted-foreground p-2 border border-dashed rounded bg-muted/50">
-                            <Info className="w-3 h-3 inline mr-1"/>
-                            {comp.format === 'IMAGE' ? 'Para Imagem: Forneça um link de exemplo ou deixe em branco para adicionar via API ao enviar.' :
-                             comp.format === 'VIDEO' ? 'Para Vídeo: Forneça um link de exemplo ou deixe em branco para adicionar via API.' :
-                             'Para Documento: Forneça um nome de arquivo de exemplo ou deixe em branco.'}
-                            <Input type="text" placeholder="Link de exemplo (opcional)" value={(comp.example?.header_handle || [])[0] || ''} onChange={e => handleComponentChange(compIndex, 'example', {...comp.example, header_handle: [e.target.value]})} className="text-xs mt-1 neu-input h-7"/>
-                        </div>
-                    )}
-
-                    {comp.type === 'BUTTONS' && (
-                      <div className="space-y-2">
-                        {comp.buttons?.map((btn, btnIndex) => (
-                          <div key={btnIndex} className="p-2 border rounded bg-background space-y-1">
-                            <div className="flex justify-between items-center">
-                              <Select value={btn.type} onValueChange={(v) => handleButtonChange(compIndex, btnIndex, 'type', v as TemplateButton['type'])}>
-                                <SelectTrigger className="text-xs neu-input h-8 w-40"><SelectValue/></SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="QUICK_REPLY">Resposta Rápida</SelectItem>
-                                  <SelectItem value="URL">Link (URL)</SelectItem>
-                                  <SelectItem value="PHONE_NUMBER">Ligar</SelectItem>
-                                  <SelectItem value="COPY_CODE">Copiar Código</SelectItem>
-                                </SelectContent>
-                              </Select>
-                               <Button type="button" variant="ghost" size="icon" className="h-6 w-6 p-0" onClick={() => removeTemplateButton(compIndex, btnIndex)}><Trash2 className="w-3 h-3 text-red-500"/></Button>
-                            </div>
-                            <Input placeholder="Texto do Botão" value={btn.text} onChange={e => handleButtonChange(compIndex, btnIndex, 'text', e.target.value)} className="text-xs neu-input h-8"/>
-                            {btn.type === 'URL' && <Input placeholder="https://exemplo.com/{{1}}" value={btn.url || ''} onChange={e => handleButtonChange(compIndex, btnIndex, 'url', e.target.value)} className="text-xs neu-input h-8"/>}
-                            {btn.type === 'PHONE_NUMBER' && <Input placeholder="+5511999999999" value={btn.phoneNumber || ''} onChange={e => handleButtonChange(compIndex, btnIndex, 'phoneNumber', e.target.value)} className="text-xs neu-input h-8"/>}
-                            {btn.type === 'COPY_CODE' && <Input placeholder="CUPOMXYZ" value={btn.couponCode || ''} onChange={e => handleButtonChange(compIndex, btnIndex, 'couponCode', e.target.value)} className="text-xs neu-input h-8"/>}
-                          </div>
-                        ))}
-                        { (comp.buttons?.length || 0) < 3 && <Button type="button" variant="outline" size="sm" onClick={() => addTemplateButton(compIndex)} className="text-xs h-7">+ Botão</Button> }
+                {(newTemplateData.components || []).map((comp, compIndex) => {
+                  if (!comp) return null;
+                  return (
+                    <div key={compIndex} className="p-3 border rounded bg-card space-y-2">
+                      <div className="flex justify-between items-center">
+                        <Badge variant="secondary">{comp.type}</Badge>
+                        {comp.type !== 'BODY' && (
+                          <Button type="button" variant="ghost" size="sm" className="h-6 p-1 text-red-500" onClick={() => removeComponent(compIndex)}>
+                            <XCircle className="w-3.5 h-3.5"/>
+                          </Button>
+                        )}
                       </div>
-                    )}
-                  </div>
-                ))}
-                 <div className="flex gap-2 mt-2">
-                    <Button type="button" variant="outline" size="sm" onClick={() => addComponent('HEADER')} className="text-xs h-7">Header</Button>
-                    <Button type="button" variant="outline" size="sm" onClick={() => addComponent('FOOTER')} className="text-xs h-7">Rodapé</Button>
-                    {!(newTemplateData.components || []).find(c=>c.type==='BUTTONS') && <Button type="button" variant="outline" size="sm" onClick={() => addComponent('BUTTONS')} className="text-xs h-7">Botões</Button>}
+                      {comp.type === 'HEADER' && (
+                        <Select value={comp.format || 'TEXT'} onValueChange={(v) => handleComponentChange(compIndex, 'format', v)}>
+                            <SelectTrigger className="text-xs neu-input h-8"><SelectValue/></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="TEXT">Texto</SelectItem>
+                              <SelectItem value="IMAGE">Imagem</SelectItem>
+                              <SelectItem value="VIDEO">Vídeo</SelectItem>
+                              <SelectItem value="DOCUMENT">Documento</SelectItem>
+                            </SelectContent>
+                        </Select>
+                      )}
+                      {((comp.type === 'HEADER' && comp.format === 'TEXT') || comp.type === 'BODY' || comp.type === 'FOOTER') && (
+                        <Textarea
+                          placeholder={`Conteúdo para ${comp.type.toLowerCase()}... Use {{1}}, {{2}} para variáveis.`}
+                          value={comp.text || ''}
+                          onChange={(e) => handleComponentChange(compIndex, 'text', e.target.value)}
+                          rows={comp.type === 'BODY' ? 4 : 2}
+                          className="text-sm neu-input"
+                        />
+                      )}
+                      {comp.type === 'HEADER' && (comp.format === 'IMAGE' || comp.format === 'VIDEO' || comp.format === 'DOCUMENT') && (
+                        <div className="text-xs text-muted-foreground p-2 border border-dashed rounded bg-muted/50">
+                          <Info className="w-3 h-3 inline mr-1"/>
+                          {comp.format === 'IMAGE' ? 'Para Imagem: Forneça um link de exemplo ou deixe em branco para adicionar via API ao enviar.' :
+                           comp.format === 'VIDEO' ? 'Para Vídeo: Forneça um link de exemplo ou deixe em branco para adicionar via API.' :
+                           'Para Documento: Forneça um nome de arquivo de exemplo ou deixe em branco.'}
+                          <Input
+                            type="text"
+                            placeholder="Link de exemplo (opcional)"
+                            value={(comp.example?.header_handle || [])[0] || ''}
+                            onChange={e => handleComponentChange(compIndex, 'example', {...comp.example, header_handle: [e.target.value]})}
+                            className="text-xs mt-1 neu-input h-7"
+                          />
+                        </div>
+                      )}
+                      {comp.type === 'BUTTONS' && comp.buttons && (
+                        <div className="space-y-2">
+                          {comp.buttons.map((btn, btnIndex) => (
+                            <div key={btnIndex} className="p-2 border rounded bg-background space-y-1">
+                              <div className="flex justify-between items-center">
+                                <Select
+                                  value={btn.type}
+                                  onValueChange={(v) => handleButtonChange(compIndex, btnIndex, 'type', v as TemplateButton['type'])}
+                                >
+                                  <SelectTrigger className="text-xs neu-input h-8 w-40"><SelectValue/></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="QUICK_REPLY">Resposta Rápida</SelectItem>
+                                    <SelectItem value="URL">Link (URL)</SelectItem>
+                                    <SelectItem value="PHONE_NUMBER">Ligar</SelectItem>
+                                    <SelectItem value="COPY_CODE">Copiar Código</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6 p-0"
+                                  onClick={() => removeTemplateButton(compIndex, btnIndex)}
+                                >
+                                  <Trash2 className="w-3 h-3 text-red-500"/>
+                                </Button>
+                              </div>
+                              <Input
+                                placeholder="Texto do Botão"
+                                value={btn.text}
+                                onChange={e => handleButtonChange(compIndex, btnIndex, 'text', e.target.value)}
+                                className="text-xs neu-input h-8"
+                              />
+                              {btn.type === 'URL' && (
+                                <Input
+                                  placeholder="https://exemplo.com/{{1}}"
+                                  value={btn.url || ''}
+                                  onChange={e => handleButtonChange(compIndex, btnIndex, 'url', e.target.value)}
+                                  className="text-xs neu-input h-8"
+                                />
+                              )}
+                              {btn.type === 'PHONE_NUMBER' && (
+                                <Input
+                                  placeholder="+5511999999999"
+                                  value={btn.phoneNumber || ''}
+                                  onChange={e => handleButtonChange(compIndex, btnIndex, 'phoneNumber', e.target.value)}
+                                  className="text-xs neu-input h-8"
+                                />
+                              )}
+                              {btn.type === 'COPY_CODE' && (
+                                <Input
+                                  placeholder="CUPOMXYZ"
+                                  value={btn.couponCode || ''}
+                                  onChange={e => handleButtonChange(compIndex, btnIndex, 'couponCode', e.target.value)}
+                                  className="text-xs neu-input h-8"
+                                />
+                              )}
+                            </div>
+                          ))}
+                          {(comp.buttons?.length || 0) < 3 && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => addTemplateButton(compIndex)}
+                              className="text-xs h-7"
+                            >
+                              + Botão
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                <div className="flex gap-2 mt-2">
+                  <Button type="button" variant="outline" size="sm" onClick={() => addComponent('HEADER')} className="text-xs h-7">Header</Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => addComponent('FOOTER')} className="text-xs h-7">Rodapé</Button>
+                  {!(newTemplateData.components || []).find(c => c.type === 'BUTTONS') && (
+                    <Button type="button" variant="outline" size="sm" onClick={() => addComponent('BUTTONS')} className="text-xs h-7">Botões</Button>
+                  )}
                 </div>
               </CardContent>
             </Card>
             <Alert variant="default" className="bg-amber-50 border-amber-200 text-amber-700">
               <Info className="h-4 w-4 !text-amber-600" />
               <AlertDescription className="text-xs">
-                <strong>Atenção:</strong> Todas as variáveis devem ser no formato `{{ "{{" }}1}}`, `{{ "{{" }}2}}`, etc.
+                <strong>Atenção:</strong> Todas as variáveis devem ser no formato <code>{'{{1}}'}</code>, <code>{'{{2}}'}</code>, etc.
                 O conteúdo do template deve seguir as <a href="https://developers.facebook.com/docs/whatsapp/message-templates/guidelines" target="_blank" rel="noopener noreferrer" className="underline hover:text-amber-800">diretrizes do WhatsApp</a>.
                 A aprovação pode levar de alguns minutos a algumas horas.
               </AlertDescription>
