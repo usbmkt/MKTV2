@@ -145,7 +145,7 @@ export default function ZapTemplates() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['zapTemplates'] });
       toast({ title: "Template enviado para aprovação!", variant: "default" });
-      setIsModalOpen(false); 
+      setIsModalOpen(false); // Isso irá acionar handleModalOpenChange para resetar
     },
     onError: (err: Error) => {
       toast({ title: "Erro ao criar template", description: err.message, variant: "destructive" });
@@ -268,22 +268,21 @@ export default function ZapTemplates() {
       setEditingTemplate(null); 
       setNewTemplateData(defaultNewTemplateDataState); 
     }
+    // Se estiver abrindo, o useEffect cuidará de popular/resetar newTemplateData
   };
 
   useEffect(() => {
-    // Este useEffect garante que, quando o modal abre,
-    // newTemplateData é definido corretamente para um novo template ou para um template existente.
     if (isModalOpen) { 
       if (editingTemplate) {
         setNewTemplateData(editingTemplate);
       } else {
         setNewTemplateData(defaultNewTemplateDataState); 
       }
-    } 
-    // Se o modal for fechado (isModalOpen se torna false),
-    // handleModalOpenChange já deve ter resetado newTemplateData.
-    // Adicionar uma cláusula 'else' aqui para resetar pode ser redundante
-    // ou causar um reset extra dependendo da ordem de execução.
+    } else {
+        // Se o modal foi fechado, ensure newTemplateData é resetado para o estado padrão
+        // Isso pode ser redundante se handleModalOpenChange já faz isso, mas garante.
+        setNewTemplateData(defaultNewTemplateDataState);
+    }
   }, [editingTemplate, isModalOpen]);
 
 
@@ -300,6 +299,7 @@ export default function ZapTemplates() {
         <Button 
           onClick={() => { 
             setEditingTemplate(null); 
+            // setNewTemplateData(defaultNewTemplateDataState); // Movido para useEffect/handleModalOpenChange
             setIsModalOpen(true); 
           }} 
           className="neu-button"
@@ -379,7 +379,7 @@ export default function ZapTemplates() {
         </CardContent>
       </Card>
 
-      {/* Esta é a linha ~491 (nos logs, pode variar para 503, 507, 511 etc.) */}
+      {/* Esta é a linha que está causando erro (agora ~511, era 503, 507, 491) */}
       <Dialog open={isModalOpen} onOpenChange={handleModalOpenChange}>
         <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
           <DialogHeader className="p-6 pb-4 border-b">
