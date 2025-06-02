@@ -1,18 +1,19 @@
+// zap/client/src/components/whatsapp_features/ZapTemplates.tsx
 import React, { useState, useEffect, ChangeEvent, MouseEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'; // Verify path
-import { Button } from '@/components/ui/button'; // Verify path
-import { Badge } from '@/components/ui/badge'; // Verify path
-import { Input } from '@/components/ui/input'; // Verify path
-import { Label } from '@/components/ui/label'; // Verify path
-import { Textarea } from '@/components/ui/textarea'; // Verify path
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'; // Verify path
+} from '@/components/ui/select';
 import {
   Dialog,
   DialogContent,
@@ -20,16 +21,17 @@ import {
   DialogTitle,
   DialogFooter,
   DialogDescription,
-} from '@/components/ui/dialog'; // Verify path
+  DialogTrigger, 
+} from '@/components/ui/dialog'; 
 import { 
   DropdownMenu, 
   DropdownMenuTrigger, 
   DropdownMenuContent, 
   DropdownMenuItem 
-} from '@/components/ui/dropdown-menu'; // Verify path
-import { Alert, AlertDescription } from '@/components/ui/alert'; // Add import for Alert (verify path)
-import { Plus, Edit2, Trash2, Search, MessageSquare, Loader2, AlertTriangle, CheckCircle, XCircle, Info } from 'lucide-react';
-import { useToast } from '@/components/ui/use-toast'; // Verify path
+} from '@/components/ui/dropdown-menu'; 
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Plus, Edit2, Trash2, Search, MessageSquare, Loader2, AlertTriangle, CheckCircle, XCircle, Info, Eye, Send } from 'lucide-react'; // Send não está sendo usado, pode remover se não precisar
+import { useToast } from '@/components/ui/use-toast'; 
 
 interface MessageTemplate {
   id: string;
@@ -100,7 +102,7 @@ const createTemplate = async (templateData: Omit<MessageTemplate, 'id' | 'status
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
-  initialTemplatesFromMock.push(newTemplate);
+  initialTemplatesFromMock.push(newTemplate); // Simula adição ao "banco"
   return newTemplate;
 };
 
@@ -144,7 +146,7 @@ export default function ZapTemplates() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['zapTemplates'] });
       toast({ title: "Template enviado para aprovação!", variant: "default" });
-      setIsModalOpen(false);
+      setIsModalOpen(false); 
     },
     onError: (err: Error) => {
       toast({ title: "Erro ao criar template", description: err.message, variant: "destructive" });
@@ -162,13 +164,9 @@ export default function ZapTemplates() {
     }
   });
 
-  const handleInputChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+  const handleInputChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => { // Removido HTMLSelectElement pois é tratado por onValueChange
     const { name, value } = e.target;
-    if (name === "category" || name === "language") {
-        setNewTemplateData(prev => ({ ...prev, [name]: value as MessageTemplate['category'] | MessageTemplate['language'] }));
-    } else {
-        setNewTemplateData(prev => ({ ...prev, [name]: value }));
-    }
+    setNewTemplateData(prev => ({ ...prev, [name]: value }));
   };
   
   const handleComponentChange = (index: number, field: keyof TemplateComponent, value: any) => {
@@ -210,10 +208,11 @@ export default function ZapTemplates() {
   const addTemplateButton = (compIndex: number) => {
     setNewTemplateData(prev => {
       const components = JSON.parse(JSON.stringify(prev.components || []));
-      if (components[compIndex]?.buttons) {
-        components[compIndex].buttons.push({ type: 'QUICK_REPLY', text: 'Nova Resposta' });
-      } else if (components[compIndex]) {
-        components[compIndex].buttons = [{ type: 'QUICK_REPLY', text: 'Nova Resposta' }];
+      if (components[compIndex]) { // Garante que o componente existe
+        if (!components[compIndex].buttons) {
+          components[compIndex].buttons = []; // Inicializa se não existir
+        }
+        components[compIndex].buttons!.push({ type: 'QUICK_REPLY', text: 'Nova Resposta' });
       }
       return { ...prev, components };
     });
@@ -277,9 +276,18 @@ export default function ZapTemplates() {
         setNewTemplateData(defaultNewTemplateDataState); 
       }
     } else {
+        // Quando o modal é fechado, handleModalOpenChange já reseta.
+        // Se isModalOpen se torna false por outros meios e editingTemplate não é null,
+        // podemos querer resetar editingTemplate também.
+        // Contudo, handleModalOpenChange já trata o reset ao fechar.
+        // Para ser mais explícito, podemos garantir o reset aqui também se o modal não estiver aberto.
         setNewTemplateData(defaultNewTemplateDataState);
+        if (editingTemplate !== null) { // Se estava editando e o modal fechou
+             setEditingTemplate(null); // Limpa o estado de edição
+        }
     }
   }, [editingTemplate, isModalOpen]);
+
 
   if (isLoading) return <div className="p-4 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto" /> Carregando templates...</div>;
   if (error) return <div className="p-4 text-center text-red-500"><AlertTriangle className="w-6 h-6 mx-auto mb-2"/>Erro ao carregar templates: {(error as Error).message}</div>;
@@ -389,7 +397,7 @@ export default function ZapTemplates() {
                       id="template-name"
                       name="name"
                       value={newTemplateData.name || ''}
-                      onChange={(e: ChangeEvent<HTMLInputElement>) => handleInputChange(e)}
+                      onChange={handleInputChange}
                       placeholder="Ex: promocao_natal_2024"
                       className="neu-input"
                       required
@@ -435,7 +443,7 @@ export default function ZapTemplates() {
               </CardHeader>
               <CardContent className="space-y-3">
                 {(newTemplateData.components || []).map((comp, compIndex) => {
-                  if (!comp) return null;
+                  if (!comp) return null; // Adicionado para segurança
                   return (
                     <div key={compIndex} className="p-3 border rounded bg-card space-y-2">
                       <div className="flex justify-between items-center">
@@ -466,9 +474,10 @@ export default function ZapTemplates() {
                             </SelectContent>
                         </Select>
                       )}
+                      {/* Linha 472 (aproximadamente) no seu código original que causou o erro */}
                       {((comp.type === 'HEADER' && comp.format === 'TEXT') || comp.type === 'BODY' || comp.type === 'FOOTER') && (
                         <Textarea
-                          placeholder={`Conteúdo para ${comp.type.toLowerCaseimmune(1).tsx
+                          placeholder={`Conteúdo para ${comp.type.toLowerCase()}... Use {{1}}, {{2}} para variáveis.`} // CORRIGIDO AQUI
                           value={comp.text || ''}
                           onChange={(e: ChangeEvent<HTMLTextAreaElement>) => handleComponentChange(compIndex, 'text', e.target.value)}
                           rows={comp.type === 'BODY' ? 4 : 2}
@@ -490,7 +499,7 @@ export default function ZapTemplates() {
                           />
                         </div>
                       )}
-                      {comp.type === 'BUTTONS' && comp.buttons && (
+                      {comp.type === 'BUTTONS' && comp.buttons && ( // Adicionado check para comp.buttons
                         <div className="space-y-2">
                           {comp.buttons.map((btn, btnIndex) => (
                             <div key={btnIndex} className="p-2 border rounded bg-background space-y-1">
@@ -549,7 +558,7 @@ export default function ZapTemplates() {
                               )}
                             </div>
                           ))}
-                          {(comp.buttons?.length || 0) < 3 && (
+                          { (comp.buttons?.length || 0) < 3 && ( // Adicionado check para comp.buttons
                             <Button
                               type="button"
                               variant="outline"
@@ -588,8 +597,23 @@ export default function ZapTemplates() {
               Cancelar
             </Button>
             <Button
-              type="submit"
-              onClick={(e: MouseEvent<HTMLButtonElement>) => handleSubmit(e as any)} // Cast to any to match form event
+              type="submit" 
+              form="zap-template-form" // Adicionado para ligar ao form se necessário, mas onClick no form é mais comum
+              onClick={(e: MouseEvent<HTMLButtonElement>) => {
+                  // Previne o comportamento padrão do botão se ele não for do tipo submit dentro do form
+                  // e chama handleSubmit que tem e.preventDefault()
+                  const form = (e.target as HTMLElement)?.closest('form');
+                  if(form) {
+                    // Simula o evento de submit do formulário para o React Hook Form
+                    handleSubmit({
+                      preventDefault: () => {},
+                      target: form,
+                      currentTarget: form,
+                    } as unknown as React.FormEvent<HTMLFormElement>);
+                  } else {
+                    handleSubmit(e as any); // Fallback, mas pode não ser ideal
+                  }
+              }}
               disabled={createMutation.isPending}
               className="neu-button-primary"
             >
