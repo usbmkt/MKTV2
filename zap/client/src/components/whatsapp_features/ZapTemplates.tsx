@@ -26,10 +26,6 @@ import {
 import { Plus, Edit2, Trash2, Search, MessageSquare, Loader2, AlertTriangle, CheckCircle, XCircle, Info, Eye, Send } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast'; // Ajuste o caminho se necessário
 
-// ADDED MISSING IMPORTS
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-
 interface MessageTemplate {
   id: string;
   name: string;
@@ -66,7 +62,7 @@ interface TemplateButton {
   couponCode?: string;
 }
 
-const initialTemplatesFromMock: MessageTemplate[] = [ // Renomeado para evitar conflito se você tiver 'initialTemplates' em outro lugar
+const initialTemplatesFromMock: MessageTemplate[] = [
   {
     id: 'welcome_message_123',
     name: 'welcome_message_123',
@@ -200,8 +196,7 @@ export default function ZapTemplates() {
     setNewTemplateData(prev => {
       const components = [...(prev.components || [])];
       const targetComponent = { ...components[index] }; 
-      // @ts-ignore
-      targetComponent[field] = value; 
+      (targetComponent as any)[field] = value; 
       components[index] = targetComponent; 
       return { ...prev, components };
     });
@@ -227,8 +222,7 @@ export default function ZapTemplates() {
     setNewTemplateData(prev => {
       const components = JSON.parse(JSON.stringify(prev.components || [])); 
       if (components[compIndex] && components[compIndex].buttons) {
-        // @ts-ignore
-        components[compIndex].buttons[btnIndex][field] = value;
+        (components[compIndex].buttons[btnIndex] as any)[field] = value;
       }
       return { ...prev, components };
     });
@@ -262,7 +256,6 @@ export default function ZapTemplates() {
       toast({ title: "Campos obrigatórios", description: "Nome, categoria, idioma e corpo da mensagem são obrigatórios.", variant: "destructive" });
       return;
     }
-    // @ts-ignore
     createMutation.mutate(newTemplateData as Omit<MessageTemplate, 'id' | 'status' | 'qualityScore' | 'createdAt' | 'updatedAt'>);
   };
 
@@ -293,10 +286,8 @@ export default function ZapTemplates() {
     if (!isOpen) {
       setIsModalOpen(false);
       setEditingTemplate(null);
-      setNewTemplateData(defaultNewTemplateDataState); // Usa a constante para resetar
+      setNewTemplateData(defaultNewTemplateDataState); 
     } else {
-      // Se for abrir para um novo template (editingTemplate é null), reseta.
-      // Se for para editar, o useEffect já deve ter populado newTemplateData
       if (!editingTemplate) {
         setNewTemplateData(defaultNewTemplateDataState);
       }
@@ -305,16 +296,18 @@ export default function ZapTemplates() {
   };
 
   useEffect(() => {
-    if (editingTemplate) {
-      setNewTemplateData(editingTemplate);
-    } else {
-      setNewTemplateData(defaultNewTemplateDataState);
+    if (isModalOpen) { // Apenas executa se o modal estiver aberto
+      if (editingTemplate) {
+        setNewTemplateData(editingTemplate);
+      } else {
+        setNewTemplateData(defaultNewTemplateDataState);
+      }
     }
-  }, [editingTemplate, isModalOpen]); // Adicionado isModalOpen para resetar ao abrir para novo
+  }, [editingTemplate, isModalOpen]);
 
 
   if (isLoading) return <div className="p-4 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto" /> Carregando templates...</div>;
-  if (error) return <div className="p-4 text-center text-red-500"><AlertTriangle className="w-6 h-6 mx-auto mb-2"/>Erro ao carregar templates: ${(error as Error).message}</div>;
+  if (error) return <div className="p-4 text-center text-red-500"><AlertTriangle className="w-6 h-6 mx-auto mb-2"/>Erro ao carregar templates: {(error as Error).message}</div>;
 
   return (
     <div className="space-y-6">
@@ -354,7 +347,6 @@ export default function ZapTemplates() {
                   <CardHeader className="pb-3">
                     <div className="flex justify-between items-start">
                       <CardTitle className="text-base font-semibold truncate">{template.name}</CardTitle>
-                      {/* DropdownMenu was not imported */}
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="sm" className="p-1 h-7 neu-button">
@@ -364,8 +356,7 @@ export default function ZapTemplates() {
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onClick={() => {
                             setEditingTemplate(template);
-                            // setNewTemplateData é tratado pelo useEffect agora
-                            setIsModalOpen(true);
+                            setIsModalOpen(true); // O useEffect cuidará de setNewTemplateData
                           }}>
                             <Edit2 className="mr-2 h-3.5 w-3.5" /> Editar
                           </DropdownMenuItem>
@@ -401,7 +392,7 @@ export default function ZapTemplates() {
         </CardContent>
       </Card>
 
-      {/* Linha 491 original (agora movida para handleModalOpenChange e defaultNewTemplateDataState) */}
+      {/* Esta é a linha que corresponde à antiga linha 491, agora ~507-509 */}
       <Dialog open={isModalOpen} onOpenChange={handleModalOpenChange}>
         <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
           <DialogHeader className="p-6 pb-4 border-b">
@@ -506,18 +497,17 @@ export default function ZapTemplates() {
                 </div>
               </CardContent>
             </Card>
-            {/* CORRECTED LINE 509 BELOW */}
             <Alert variant="default" className="bg-amber-50 border-amber-200 text-amber-700">
               <Info className="h-4 w-4 !text-amber-600" />
               <AlertDescription className="text-xs">
-                <strong>Atenção:</strong> Todas as variáveis devem ser no formato <code>{"{{1}}"}</code>, <code>{"{{2}}"}</code>, etc.
+                <strong>Atenção:</strong> Todas as variáveis devem ser no formato `{{ "{{" }}1}}`, `{{ "{{" }}2}}`, etc.
                 O conteúdo do template deve seguir as <a href="https://developers.facebook.com/docs/whatsapp/message-templates/guidelines" target="_blank" rel="noopener noreferrer" className="underline hover:text-amber-800">diretrizes do WhatsApp</a>.
                 A aprovação pode levar de alguns minutos a algumas horas.
               </AlertDescription>
             </Alert>
           </form>
           <DialogFooter className="p-6 pt-4 border-t">
-            <Button variant="outline" onClick={() => { setIsModalOpen(false); setEditingTemplate(null); setNewTemplateData(defaultNewTemplateDataState); }} disabled={createMutation.isPending}>
+            <Button variant="outline" onClick={() => handleModalOpenChange(false)} disabled={createMutation.isPending}>
               Cancelar
             </Button>
             <Button type="submit" onClick={handleSubmit} disabled={createMutation.isPending} className="neu-button-primary">
