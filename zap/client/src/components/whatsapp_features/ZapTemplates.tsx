@@ -438,7 +438,7 @@ export default function ZapTemplates() {
                           <SelectContent><SelectItem value="TEXT">Texto</SelectItem><SelectItem value="IMAGE">Imagem</SelectItem><SelectItem value="VIDEO">Vídeo</SelectItem><SelectItem value="DOCUMENT">Documento</SelectItem></SelectContent>
                       </Select>
                     )}
-                    {(comp.type === 'HEADER' && comp.format === 'TEXT' || comp.type === 'BODY' || comp.type === 'FOOTER') && (
+                    {((comp.type === 'HEADER' && comp.format === 'TEXT') || comp.type === 'BODY' || comp.type === 'FOOTER') ? (
                        <Textarea placeholder={`Conteúdo para ${comp.type.toLowerCase()}... Use {{1}}, {{2}} para variáveis.`} value={comp.text || ''} onChange={(e) => handleComponentChange(compIndex, 'text', e.target.value)} rows={comp.type==='BODY' ? 4: 2} className="text-sm neu-input"/>
                     )}
                     {comp.type === 'HEADER' && (comp.format === 'IMAGE' || comp.format === 'VIDEO' || comp.format === 'DOCUMENT') && (
