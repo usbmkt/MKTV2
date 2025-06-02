@@ -30,7 +30,7 @@ import {
 } from '@/components/ui/dropdown-menu'; // Verify path
 import { Alert, AlertDescription } from '@/components/ui/alert'; // Verify path
 import { Plus, Edit2, Trash2, Search, MessageSquare, Loader2, AlertTriangle, CheckCircle, XCircle, Info } from 'lucide-react';
-import { useToast } from '@/components/ui/toast'; // Verify path - Changed from use-toast
+import { useToast } from '@/components/ui/use-toast'; // Verify path - Reverted to use-toast
 
 interface MessageTemplate {
   id: string;
