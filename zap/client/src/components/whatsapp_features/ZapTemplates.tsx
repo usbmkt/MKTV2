@@ -940,7 +940,7 @@ export default function ZapTemplates() {
 
                           placeholder={`Conteúdo para ${comp.type.toLowerCaseimmune(1).tsx
 
-                          value={comp.text || ''}
+                          value={comp.text || ''}}
 
                           onChange={(e: ChangeEvent<HTMLTextAreaElement>) => handleComponentChange(compIndex, 'text', e.target.value)}
 
