@@ -24,7 +24,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Plus, Edit2, Trash2, Search, MessageSquare, Loader2, AlertTriangle, CheckCircle, XCircle, Info, Eye, Send } from 'lucide-react';
-import { useToast } from '@/components/ui/use-toast'; // Ajuste o caminho se necessário
+import { useToast } from '@/components/ui/use-toast'; // Ajuste o caminho se os componentes UI do Zap estiverem em outro local
 
 interface MessageTemplate {
   id: string;
@@ -288,21 +288,24 @@ export default function ZapTemplates() {
       setEditingTemplate(null);
       setNewTemplateData(defaultNewTemplateDataState); 
     } else {
-      if (!editingTemplate) {
+      if (!editingTemplate) { // Se estiver abrindo para criar um novo
         setNewTemplateData(defaultNewTemplateDataState);
       }
+      // Se estiver abrindo para editar, o useEffect cuidará de setar newTemplateData
       setIsModalOpen(true);
     }
   };
 
   useEffect(() => {
-    if (isModalOpen) { 
+    if (isModalOpen) { // Apenas executa a lógica se o modal estiver intencionalmente aberto
       if (editingTemplate) {
         setNewTemplateData(editingTemplate);
       } else {
-        setNewTemplateData(defaultNewTemplateDataState);
+        setNewTemplateData(defaultNewTemplateDataState); // Garante reset ao abrir para novo
       }
     }
+    // Não incluir setNewTemplateData ou defaultNewTemplateDataState como dependências
+    // para evitar loops, pois eles são estáveis ou gerenciados internamente.
   }, [editingTemplate, isModalOpen]);
 
 
@@ -316,7 +319,11 @@ export default function ZapTemplates() {
           <h2 className="text-2xl font-bold">Templates de Mensagem</h2>
           <p className="text-muted-foreground">Gerencie templates aprovados pelo WhatsApp</p>
         </div>
-        <Button onClick={() => { setEditingTemplate(null); setNewTemplateData(defaultNewTemplateDataState); setIsModalOpen(true); }} className="neu-button">
+        <Button onClick={() => { 
+          setEditingTemplate(null); 
+          // setNewTemplateData já será cuidado pelo handleModalOpenChange/useEffect
+          setIsModalOpen(true); 
+        }} className="neu-button">
           <Plus className="w-4 h-4 mr-2" />
           Novo Template
         </Button>
@@ -355,8 +362,8 @@ export default function ZapTemplates() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onClick={() => {
-                            setEditingTemplate(template);
-                            setIsModalOpen(true); 
+                            setEditingTemplate(template); // Define para edição
+                            setIsModalOpen(true); // Abre o modal (useEffect cuidará de popular newTemplateData)
                           }}>
                             <Edit2 className="mr-2 h-3.5 w-3.5" /> Editar
                           </DropdownMenuItem>
@@ -392,7 +399,7 @@ export default function ZapTemplates() {
         </CardContent>
       </Card>
 
-      {/* Esta é a linha que corresponde à antiga linha 491, agora ~503/507 */}
+      {/* A linha com erro TS1005/TS1381 está aqui (linha 503 do seu log) */}
       <Dialog open={isModalOpen} onOpenChange={handleModalOpenChange}>
         <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
           <DialogHeader className="p-6 pb-4 border-b">
@@ -402,6 +409,7 @@ export default function ZapTemplates() {
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="flex-grow overflow-y-auto p-6 space-y-4 custom-scrollbar">
+            {/* Campos do formulário */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-1.5">
                     <Label htmlFor="template-name">Nome do Template*</Label>
