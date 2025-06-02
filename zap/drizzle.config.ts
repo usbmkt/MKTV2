@@ -19,7 +19,7 @@ export default defineConfig({
   dbCredentials: {
     // A URL será lida de process.env.ZAP_DATABASE_URL
     // Drizzle Kit usará isso para se conectar ao banco para introspecção e migrações.
-    url: process.env.ZAP_DATABASE_URL || "postgresql://user:pass@host:port/db_placeholder_para_nao_quebrar_build",
+    url: process.env.ZAP_DATABASE_URL || "postgresql://mktv5renderuser:3CWm0J0MNNQAXdh71LBTDehOQLERdxig@dpg-d0t7v1u3jp1c73eaajpg-a.oregon-postgres.render.com/mktv5render_wb67",
   },
   verbose: true,
   strict: true,

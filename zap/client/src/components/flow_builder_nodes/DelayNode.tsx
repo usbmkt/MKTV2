@@ -1,21 +1,16 @@
- 
 // zap/client/src/components/flow_builder_nodes/DelayNode.tsx
 import React from 'react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import { Clock } from 'lucide-react';
 import { cn } from '@zap_client/lib/utils';
-
-export interface DelayNodeData {
-  label?: string;
-  delaySeconds?: number;
-}
+import { type DelayNodeData } from '@zap_client/features/types/whatsapp_flow_types'; // Supondo que o tipo foi movido
 
 const DelayNode: React.FC<NodeProps<DelayNodeData>> = ({ data, selected, id }) => {
   return (
     <div
       className={cn(
-        "p-3 rounded-md shadow-md bg-card border border-gray-500/70 w-60",
-        selected && "ring-2 ring-gray-600 ring-offset-2 ring-offset-background"
+        "p-3 rounded-md shadow-md bg-card border border-gray-500/70 w-60 hover:shadow-lg transition-shadow",
+        selected && "ring-2 ring-gray-600 ring-offset-1"
       )}
     >
       <Handle type="target" position={Position.Left} id={`${id}-target`} className="!bg-slate-400 w-2.5 h-2.5" />
