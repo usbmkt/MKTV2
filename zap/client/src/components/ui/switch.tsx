@@ -2,7 +2,7 @@
 import * as React from "react"
 import * as SwitchPrimitives from "@radix-ui/react-switch"
 
-import { cn } from "@zap_client/lib/utils"
+import { cn } from "@zap_client/lib/utils" // Assuming this is a utility function like in shadcn/ui
 
 const Switch = React.forwardRef<
   React.ElementRef<typeof SwitchPrimitives.Root>,
@@ -16,3 +16,13 @@ const Switch = React.forwardRef<
     {...props}
     ref={ref}
   >
+    <SwitchPrimitives.Thumb
+      className={cn(
+        "pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform data-[state=checked]:translate-x-5 data-[state=unchecked]:translate-x-0"
+      )}
+    />
+  </SwitchPrimitives.Root>
+))
+Switch.displayName = SwitchPrimitives.Root.displayName // Optional: For better debugging experience
+
+export { Switch } // Standard export for the component
