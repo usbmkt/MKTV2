@@ -21,14 +21,14 @@ import {
   DialogTitle,
   DialogFooter,
   DialogDescription,
-  DialogTrigger, // Adicionado se você usar DialogTrigger explicitamente
-} from '@/components/ui/dialog'; // Certifique-se que DialogTrigger está aqui se usado
+  DialogTrigger, 
+} from '@/components/ui/dialog'; 
 import { 
   DropdownMenu, 
   DropdownMenuTrigger, 
   DropdownMenuContent, 
   DropdownMenuItem 
-} from '@/components/ui/dropdown-menu'; // Adicionado para as ações do card
+} from '@/components/ui/dropdown-menu'; 
 import { Plus, Edit2, Trash2, Search, MessageSquare, Loader2, AlertTriangle, CheckCircle, XCircle, Info, Eye, Send } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast'; 
 
@@ -145,8 +145,7 @@ export default function ZapTemplates() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['zapTemplates'] });
       toast({ title: "Template enviado para aprovação!", variant: "default" });
-      setIsModalOpen(false); // Fechar modal
-      // O reset de newTemplateData será tratado por handleModalOpenChange ou useEffect
+      setIsModalOpen(false); // Isso irá acionar handleModalOpenChange para resetar
     },
     onError: (err: Error) => {
       toast({ title: "Erro ao criar template", description: err.message, variant: "destructive" });
@@ -264,12 +263,12 @@ export default function ZapTemplates() {
   };
 
   const handleModalOpenChange = (isOpen: boolean) => {
-    setIsModalOpen(isOpen); // Atualiza o estado de visibilidade do modal
+    setIsModalOpen(isOpen);
     if (!isOpen) {
-      setEditingTemplate(null); // Limpa o template em edição ao fechar
-      setNewTemplateData(defaultNewTemplateDataState); // Reseta os dados do formulário
+      setEditingTemplate(null); 
+      setNewTemplateData(defaultNewTemplateDataState); 
     }
-    // Se isOpen é true e não estamos editando, o useEffect abaixo cuidará do reset.
+    // Se estiver abrindo, o useEffect cuidará de popular/resetar newTemplateData
   };
 
   useEffect(() => {
@@ -277,13 +276,14 @@ export default function ZapTemplates() {
       if (editingTemplate) {
         setNewTemplateData(editingTemplate);
       } else {
-        // Se abrindo para criar novo, ou se editingTemplate for explicitamente null
         setNewTemplateData(defaultNewTemplateDataState); 
       }
+    } else {
+        // Se o modal foi fechado, ensure newTemplateData é resetado para o estado padrão
+        // Isso pode ser redundante se handleModalOpenChange já faz isso, mas garante.
+        setNewTemplateData(defaultNewTemplateDataState);
     }
-    // Se o modal não está aberto, não fazemos nada com newTemplateData aqui, 
-    // pois handleModalOpenChange já o resetou ao fechar.
-  }, [editingTemplate, isModalOpen]); // Dependências corretas
+  }, [editingTemplate, isModalOpen]);
 
 
   if (isLoading) return <div className="p-4 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto" /> Carregando templates...</div>;
@@ -299,7 +299,7 @@ export default function ZapTemplates() {
         <Button 
           onClick={() => { 
             setEditingTemplate(null); 
-            // O useEffect agora deve ser acionado por isModalOpen e editingTemplate mudando
+            // setNewTemplateData(defaultNewTemplateDataState); // Movido para useEffect/handleModalOpenChange
             setIsModalOpen(true); 
           }} 
           className="neu-button"
@@ -379,7 +379,7 @@ export default function ZapTemplates() {
         </CardContent>
       </Card>
 
-      {/* Linha ~511 (antiga 503, 507, 491) */}
+      {/* Esta é a linha que está causando erro (agora ~511, era 503, 507, 491) */}
       <Dialog open={isModalOpen} onOpenChange={handleModalOpenChange}>
         <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
           <DialogHeader className="p-6 pb-4 border-b">
@@ -488,7 +488,7 @@ export default function ZapTemplates() {
             <Alert variant="default" className="bg-amber-50 border-amber-200 text-amber-700">
               <Info className="h-4 w-4 !text-amber-600" />
               <AlertDescription className="text-xs">
-<strong>Atenção:</strong> Todas as variáveis devem ser no formato {`{{1}}`}, {`{{2}}`}, etc.
+                <strong>Atenção:</strong> Todas as variáveis devem ser no formato `{{ "{{" }}1}}`, `{{ "{{" }}2}}`, etc.
                 O conteúdo do template deve seguir as <a href="https://developers.facebook.com/docs/whatsapp/message-templates/guidelines" target="_blank" rel="noopener noreferrer" className="underline hover:text-amber-800">diretrizes do WhatsApp</a>.
                 A aprovação pode levar de alguns minutos a algumas horas.
               </AlertDescription>
