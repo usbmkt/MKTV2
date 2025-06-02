@@ -288,24 +288,21 @@ export default function ZapTemplates() {
       setEditingTemplate(null);
       setNewTemplateData(defaultNewTemplateDataState); 
     } else {
-      if (!editingTemplate) { // Se estiver abrindo para criar um novo
+      if (!editingTemplate) { 
         setNewTemplateData(defaultNewTemplateDataState);
       }
-      // Se estiver abrindo para editar, o useEffect cuidará de setar newTemplateData
       setIsModalOpen(true);
     }
   };
 
   useEffect(() => {
-    if (isModalOpen) { // Apenas executa a lógica se o modal estiver intencionalmente aberto
+    if (isModalOpen) { 
       if (editingTemplate) {
         setNewTemplateData(editingTemplate);
       } else {
-        setNewTemplateData(defaultNewTemplateDataState); // Garante reset ao abrir para novo
+        setNewTemplateData(defaultNewTemplateDataState); 
       }
     }
-    // Não incluir setNewTemplateData ou defaultNewTemplateDataState como dependências
-    // para evitar loops, pois eles são estáveis ou gerenciados internamente.
   }, [editingTemplate, isModalOpen]);
 
 
@@ -321,8 +318,7 @@ export default function ZapTemplates() {
         </div>
         <Button onClick={() => { 
           setEditingTemplate(null); 
-          // setNewTemplateData já será cuidado pelo handleModalOpenChange/useEffect
-          setIsModalOpen(true); 
+          setIsModalOpen(true); // O useEffect e handleModalOpenChange cuidarão de setNewTemplateData
         }} className="neu-button">
           <Plus className="w-4 h-4 mr-2" />
           Novo Template
@@ -362,8 +358,8 @@ export default function ZapTemplates() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onClick={() => {
-                            setEditingTemplate(template); // Define para edição
-                            setIsModalOpen(true); // Abre o modal (useEffect cuidará de popular newTemplateData)
+                            setEditingTemplate(template); 
+                            setIsModalOpen(true); 
                           }}>
                             <Edit2 className="mr-2 h-3.5 w-3.5" /> Editar
                           </DropdownMenuItem>
@@ -399,7 +395,7 @@ export default function ZapTemplates() {
         </CardContent>
       </Card>
 
-      {/* A linha com erro TS1005/TS1381 está aqui (linha 503 do seu log) */}
+      {/* Esta é a linha que está causando erro (agora ~503, era 507, 491) */}
       <Dialog open={isModalOpen} onOpenChange={handleModalOpenChange}>
         <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
           <DialogHeader className="p-6 pb-4 border-b">
