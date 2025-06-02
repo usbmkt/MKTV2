@@ -439,7 +439,8 @@ export default function ZapTemplates() {
                       </Select>
                     )}
                     {((comp.type === 'HEADER' && comp.format === 'TEXT') || comp.type === 'BODY' || comp.type === 'FOOTER') ? (
-                       <Textarea placeholder={`Conteúdo para ${comp.type.toLowerCase()}... Use {{1}}, {{2}} para variáveis.`} value={comp.text || ''} onChange={(e) => handleComponentChange(compIndex, 'text', e.target.value)} rows={comp.type==='BODY' ? 4: 2} className="text-sm neu-input"/>
+                       <Textarea placeholder={`Conteúdo para ${comp.type.toLowerCase()}... Use {{1}}, {{2}} para variáveis.`} value={comp.text || ''} onChange={(e) => handleComponentChange(compIndex, 'text', e.target.value)} rows={comp.type==='BODY' ? 4: 2} className="text-sm neu-input"
+  />
 ) : null
                     )}
                     {comp.type === 'HEADER' && (comp.format === 'IMAGE' || comp.format === 'VIDEO' || comp.format === 'DOCUMENT') && (
