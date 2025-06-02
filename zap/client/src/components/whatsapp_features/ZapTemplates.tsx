@@ -21,10 +21,16 @@ import {
   DialogTitle,
   DialogFooter,
   DialogDescription,
-  DialogTrigger,
-} from '@/components/ui/dialog';
+  DialogTrigger, // Adicionado se você usar DialogTrigger explicitamente
+} from '@/components/ui/dialog'; // Certifique-se que DialogTrigger está aqui se usado
+import { 
+  DropdownMenu, 
+  DropdownMenuTrigger, 
+  DropdownMenuContent, 
+  DropdownMenuItem 
+} from '@/components/ui/dropdown-menu'; // Adicionado para as ações do card
 import { Plus, Edit2, Trash2, Search, MessageSquare, Loader2, AlertTriangle, CheckCircle, XCircle, Info, Eye, Send } from 'lucide-react';
-import { useToast } from '@/components/ui/use-toast'; // Ajuste o caminho se os componentes UI do Zap estiverem em outro local
+import { useToast } from '@/components/ui/use-toast'; 
 
 interface MessageTemplate {
   id: string;
@@ -77,31 +83,6 @@ const initialTemplatesFromMock: MessageTemplate[] = [
     ],
     qualityScore: { score: 'GREEN' }
   },
-  {
-    id: 'order_confirmation_abc',
-    name: 'order_confirmation_abc',
-    category: 'UTILITY',
-    language: 'pt_BR',
-    status: 'APPROVED',
-    components: [
-      { type: 'HEADER', format: 'DOCUMENT' },
-      { type: 'BODY', text: 'Seu pedido #{{1}} foi confirmado e a nota fiscal está anexa. Acompanhe seu pedido em: {{2}}' },
-      { type: 'BUTTONS', buttons: [{ type: 'URL', text: 'Rastrear Pedido', url: 'https://usbcompany.com.br/track/{{1}}' }] }
-    ],
-    qualityScore: { score: 'GREEN' }
-  },
-  {
-    id: 'promo_lançamento_xyz',
-    name: 'promo_lançamento_xyz',
-    category: 'MARKETING',
-    language: 'pt_BR',
-    status: 'PENDING',
-    components: [
-      { type: 'HEADER', format: 'IMAGE' },
-      { type: 'BODY', text: '🚀 GRANDE LANÇAMENTO! {{1}} com DESCONTO IMPERDÍVEL por tempo limitado! Não perca: {{2}}' },
-      { type: 'BUTTONS', buttons: [{ type: 'URL', text: 'Aproveitar Agora!', url: 'https://usbcompany.com.br/oferta-especial' }] }
-    ],
-  }
 ];
 
 const fetchTemplates = async (): Promise<MessageTemplate[]> => {
@@ -164,8 +145,8 @@ export default function ZapTemplates() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['zapTemplates'] });
       toast({ title: "Template enviado para aprovação!", variant: "default" });
-      setIsModalOpen(false);
-      setNewTemplateData(defaultNewTemplateDataState);
+      setIsModalOpen(false); // Fechar modal
+      // O reset de newTemplateData será tratado por handleModalOpenChange ou useEffect
     },
     onError: (err: Error) => {
       toast({ title: "Erro ao criar template", description: err.message, variant: "destructive" });
@@ -283,16 +264,12 @@ export default function ZapTemplates() {
   };
 
   const handleModalOpenChange = (isOpen: boolean) => {
+    setIsModalOpen(isOpen); // Atualiza o estado de visibilidade do modal
     if (!isOpen) {
-      setIsModalOpen(false);
-      setEditingTemplate(null);
-      setNewTemplateData(defaultNewTemplateDataState); 
-    } else {
-      if (!editingTemplate) { 
-        setNewTemplateData(defaultNewTemplateDataState);
-      }
-      setIsModalOpen(true);
+      setEditingTemplate(null); // Limpa o template em edição ao fechar
+      setNewTemplateData(defaultNewTemplateDataState); // Reseta os dados do formulário
     }
+    // Se isOpen é true e não estamos editando, o useEffect abaixo cuidará do reset.
   };
 
   useEffect(() => {
@@ -300,10 +277,13 @@ export default function ZapTemplates() {
       if (editingTemplate) {
         setNewTemplateData(editingTemplate);
       } else {
+        // Se abrindo para criar novo, ou se editingTemplate for explicitamente null
         setNewTemplateData(defaultNewTemplateDataState); 
       }
     }
-  }, [editingTemplate, isModalOpen]);
+    // Se o modal não está aberto, não fazemos nada com newTemplateData aqui, 
+    // pois handleModalOpenChange já o resetou ao fechar.
+  }, [editingTemplate, isModalOpen]); // Dependências corretas
 
 
   if (isLoading) return <div className="p-4 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto" /> Carregando templates...</div>;
@@ -316,10 +296,14 @@ export default function ZapTemplates() {
           <h2 className="text-2xl font-bold">Templates de Mensagem</h2>
           <p className="text-muted-foreground">Gerencie templates aprovados pelo WhatsApp</p>
         </div>
-        <Button onClick={() => { 
-          setEditingTemplate(null); 
-          setIsModalOpen(true); // O useEffect e handleModalOpenChange cuidarão de setNewTemplateData
-        }} className="neu-button">
+        <Button 
+          onClick={() => { 
+            setEditingTemplate(null); 
+            // O useEffect agora deve ser acionado por isModalOpen e editingTemplate mudando
+            setIsModalOpen(true); 
+          }} 
+          className="neu-button"
+        >
           <Plus className="w-4 h-4 mr-2" />
           Novo Template
         </Button>
@@ -395,7 +379,7 @@ export default function ZapTemplates() {
         </CardContent>
       </Card>
 
-      {/* Esta é a linha que está causando erro (agora ~503, era 507, 491) */}
+      {/* Linha ~511 (antiga 503, 507, 491) */}
       <Dialog open={isModalOpen} onOpenChange={handleModalOpenChange}>
         <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
           <DialogHeader className="p-6 pb-4 border-b">
