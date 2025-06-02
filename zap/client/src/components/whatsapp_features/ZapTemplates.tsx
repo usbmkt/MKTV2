@@ -62,7 +62,7 @@ interface TemplateButton {
   couponCode?: string;
 }
 
-const initialTemplatesFromMock: MessageTemplate[] = [ // Renomeado para evitar conflito se você tiver 'initialTemplates' em outro lugar
+const initialTemplatesFromMock: MessageTemplate[] = [
   {
     id: 'welcome_message_123',
     name: 'welcome_message_123',
@@ -165,7 +165,7 @@ export default function ZapTemplates() {
       queryClient.invalidateQueries({ queryKey: ['zapTemplates'] });
       toast({ title: "Template enviado para aprovação!", variant: "default" });
       setIsModalOpen(false);
-      setNewTemplateData(defaultNewTemplateDataState);
+      setNewTemplateData(defaultNewTemplateDataState); // CORRIGIDO: Usar constante
     },
     onError: (err: Error) => {
       toast({ title: "Erro ao criar template", description: err.message, variant: "destructive" });
@@ -196,8 +196,7 @@ export default function ZapTemplates() {
     setNewTemplateData(prev => {
       const components = [...(prev.components || [])];
       const targetComponent = { ...components[index] }; 
-      // @ts-ignore
-      targetComponent[field] = value; 
+      (targetComponent as any)[field] = value; 
       components[index] = targetComponent; 
       return { ...prev, components };
     });
@@ -223,8 +222,7 @@ export default function ZapTemplates() {
     setNewTemplateData(prev => {
       const components = JSON.parse(JSON.stringify(prev.components || [])); 
       if (components[compIndex] && components[compIndex].buttons) {
-        // @ts-ignore
-        components[compIndex].buttons[btnIndex][field] = value;
+        (components[compIndex].buttons[btnIndex] as any)[field] = value;
       }
       return { ...prev, components };
     });
@@ -258,7 +256,6 @@ export default function ZapTemplates() {
       toast({ title: "Campos obrigatórios", description: "Nome, categoria, idioma e corpo da mensagem são obrigatórios.", variant: "destructive" });
       return;
     }
-    // @ts-ignore
     createMutation.mutate(newTemplateData as Omit<MessageTemplate, 'id' | 'status' | 'qualityScore' | 'createdAt' | 'updatedAt'>);
   };
 
@@ -285,14 +282,16 @@ export default function ZapTemplates() {
     }
   };
 
+  // Função para lidar com a abertura/fechamento do modal e resetar o estado do formulário
   const handleModalOpenChange = (isOpen: boolean) => {
     if (!isOpen) {
       setIsModalOpen(false);
       setEditingTemplate(null);
-      setNewTemplateData(defaultNewTemplateDataState); // Usa a constante para resetar
+      setNewTemplateData(defaultNewTemplateDataState); // CORRIGIDO: Usar constante para resetar
     } else {
-      // Se for abrir para um novo template (editingTemplate é null), reseta.
-      // Se for para editar, o useEffect já deve ter populado newTemplateData
+      // Se estiver abrindo para criar um novo template (editingTemplate é null),
+      // certifique-se de que newTemplateData está resetado.
+      // Se estiver abrindo para editar, o useEffect abaixo cuidará de popular o formulário.
       if (!editingTemplate) {
         setNewTemplateData(defaultNewTemplateDataState);
       }
@@ -300,13 +299,16 @@ export default function ZapTemplates() {
     }
   };
 
+  // Efeito para popular o formulário quando editingTemplate muda (ou seja, ao clicar em editar)
   useEffect(() => {
     if (editingTemplate) {
       setNewTemplateData(editingTemplate);
     } else {
+      // Se não estiver editando (ex: fechou o modal ou clicou em novo), reseta para o padrão.
+      // Esta linha é redundante se handleModalOpenChange já faz isso, mas garante o reset.
       setNewTemplateData(defaultNewTemplateDataState);
     }
-  }, [editingTemplate, isModalOpen]); // Adicionado isModalOpen para resetar ao abrir para novo
+  }, [editingTemplate]);
 
 
   if (isLoading) return <div className="p-4 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto" /> Carregando templates...</div>;
@@ -359,7 +361,7 @@ export default function ZapTemplates() {
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onClick={() => {
                             setEditingTemplate(template);
-                            // setNewTemplateData é tratado pelo useEffect agora
+                            // O useEffect agora cuida de setNewTemplateData
                             setIsModalOpen(true);
                           }}>
                             <Edit2 className="mr-2 h-3.5 w-3.5" /> Editar
@@ -396,7 +398,7 @@ export default function ZapTemplates() {
         </CardContent>
       </Card>
 
-      {/* Linha 491 original (agora movida para handleModalOpenChange e defaultNewTemplateDataState) */}
+      {/* A linha 507 (antiga 491) está aqui */}
       <Dialog open={isModalOpen} onOpenChange={handleModalOpenChange}>
         <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
           <DialogHeader className="p-6 pb-4 border-b">
@@ -511,7 +513,7 @@ export default function ZapTemplates() {
             </Alert>
           </form>
           <DialogFooter className="p-6 pt-4 border-t">
-            <Button variant="outline" onClick={() => { setIsModalOpen(false); setEditingTemplate(null); setNewTemplateData(defaultNewTemplateDataState); }} disabled={createMutation.isPending}>
+            <Button variant="outline" onClick={() => handleModalOpenChange(false)} disabled={createMutation.isPending}> {/* CORRIGIDO: Chamar handleModalOpenChange */}
               Cancelar
             </Button>
             <Button type="submit" onClick={handleSubmit} disabled={createMutation.isPending} className="neu-button-primary">
