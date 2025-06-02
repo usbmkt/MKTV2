@@ -24,8 +24,6 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Plus, Edit2, Trash2, Search, MessageSquare, Loader2, AlertTriangle, CheckCircle, XCircle, Info, Eye, Send } from 'lucide-react';
-// import { apiRequest } from '@/lib/api'; // Supondo que você tenha um helper de API para o módulo principal
-// Por enquanto, vamos simular chamadas API ou usar fetch diretamente se for um módulo separado
 import { useToast } from '@/components/ui/use-toast'; // Ajuste o caminho se necessário
 
 interface MessageTemplate {
@@ -51,7 +49,6 @@ interface TemplateComponent {
     header_text?: string[];
     header_handle?: string[];
     body_text?: string[][];
-    // Adicione mais exemplos de handles se necessário
   };
   buttons?: TemplateButton[];
 }
@@ -65,7 +62,7 @@ interface TemplateButton {
   couponCode?: string;
 }
 
-const initialTemplates: MessageTemplate[] = [
+const initialTemplatesFromMock: MessageTemplate[] = [ // Renomeado para evitar conflito se você tiver 'initialTemplates' em outro lugar
   {
     id: 'welcome_message_123',
     name: 'welcome_message_123',
@@ -107,12 +104,10 @@ const initialTemplates: MessageTemplate[] = [
   }
 ];
 
-
-// Mock API functions (substitua por chamadas reais)
 const fetchTemplates = async (): Promise<MessageTemplate[]> => {
   console.log("Buscando templates (simulado)...");
-  await new Promise(resolve => setTimeout(resolve, 500)); // Simula delay
-  return JSON.parse(JSON.stringify(initialTemplates)); // Retorna uma cópia para evitar mutação direta
+  await new Promise(resolve => setTimeout(resolve, 500));
+  return JSON.parse(JSON.stringify(initialTemplatesFromMock));
 };
 
 const createTemplate = async (templateData: Omit<MessageTemplate, 'id' | 'status' | 'qualityScore' | 'createdAt' | 'updatedAt'>): Promise<MessageTemplate> => {
@@ -125,37 +120,36 @@ const createTemplate = async (templateData: Omit<MessageTemplate, 'id' | 'status
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
-  initialTemplates.push(newTemplate); // Simula adição ao "banco"
+  initialTemplatesFromMock.push(newTemplate);
   return newTemplate;
 };
 
 const deleteTemplateApi = async (templateId: string): Promise<void> => {
   console.log("Deletando template (simulado):", templateId);
   await new Promise(resolve => setTimeout(resolve, 500));
-  const index = initialTemplates.findIndex(t => t.id === templateId);
+  const index = initialTemplatesFromMock.findIndex(t => t.id === templateId);
   if (index > -1) {
-    initialTemplates.splice(index, 1);
+    initialTemplatesFromMock.splice(index, 1);
   } else {
     throw new Error("Template não encontrado para exclusão.");
   }
 };
 
+const defaultNewTemplateDataState: Partial<MessageTemplate> = {
+  name: '',
+  category: 'UTILITY',
+  language: 'pt_BR',
+  components: [
+    { type: 'BODY', text: '' },
+    { type: 'BUTTONS', buttons: [] }
+  ]
+};
 
 export default function ZapTemplates() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<MessageTemplate | null>(null);
-
-  const [newTemplateData, setNewTemplateData] = useState<Partial<MessageTemplate>>({
-    name: '',
-    category: 'UTILITY',
-    language: 'pt_BR',
-    components: [
-      { type: 'HEADER', format: 'TEXT', text: '' },
-      { type: 'BODY', text: ''},
-      { type: 'BUTTONS', buttons: [] }
-    ]
-  });
+  const [newTemplateData, setNewTemplateData] = useState<Partial<MessageTemplate>>(defaultNewTemplateDataState);
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -171,7 +165,7 @@ export default function ZapTemplates() {
       queryClient.invalidateQueries({ queryKey: ['zapTemplates'] });
       toast({ title: "Template enviado para aprovação!", variant: "default" });
       setIsModalOpen(false);
-      setNewTemplateData({ name: '', category: 'UTILITY', language: 'pt_BR', components: [{ type: 'BODY', text: '' }, {type: 'BUTTONS', buttons: []}] });
+      setNewTemplateData(defaultNewTemplateDataState);
     },
     onError: (err: Error) => {
       toast({ title: "Erro ao criar template", description: err.message, variant: "destructive" });
@@ -188,7 +182,6 @@ export default function ZapTemplates() {
       toast({ title: "Erro ao excluir template", description: err.message, variant: "destructive" });
     }
   });
-
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -259,7 +252,6 @@ export default function ZapTemplates() {
     });
   };
 
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTemplateData.name || !newTemplateData.category || !newTemplateData.language || !newTemplateData.components?.some(c => c.type === 'BODY' && c.text?.trim())) {
@@ -293,6 +285,29 @@ export default function ZapTemplates() {
     }
   };
 
+  const handleModalOpenChange = (isOpen: boolean) => {
+    if (!isOpen) {
+      setIsModalOpen(false);
+      setEditingTemplate(null);
+      setNewTemplateData(defaultNewTemplateDataState); // Usa a constante para resetar
+    } else {
+      // Se for abrir para um novo template (editingTemplate é null), reseta.
+      // Se for para editar, o useEffect já deve ter populado newTemplateData
+      if (!editingTemplate) {
+        setNewTemplateData(defaultNewTemplateDataState);
+      }
+      setIsModalOpen(true);
+    }
+  };
+
+  useEffect(() => {
+    if (editingTemplate) {
+      setNewTemplateData(editingTemplate);
+    } else {
+      setNewTemplateData(defaultNewTemplateDataState);
+    }
+  }, [editingTemplate, isModalOpen]); // Adicionado isModalOpen para resetar ao abrir para novo
+
 
   if (isLoading) return <div className="p-4 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto" /> Carregando templates...</div>;
   if (error) return <div className="p-4 text-center text-red-500"><AlertTriangle className="w-6 h-6 mx-auto mb-2"/>Erro ao carregar templates: {(error as Error).message}</div>;
@@ -304,7 +319,7 @@ export default function ZapTemplates() {
           <h2 className="text-2xl font-bold">Templates de Mensagem</h2>
           <p className="text-muted-foreground">Gerencie templates aprovados pelo WhatsApp</p>
         </div>
-        <Button onClick={() => { setEditingTemplate(null); setNewTemplateData({ name: '', category: 'UTILITY', language: 'pt_BR', components: [{ type: 'BODY', text: '' }, {type: 'BUTTONS', buttons: []}] }); setIsModalOpen(true); }} className="neu-button">
+        <Button onClick={() => { setEditingTemplate(null); setNewTemplateData(defaultNewTemplateDataState); setIsModalOpen(true); }} className="neu-button">
           <Plus className="w-4 h-4 mr-2" />
           Novo Template
         </Button>
@@ -344,7 +359,7 @@ export default function ZapTemplates() {
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onClick={() => {
                             setEditingTemplate(template);
-                            setNewTemplateData(template); 
+                            // setNewTemplateData é tratado pelo useEffect agora
                             setIsModalOpen(true);
                           }}>
                             <Edit2 className="mr-2 h-3.5 w-3.5" /> Editar
@@ -381,7 +396,8 @@ export default function ZapTemplates() {
         </CardContent>
       </Card>
 
-      <Dialog open={isModalOpen} onOpenChange={(isOpen) => { if(!isOpen) { setIsModalOpen(false); setEditingTemplate(null); setNewTemplateData({ name: '', category: 'UTILITY', language: 'pt_BR', components: [{ type: 'BODY', text: '' },{ type: 'BUTTONS', buttons: [] }] }); } else { setIsModalOpen(true); } }}>
+      {/* Linha 491 original (agora movida para handleModalOpenChange e defaultNewTemplateDataState) */}
+      <Dialog open={isModalOpen} onOpenChange={handleModalOpenChange}>
         <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
           <DialogHeader className="p-6 pb-4 border-b">
             <DialogTitle>{editingTemplate ? 'Editar Template' : 'Criar Novo Template de Mensagem'}</DialogTitle>
@@ -488,14 +504,14 @@ export default function ZapTemplates() {
             <Alert variant="default" className="bg-amber-50 border-amber-200 text-amber-700">
               <Info className="h-4 w-4 !text-amber-600" />
               <AlertDescription className="text-xs">
-              <strong>Atenção:</strong> Todas as variáveis devem ser no formato {`{{1}}`}, {`{{2}}`}, etc.
+                <strong>Atenção:</strong> Todas as variáveis devem ser no formato `{{ "{{" }}1}}`, `{{ "{{" }}2}}`, etc.
                 O conteúdo do template deve seguir as <a href="https://developers.facebook.com/docs/whatsapp/message-templates/guidelines" target="_blank" rel="noopener noreferrer" className="underline hover:text-amber-800">diretrizes do WhatsApp</a>.
                 A aprovação pode levar de alguns minutos a algumas horas.
               </AlertDescription>
             </Alert>
           </form>
           <DialogFooter className="p-6 pt-4 border-t">
-            <Button variant="outline" onClick={() => { setIsModalOpen(false); setEditingTemplate(null); setNewTemplateData({ name: '', category: 'UTILITY', language: 'pt_BR', components: [{ type: 'BODY', text: '' },{ type: 'BUTTONS', buttons: [] }] }); }} disabled={createMutation.isPending}>
+            <Button variant="outline" onClick={() => { setIsModalOpen(false); setEditingTemplate(null); setNewTemplateData(defaultNewTemplateDataState); }} disabled={createMutation.isPending}>
               Cancelar
             </Button>
             <Button type="submit" onClick={handleSubmit} disabled={createMutation.isPending} className="neu-button-primary">
