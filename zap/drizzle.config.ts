@@ -1,26 +1,25 @@
- 
 import { defineConfig } from 'drizzle-kit';
-import 'dotenv/config'; // Para carregar .env.zap automaticamente
+import 'dotenv/config'; 
 
-if (!process.env.ZAP_DATABASE_URL) {
-  console.warn("------------------------------------------------------------------");
-  console.warn(" ATENCAO: Variavel ZAP_DATABASE_URL nao definida no arquivo .env.zap");
-  console.warn(" Drizzle Kit pode falhar ou usar um valor padrao inesperado.");
-  console.warn(" Crie um arquivo .env.zap na raiz da pasta 'zap/' com ZAP_DATABASE_URL=sua_url_postgres");
-  console.warn("------------------------------------------------------------------");
-  // Não lançar erro aqui para permitir que o script continue se for apenas para 'generate' sem conexão real
-  // process.exit(1); 
+const DATABASE_URL = postgresql://mktv5renderuser:3CWm0J0MNNQAXdh71LBTDehOQLERdxig@dpg-d0t7v1u3jp1c73eaajpg-a.oregon-postgres.render.com/mktv5render_wb67;
+
+if (!DATABASE_URL) {
+  console.warn('------------------------------------------------------------------');
+  console.warn(' ATENÇÃO: Variável ZAP_DATABASE_URL não definida no arquivo .env.zap');
+  console.warn(' Drizzle Kit pode falhar ou usar um valor padrão inesperado.');
+  console.warn(' Crie um arquivo .env.zap na raiz da pasta "zap/" com:');
+  console.warn(' ZAP_DATABASE_URL=sua_url_postgres');
+  console.warn('------------------------------------------------------------------');
+  // NÃO encerra o processo, pois comandos como 'generate' podem não exigir conexão
 }
 
 export default defineConfig({
   dialect: 'postgresql',
-  schema: './shared/zap_schema.ts',
-  out: './migrations', // Pasta de migrações dentro de zap/
+  schema: './shared/zap_schema.ts', // Arquivo onde está o schema do Drizzle ORM
+  out: './migrations',              // Pasta onde as migrações geradas serão armazenadas
   dbCredentials: {
-    // A URL será lida de process.env.ZAP_DATABASE_URL
-    // Drizzle Kit usará isso para se conectar ao banco para introspecção e migrações.
-    url: process.env.ZAP_DATABASE_URL || "postgresql://mktv5renderuser:3CWm0J0MNNQAXdh71LBTDehOQLERdxig@dpg-d0t7v1u3jp1c73eaajpg-a.oregon-postgres.render.com/mktv5render_wb67",
+    url: DATABASE_URL || '',        // Fallback vazio: evita exposição de credenciais sensíveis
   },
-  verbose: true,
-  strict: true,
+  verbose: true,                    // Mostra logs detalhados durante execução
+  strict: true,                     // Garante checagem rigorosa no Drizzle
 });
