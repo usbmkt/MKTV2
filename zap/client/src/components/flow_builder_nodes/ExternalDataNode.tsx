@@ -1,38 +1,179 @@
-// zap/client/src/components/flow_builder_nodes/ExternalDataFetchNode.tsx
-import React from 'react';
-import { Handle, Position, NodeProps } from '@xyflow/react';
-import { DownloadCloud } from 'lucide-react';
+import React, { memo, useState, useEffect, useCallback, ChangeEvent, KeyboardEvent } from 'react';
+import { Handle, Position, useReactFlow, NodeToolbar, NodeProps as ReactFlowNodeProps } from '@xyflow/react';
+// CORRIGIDO: Path Aliases
+import { ExternalDataNodeData, FlowNodeType, HandleData, ApiResponseMapping } from '@zap_client/features/types/whatsapp_flow_types'; // Reutilizar ApiResponseMapping
+import { Card, CardContent, CardHeader, CardTitle } from '@zap_client/components/ui/card';
+import { Input } from '@zap_client/components/ui/input';
+import { Label } from '@zap_client/components/ui/label';
+import { Button } from '@zap_client/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@zap_client/components/ui/select';
+import { Textarea } from '@zap_client/components/ui/textarea';
+import { DatabaseZap, Trash2, Edit3, PlusCircle, XCircle } from 'lucide-react';
 import { cn } from '@zap_client/lib/utils';
-import { type ExternalDataFetchNodeDataFE } from '@zap_client/features/types/whatsapp_flow_types';
+import { Badge } from '@zap_client/components/ui/badge';
+import { ScrollArea } from '@zap_client/components/ui/scroll-area';
 
-const ExternalDataFetchNode: React.FC<NodeProps<ExternalDataFetchNodeDataFE>> = ({ data, selected, id }) => {
+const defaultHandles: HandleData[] = [
+  { id: 'input', type: 'target', position: Position.Left, label: 'Entrada', style: {top: '50%'} },
+  { id: 'output_success', type: 'source', position: Position.Right, label: 'Sucesso', style: {top: '35%'} },
+  { id: 'output_error', type: 'source', position: Position.Right, label: 'Erro', style: {top: '65%'} },
+];
+
+// CORRIGIDO: Tipagem explícita das props
+const ExternalDataNodeComponent: React.FC<ReactFlowNodeProps<ExternalDataNodeData>> = ({ id, data, selected }) => {
+  const { setNodes } = useReactFlow();
+
+  const [label, setLabel] = useState<string>(data.label || 'Buscar Dados Externos');
+  const [isEditingLabel, setIsEditingLabel] = useState<boolean>(false);
+  const [dataSourceUrl, setDataSourceUrl] = useState<string>(data.dataSourceUrl || '');
+  const [requestType, setRequestType] = useState<ExternalDataNodeData['requestType']>(data.requestType || 'GET');
+  const [requestPayload, setRequestPayload] = useState<string>( // Armazenar como string JSON
+    typeof data.requestPayload === 'string' ? data.requestPayload : (data.requestPayload ? JSON.stringify(data.requestPayload, null, 2) : '')
+  );
+  const [responseMapping, setResponseMapping] = useState<ApiResponseMapping[]>(data.responseMapping || []);
+
+  useEffect(() => {
+    setLabel(data.label || 'Buscar Dados Externos');
+    setDataSourceUrl(data.dataSourceUrl || '');
+    setRequestType(data.requestType || 'GET');
+    setRequestPayload(
+        typeof data.requestPayload === 'string' ? data.requestPayload : (data.requestPayload ? JSON.stringify(data.requestPayload, null, 2) : '')
+    );
+    setResponseMapping(data.responseMapping || []);
+  }, [data]);
+
+  const updateNodePartialData = useCallback(
+    (newData: Partial<ExternalDataNodeData>) => {
+      setNodes((nds) =>
+        nds.map((node) => {
+          if (node.id === id) {
+            const currentData = node.data as ExternalDataNodeData;
+            return { ...node, data: { ...currentData, ...newData } };
+          }
+          return node;
+        })
+      );
+    },
+    [id, setNodes]
+  );
+  
+  const handleLabelChange = (e: ChangeEvent<HTMLInputElement>) => setLabel(e.target.value);
+  const handleLabelSave = () => {
+    updateNodePartialData({ label });
+    setIsEditingLabel(false);
+  };
+
+  const handleUrlChange = (e: ChangeEvent<HTMLInputElement>) => {
+    setDataSourceUrl(e.target.value);
+    updateNodePartialData({ dataSourceUrl: e.target.value });
+  };
+
+  const handleRequestTypeChange = (value: string) => {
+    const newType = value as ExternalDataNodeData['requestType'];
+    setRequestType(newType);
+    updateNodePartialData({ requestType: newType });
+  };
+
+  const handlePayloadChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
+    setRequestPayload(e.target.value);
+    try {
+        // Tenta parsear para validar, mas armazena como string
+        const parsed = JSON.parse(e.target.value);
+        updateNodePartialData({ requestPayload: parsed }); // Envia objeto parseado se válido
+    } catch (error) {
+        updateNodePartialData({ requestPayload: e.target.value }); // Envia string se inválido
+    }
+  };
+  
+  const handleMappingChange = (index: number, field: keyof ApiResponseMapping, value: string) => {
+    const newMappings = [...responseMapping];
+    (newMappings[index] as any)[field] = value;
+    setResponseMapping(newMappings);
+    updateNodePartialData({ responseMapping: newMappings });
+  };
+
+  const addMapping = () => {
+    const newMap: ApiResponseMapping = { id: `map-${Date.now()}`, sourcePath: '', targetVariable: '' };
+    const newMappings = [...responseMapping, newMap];
+    setResponseMapping(newMappings);
+    updateNodePartialData({ responseMapping: newMappings });
+  };
+
+  const removeMapping = (indexToRemove: number) => {
+    const newMappings = responseMapping.filter((_: ApiResponseMapping, index: number) => index !== indexToRemove);
+    setResponseMapping(newMappings);
+    updateNodePartialData({ responseMapping: newMappings });
+  };
+
+  const handleDeleteNode = () => {
+    setNodes((nds) => nds.filter(node => node.id !== id));
+  };
+
+  const handlesToRender = data.handles || defaultHandles;
+
   return (
-    <div
-      className={cn(
-        "p-3 rounded-md shadow-md bg-card border border-lime-600/70 w-72",
-        selected && "ring-2 ring-lime-700 ring-offset-2 ring-offset-background"
-      )}
-    >
-      <Handle type="target" position={Position.Left} id={`${id}-target`} className="!bg-slate-400 w-2.5 h-2.5" />
-      <div className="flex items-center mb-2">
-        <DownloadCloud className="w-4 h-4 mr-2 text-lime-700" />
-        <div className="text-sm font-semibold text-foreground">{data.label || 'Buscar Dados Externos'}</div>
-      </div>
-      <div className="text-xs text-muted-foreground space-y-0.5">
-        <p className="truncate" title={data.url || 'URL não configurada'}>
-            <span className="font-medium">URL:</span> {data.url || 'Configure...'}
-        </p>
-         <p className="truncate">
-            <span className="font-medium">Método:</span> {data.method || 'GET'}
-        </p>
-        <p className="truncate">
-            <span className="font-medium">Salvar em:</span> {data.saveToVariable || 'N/D'}
-        </p>
-      </div>
-      <Handle type="source" position={Position.Right} id="success" className="!bg-green-500 w-2.5 h-2.5 !top-[35%]" title="Sucesso"/>
-      <Handle type="source" position={Position.Right} id="failure" className="!bg-red-500 w-2.5 h-2.5 !top-[65%]" title="Falha"/>
-    </div>
+    <Card className={cn("w-96 shadow-md neu-card", selected && "ring-2 ring-emerald-500 ring-offset-2")}>
+      <NodeToolbar isVisible={selected} position={Position.Top} className="flex gap-2">
+        <Button variant="outline" size="sm" onClick={() => setIsEditingLabel(true)} title="Editar Nome"><Edit3 className="h-4 w-4" /></Button>
+        <Button variant="destructive" size="sm" onClick={handleDeleteNode} title="Remover Nó"><Trash2 className="h-4 w-4" /></Button>
+      </NodeToolbar>
+
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 pt-3 px-4 bg-emerald-500/10 dark:bg-emerald-700/20 rounded-t-lg">
+         {isEditingLabel ? (
+            <div className="flex items-center gap-2">
+                <Input value={label} onChange={handleLabelChange} className="text-sm h-7" autoFocus onBlur={handleLabelSave} onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => e.key === 'Enter' && handleLabelSave()} />
+                <Button size="sm" onClick={handleLabelSave} className="h-7">Salvar</Button>
+            </div>
+        ) : (
+            <CardTitle className="text-sm font-semibold flex items-center cursor-pointer" onClick={() => setIsEditingLabel(true)}>
+                <DatabaseZap className="h-4 w-4 mr-2 text-emerald-600 dark:text-emerald-400" />
+                {data.label || 'Dados Externos'}
+            </CardTitle>
+        )}
+        <Badge variant="default" className="bg-emerald-500 text-white capitalize">{data.nodeType.replace('Node', '')}</Badge>
+      </CardHeader>
+      <CardContent className="p-3 space-y-3 max-h-96">
+        <ScrollArea className="h-80 pr-3">
+            <div><Label htmlFor={`ds-url-${id}`} className="text-xs">URL da Fonte de Dados *</Label><Input id={`ds-url-${id}`} value={dataSourceUrl} onChange={handleUrlChange} placeholder="https://api.minhafonte.com/dados" className="mt-1 neu-input"/></div>
+            <div>
+                <Label htmlFor={`ds-req-type-${id}`} className="text-xs">Tipo de Requisição *</Label>
+                <Select value={requestType} onValueChange={handleRequestTypeChange}>
+                    <SelectTrigger id={`ds-req-type-${id}`} className="mt-1 neu-input"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="GET">GET</SelectItem>
+                        <SelectItem value="POST">POST</SelectItem>
+                    </SelectContent>
+                </Select>
+            </div>
+            {requestType === 'POST' && (
+                <div><Label htmlFor={`ds-payload-${id}`} className="text-xs">Payload da Requisição (JSON)</Label><Textarea id={`ds-payload-${id}`} value={requestPayload} onChange={handlePayloadChange} placeholder='{ "filtro": "valor" }' className="mt-1 neu-input" rows={3}/></div>
+            )}
+             <div className="space-y-1 border-t pt-2 mt-2">
+                <div className="flex justify-between items-center"><Label className="text-xs">Mapeamento da Resposta para Variáveis</Label><Button variant="link" size="xs" onClick={addMapping}><PlusCircle className="h-3 w-3 mr-1"/>Add Mapeamento</Button></div>
+                {responseMapping.map((map: ApiResponseMapping, index: number) => (
+                    <div key={map.id || index} className="flex items-center gap-1">
+                        <Input value={map.sourcePath} onChange={(e: ChangeEvent<HTMLInputElement>) => handleMappingChange(index, 'sourcePath', e.target.value)} placeholder="Caminho JSON (Ex: $.user.id)" className="neu-input text-xs h-7"/>
+                        <Input value={map.targetVariable} onChange={(e: ChangeEvent<HTMLInputElement>) => handleMappingChange(index, 'targetVariable', e.target.value)} placeholder="Nome Variável (Ex: id_usuario_api)" className="neu-input text-xs h-7"/>
+                        <Button variant="ghost" size="icon" onClick={() => removeMapping(index)} className="h-7 w-7 text-destructive"><XCircle className="h-3 w-3"/></Button>
+                    </div>
+                ))}
+            </div>
+        </ScrollArea>
+      </CardContent>
+
+      {handlesToRender.map((handleItem: HandleData) => (
+        <Handle
+          key={handleItem.id}
+          id={handleItem.id}
+          type={handleItem.type}
+          position={handleItem.position}
+          isConnectable={true}
+          style={{ ...handleItem.style, background: '#10b981', width: '10px', height: '10px' }} // Cor Emerald
+          aria-label={handleItem.label}
+        />
+      ))}
+    </Card>
   );
 };
 
-export default ExternalDataFetchNode; 
+export default memo(ExternalDataNodeComponent);
