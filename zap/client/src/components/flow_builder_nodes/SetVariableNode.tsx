@@ -1,13 +1,12 @@
 import React, { memo, useState, useEffect, useCallback, ChangeEvent, KeyboardEvent } from 'react';
 import { Handle, Position, useReactFlow, NodeToolbar, NodeProps as ReactFlowNodeProps } from '@xyflow/react';
-// CORRIGIDO: Path Aliases
 import { SetVariableNodeData, FlowNodeType, HandleData, VariableAssignment, VariableType } from '@zap_client/features/types/whatsapp_flow_types';
 import { Card, CardContent, CardHeader, CardTitle } from '@zap_client/components/ui/card';
 import { Input } from '@zap_client/components/ui/input';
 import { Label } from '@zap_client/components/ui/label';
 import { Button } from '@zap_client/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@zap_client/components/ui/select';
-import { VariableIcon as VarIcon, Trash2, Edit3, PlusCircle, XCircle } from 'lucide-react'; // Renomeado Variable para VarIcon
+import { VariableIcon as VarIconPojo, Trash2, Edit3, PlusCircle, XCircle } from 'lucide-react'; // Renomeado para evitar conflito
 import { cn } from '@zap_client/lib/utils';
 import { Badge } from '@zap_client/components/ui/badge';
 import { ScrollArea } from '@zap_client/components/ui/scroll-area';
@@ -20,11 +19,9 @@ const defaultHandles: HandleData[] = [
 
 const valueSourceTypes: VariableAssignment['sourceType'][] = ['static', 'variable', 'expression', 'api_response'];
 
-// CORRIGIDO: Tipagem explícita das props
 const SetVariableNodeComponent: React.FC<ReactFlowNodeProps<SetVariableNodeData>> = ({ id, data, selected }) => {
   const { setNodes } = useReactFlow();
 
-  // Estados locais baseados em `data`
   const [label, setLabel] = useState<string>(data.label || 'Definir Variável');
   const [isEditingLabel, setIsEditingLabel] = useState<boolean>(false);
   const [assignments, setAssignments] = useState<VariableAssignment[]>(
@@ -37,13 +34,13 @@ const SetVariableNodeComponent: React.FC<ReactFlowNodeProps<SetVariableNodeData>
     setAssignments(data.assignments || [{ id: `asg-${Date.now()}`, variableName: 'novaVariavel', value: '', sourceType: 'static' }]);
   }, [data]);
 
-  const updateNodePartialData = useCallback(
-    (newData: Partial<SetVariableNodeData>) => {
+  const updateNodeAssignments = useCallback(
+    (newAssignments: VariableAssignment[]) => {
       setNodes((nds) =>
         nds.map((node) => {
           if (node.id === id) {
             const currentData = node.data as SetVariableNodeData;
-            return { ...node, data: { ...currentData, ...newData } };
+            return { ...node, data: { ...currentData, assignments: newAssignments } };
           }
           return node;
         })
@@ -54,33 +51,46 @@ const SetVariableNodeComponent: React.FC<ReactFlowNodeProps<SetVariableNodeData>
   
   const handleLabelChange = (e: ChangeEvent<HTMLInputElement>) => setLabel(e.target.value);
   const handleLabelSave = () => {
-    updateNodePartialData({ label });
+    // Atualizar apenas o label no data do nó
+    setNodes((nds) =>
+        nds.map((node) => {
+          if (node.id === id) {
+            const currentData = node.data as SetVariableNodeData;
+            return { ...node, data: { ...currentData, label: label } };
+          }
+          return node;
+        })
+      );
     setIsEditingLabel(false);
   };
   
   const handleAssignmentChange = (index: number, field: keyof VariableAssignment, value: string | VariableAssignment['sourceType']) => {
-    const newAssignments = [...assignments];
-    (newAssignments[index] as any)[field] = value; // Tipagem any para simplificar, mas poderia ser mais estrito
+    const newAssignments = assignments.map((asg, i) => {
+        if (i === index) {
+            return { ...asg, [field]: value };
+        }
+        return asg;
+    });
     setAssignments(newAssignments);
-    updateNodePartialData({ assignments: newAssignments });
+    updateNodeAssignments(newAssignments);
   };
 
   const addAssignment = () => {
     const newAssignment: VariableAssignment = { 
-        id: `asg-${Date.now()}`, 
+        id: `asg-${Date.now()}-${assignments.length}`, 
         variableName: `var${assignments.length + 1}`, 
         value: '', 
         sourceType: 'static' 
     };
     const newAssignments = [...assignments, newAssignment];
     setAssignments(newAssignments);
-    updateNodePartialData({ assignments: newAssignments });
+    updateNodeAssignments(newAssignments);
   };
 
   const removeAssignment = (indexToRemove: number) => {
     const newAssignments = assignments.filter((_: VariableAssignment, index: number) => index !== indexToRemove);
     setAssignments(newAssignments);
-    updateNodePartialData({ assignments: newAssignments });
+    updateNodeAssignments(newAssignments);
   };
 
   const handleDeleteNode = () => {
@@ -104,7 +114,7 @@ const SetVariableNodeComponent: React.FC<ReactFlowNodeProps<SetVariableNodeData>
             </div>
         ) : (
             <CardTitle className="text-sm font-semibold flex items-center cursor-pointer" onClick={() => setIsEditingLabel(true)}>
-                <VarIcon className="h-4 w-4 mr-2 text-lime-600 dark:text-lime-400" />
+                <VarIconPojo className="h-4 w-4 mr-2 text-lime-600 dark:text-lime-400" />
                 {data.label || 'Definir Variável'}
             </CardTitle>
         )}
@@ -115,7 +125,7 @@ const SetVariableNodeComponent: React.FC<ReactFlowNodeProps<SetVariableNodeData>
             {assignments.map((assignment: VariableAssignment, index: number) => (
                 <Card key={assignment.id || index} className="p-2 mb-2 neu-card-inset space-y-1">
                     <div className="flex items-center justify-end">
-                        {assignments.length > 1 && 
+                        {assignments.length > 0 &&  // Permitir remover mesmo se for o último, para limpar
                             <Button variant="ghost" size="icon" onClick={() => removeAssignment(index)} className="h-6 w-6 text-destructive"><XCircle className="h-3.5 w-3.5"/></Button>
                         }
                     </div>
@@ -127,7 +137,7 @@ const SetVariableNodeComponent: React.FC<ReactFlowNodeProps<SetVariableNodeData>
                         <div>
                             <Label htmlFor={`var-source-${id}-${index}`} className="text-xs">Fonte do Valor</Label>
                             <Select value={assignment.sourceType} onValueChange={(value: string) => handleAssignmentChange(index, 'sourceType', value as VariableAssignment['sourceType'])}>
-                                <SelectTrigger id={`var-source-${id}-${index}`} className="neu-input text-xs h-8"><SelectValue/></SelectTrigger>
+                                <SelectTrigger id={`var-source-${id}-${index}`} className="neu-input text-xs h-8"><SelectValue /></SelectTrigger>
                                 <SelectContent>
                                     {valueSourceTypes.map(vst => <SelectItem key={vst} value={vst}>{vst.replace('_', ' ').toLocaleUpperCase()}</SelectItem>)}
                                 </SelectContent>
@@ -135,7 +145,7 @@ const SetVariableNodeComponent: React.FC<ReactFlowNodeProps<SetVariableNodeData>
                         </div>
                         <div>
                             <Label htmlFor={`var-value-${id}-${index}`} className="text-xs">Valor</Label>
-                            <Input id={`var-value-${id}-${index}`} value={assignment.value} onChange={(e: ChangeEvent<HTMLInputElement>) => handleAssignmentChange(index, 'value', e.target.value)} placeholder="Valor ou {{outra_var}}" className="neu-input text-xs h-8"/>
+                            <Input id={`var-value-${id}-${index}`} value={String(assignment.value ?? '')} onChange={(e: ChangeEvent<HTMLInputElement>) => handleAssignmentChange(index, 'value', e.target.value)} placeholder="Valor ou {{outra_var}}" className="neu-input text-xs h-8"/>
                         </div>
                         {assignment.sourceType === 'expression' && (
                              <div>
@@ -163,7 +173,7 @@ const SetVariableNodeComponent: React.FC<ReactFlowNodeProps<SetVariableNodeData>
           type={handleItem.type}
           position={handleItem.position}
           isConnectable={true}
-          style={{ ...handleItem.style, background: '#84cc16', width: '10px', height: '10px' }} // Cor Lime
+          style={{ ...handleItem.style, background: '#84cc16', width: '10px', height: '10px' }} 
           aria-label={handleItem.label}
         />
       ))}
