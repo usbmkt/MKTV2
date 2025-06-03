@@ -1,18 +1,18 @@
-// Предполагаемый путь: zap/client/src/components/ZapWhatsAppConnection.tsx
-import React, { useState, useEffect, useCallback, ChangeEvent } from "react"; // Adicionado ChangeEvent
+// zap/client/src/components/ZapWhatsAppConnection.tsx
+import React, { useState, useEffect, useCallback, ChangeEvent } from "react";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@zap_client/components/ui/card"; // Ajustado para @zap_client
-import { Button } from "@zap_client/components/ui/button"; // Ajustado para @zap_client
-import { Badge } from "@zap_client/components/ui/badge"; // Ajustado para @zap_client
-import { Input } from "@zap_client/components/ui/input"; // Ajustado para @zap_client
-import { Label } from "@zap_client/components/ui/label"; // Ajustado para @zap_client
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@zap_client/components/ui/tabs"; // Ajustado para @zap_client
-import { Alert, AlertDescription } from "@zap_client/components/ui/alert"; // Ajustado para @zap_client
+} from "@zap_client/components/ui/card";
+import { Button } from "@zap_client/components/ui/button";
+import { Badge } from "@zap_client/components/ui/badge";
+import { Input } from "@zap_client/components/ui/input";
+import { Label } from "@zap_client/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@zap_client/components/ui/tabs";
+import { Alert, AlertDescription } from "@zap_client/components/ui/alert"; // Renomeado AlertDescription para UIAlertDescription se houver conflito com DialogDescription
 import {
   Smartphone,
   QrCode,
@@ -21,14 +21,15 @@ import {
   RefreshCw,
   Settings,
   Copy,
-  Download, // Este ícone não é usado no JSX abaixo, mas está importado
+  Download,
   Shield,
-  Zap, // Renomeado para ZapIcon para evitar conflito se este componente for nomeado Zap
+  Zap as ZapIcon, // Renomeado para ZapIcon
   Loader2,
   Unlink,
   Info,
 } from "lucide-react";
-import QRCodeDisplay from "./QRCodeDisplay"; // Verifique se este caminho está correto
+import QRCodeReact from "qrcode.react"; // Usando QRCodeReact diretamente para teste
+// import QRCodeDisplay from "./QRCodeDisplay"; // Certifique-se que este componente existe ou crie-o
 
 interface WhatsAppConnectionStatus {
   status:
@@ -50,8 +51,6 @@ interface ApiError {
   details?: any;
 }
 
-// A mockApiCall será substituída por chamadas reais ao backend do "zap"
-// que por sua vez chamará o seu WHATSAPP_BOT_URL
 const mockApiCall = async (action: string, payload?: any): Promise<any> => {
   console.log(`[API Mock] Action: ${action}`, payload);
   await new Promise((resolve) =>
@@ -70,8 +69,8 @@ const mockApiCall = async (action: string, payload?: any): Promise<any> => {
     if (rand < 0.9)
       return {
         status: "CONNECTED",
-        connectedPhoneNumber: "+1234567890", // Exemplo
-        deviceName: "iPhone 13", // Exemplo
+        connectedPhoneNumber: "+1234567890",
+        deviceName: "iPhone 13",
         batteryLevel: Math.floor(Math.random() * 70) + 30,
         lastSeen: new Date(
           Date.now() - Math.random() * 100000,
@@ -85,28 +84,22 @@ const mockApiCall = async (action: string, payload?: any): Promise<any> => {
   return { status: "INITIALIZING" };
 };
 
-interface WhatsAppConnectionProps {
+interface ZapWhatsAppConnectionProps {
   onConnectionChange?: (status: WhatsAppConnectionStatus) => void;
 }
 
-export default function WhatsAppConnection({ // Considere renomear para ZapWhatsAppConnection se o nome do arquivo for esse
+export default function ZapWhatsAppConnection({
   onConnectionChange,
-}: WhatsAppConnectionProps = {}) {
+}: ZapWhatsAppConnectionProps) { // Removido valor padrão {}
   const [connectionStatus, setConnectionStatus] =
     useState<WhatsAppConnectionStatus>({ status: "INITIALIZING" });
   const [isLoading, setIsLoading] = useState(false);
   const [apiToken, setApiToken] = useState("");
 
-  // Estas funções (fetchStatus, generateAndSetQRCode, handleDisconnect)
-  // devem ser atualizadas para usar o `zapApi` para chamar os endpoints
-  // do backend do módulo "zap" (ex: /api/zap/connection/status)
   const fetchStatus = useCallback(
     async (showLoading = true) => {
       if (showLoading) setIsLoading(true);
       try {
-        // Exemplo de como seria com uma API real:
-        // const response = await fetch('/api/zap/connection/status'); // Ajuste o endpoint
-        // const data: WhatsAppConnectionStatus = await response.json();
         const data: WhatsAppConnectionStatus = await mockApiCall("get-status");
         setConnectionStatus(data);
         if (onConnectionChange) onConnectionChange(data);
@@ -126,8 +119,6 @@ export default function WhatsAppConnection({ // Considere renomear para ZapWhats
   const generateAndSetQRCode = useCallback(async () => {
     setIsLoading(true);
     try {
-      // Exemplo: const response = await fetch('/api/zap/connection/connect', { method: 'POST' });
-      // const data: WhatsAppConnectionStatus = await response.json();
       const data: WhatsAppConnectionStatus = await mockApiCall("generate-qr");
       setConnectionStatus(data);
     } catch (error) {
@@ -151,7 +142,6 @@ export default function WhatsAppConnection({ // Considere renomear para ZapWhats
       return;
     setIsLoading(true);
     try {
-      // Exemplo: await fetch('/api/zap/connection/disconnect', { method: 'POST' });
       await mockApiCall("disconnect");
       setConnectionStatus({ status: "DISCONNECTED", qrCode: null });
       if (onConnectionChange) onConnectionChange({ status: "DISCONNECTED" });
@@ -190,12 +180,10 @@ export default function WhatsAppConnection({ // Considere renomear para ZapWhats
       });
   };
 
-  // Este webhookUrlToCopy deve corresponder ao endpoint do SEU backend do módulo "zap"
-  // que receberá os webhooks do WhatsApp (seja do seu serviço de bot ou da Meta)
-  const webhookUrlToCopy = `${window.location.origin}/api/zap/webhook`; // Exemplo de endpoint
+  const webhookUrlToCopy = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/zap/webhook`;
 
   return (
-    <Card className="shadow-xl bg-background">
+    <Card className="shadow-xl bg-background neu-card">
       <CardHeader className="border-b">
         <div className="flex justify-between items-center">
           <CardTitle className="flex items-center">
@@ -246,15 +234,15 @@ export default function WhatsAppConnection({ // Considere renomear para ZapWhats
       </CardHeader>
       <Tabs defaultValue="connect" className="w-full">
         <TabsList className="grid w-full grid-cols-3 sticky top-0 z-10 bg-background/95 backdrop-blur-sm px-4 pt-4">
-          <TabsTrigger value="connect" className="text-xs">
-            <Zap className="mr-1.5 h-3.5 w-3.5" /> {/* Se Zap é um ícone de lucide-react */}
+          <TabsTrigger value="connect" className="text-xs neu-button">
+            <ZapIcon className="mr-1.5 h-3.5 w-3.5" />
             Connect
           </TabsTrigger>
-          <TabsTrigger value="status" className="text-xs">
+          <TabsTrigger value="status" className="text-xs neu-button">
             <Info className="mr-1.5 h-3.5 w-3.5" />
             Status
           </TabsTrigger>
-          <TabsTrigger value="settings" className="text-xs">
+          <TabsTrigger value="settings" className="text-xs neu-button">
             <Settings className="mr-1.5 h-3.5 w-3.5" />
             Advanced
           </TabsTrigger>
@@ -268,12 +256,19 @@ export default function WhatsAppConnection({ // Considere renomear para ZapWhats
                   Scan the QR Code below with the WhatsApp app on your phone to
                   connect.
                 </p>
-                <QRCodeDisplay // Certifique-se que este componente existe e está correto
-                  qrCodeValue={connectionStatus.qrCode}
-                  onRefresh={generateAndSetQRCode}
-                  isLoading={isLoading}
-                />
-                <Alert className="mt-4">
+                {/* Substituído QRCodeDisplay por QRCodeReact diretamente para teste */}
+                <div className="p-2 border-4 border-primary rounded-lg bg-white inline-block neu-card">
+                  <QRCodeReact value={connectionStatus.qrCode} size={256} level="M" />
+                </div>
+                <div className="flex space-x-2">
+                    <Button onClick={generateAndSetQRCode} disabled={isLoading} variant="outline" className="neu-button">
+                        <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} /> Renovar QR
+                    </Button>
+                    {/* <Button onClick={downloadQRCodeImage} variant="outline" className="neu-button"> 
+                        <Download className="mr-2 h-4 w-4" /> Baixar QR
+                    </Button> */}
+                </div>
+                <Alert className="mt-4 neu-card-inset">
                   <Smartphone className="h-4 w-4" />
                   <AlertDescription className="text-xs">
                     Open WhatsApp &gt; Settings &gt; Linked Devices &gt; Link a
@@ -301,6 +296,7 @@ export default function WhatsAppConnection({ // Considere renomear para ZapWhats
                 onClick={handleDisconnect}
                 variant="destructive"
                 disabled={isLoading}
+                  className="neu-button"
               >
                 {isLoading ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -327,7 +323,7 @@ export default function WhatsAppConnection({ // Considere renomear para ZapWhats
                     ? `Error: ${connectionStatus.lastError}`
                     : "Click to generate the QR Code and start connecting."}
                 </p>
-                <Button onClick={generateAndSetQRCode} disabled={isLoading}>
+                <Button onClick={generateAndSetQRCode} disabled={isLoading} className="neu-button-primary">
                   <QrCode className="mr-2 h-4 w-4" /> Generate QR Code
                 </Button>
               </div>
@@ -335,7 +331,7 @@ export default function WhatsAppConnection({ // Considere renomear para ZapWhats
         </TabsContent>
 
         <TabsContent value="status" className="p-6 space-y-4">
-          <Card>
+          <Card className="neu-card">
             <CardHeader>
               <CardTitle className="text-base">
                 Connection Information
@@ -395,7 +391,7 @@ export default function WhatsAppConnection({ // Considere renomear para ZapWhats
           <Button
             onClick={() => fetchStatus()}
             variant="outline"
-            className="w-full"
+            className="w-full neu-button"
             disabled={isLoading}
           >
             <RefreshCw
@@ -406,7 +402,7 @@ export default function WhatsAppConnection({ // Considere renomear para ZapWhats
         </TabsContent>
 
         <TabsContent value="settings" className="p-6 space-y-6">
-          <Card>
+          <Card className="neu-card">
             <CardHeader>
               <CardTitle className="text-base">
                 API Settings (Optional)
@@ -417,22 +413,23 @@ export default function WhatsAppConnection({ // Considere renomear para ZapWhats
                 <Label htmlFor="apiToken" className="text-xs">
                   Your API Token (if using external provider)
                 </Label>
+                {/* LINHA ~200 - A linha do Input. Verifique esta sintaxe com atenção. */}
                 <Input
                   id="apiToken"
                   type="password"
                   placeholder="Paste your token here if needed"
                   value={apiToken}
-                    onChange={(e: ChangeEvent<HTMLInputElement>) => setApiToken(e.target.value)} // Tipagem adicionada
-                  className="mt-1"
+                    onChange={(e: ChangeEvent<HTMLInputElement>) => setApiToken(e.target.value)}
+                  className="mt-1 neu-input"
                 />
               </div>
-              <Button className="text-xs" size="sm" type="button">
+              <Button className="text-xs neu-button" size="sm" type="button">
                 <Settings className="mr-1.5 h-3.5 w-3.5" />
                 <span>Save Token</span>
               </Button>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="neu-card">
             <CardHeader>
               <CardTitle className="text-base">
                 Webhook for Received Messages
@@ -444,17 +441,17 @@ export default function WhatsAppConnection({ // Considere renomear para ZapWhats
                 and events.
               </p>
               <div className="flex items-center space-x-2">
-                <Input value={webhookUrlToCopy} readOnly className="text-xs" />
+                <Input value={webhookUrlToCopy} readOnly className="text-xs neu-input" />
                 <Button
                   variant="outline"
                   size="icon"
                   onClick={() => copyToClipboard(webhookUrlToCopy)}
-                  className="h-9 w-9"
+                  className="h-9 w-9 neu-button"
                 >
                   <Copy className="h-4 w-4" />
                 </Button>
               </div>
-              <Alert>
+              <Alert className="neu-card-inset">
                 <Shield className="h-4 w-4" />
                 <AlertDescription className="text-xs">
                   This endpoint is secure and expects specific data from the
@@ -469,49 +466,6 @@ export default function WhatsAppConnection({ // Considere renomear para ZapWhats
   );
 }
 
-// Se QRCodeDisplay é um componente simples, pode ser algo assim:
-// (Lembre-se de criar o arquivo QRCodeDisplay.tsx se ele não existir)
-//
-// // Exemplo para zap/client/src/components/QRCodeDisplay.tsx
-// import React from 'react';
-// import QRCodeReact from 'qrcode.react';
-// import { Button } from '@zap_client/components/ui/button';
-// import { RefreshCw, Download } from 'lucide-react';
-
-// interface QRCodeDisplayProps {
-//   qrCodeValue: string;
-//   onRefresh: () => void;
-//   isLoading: boolean;
-// }
-
-// const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({ qrCodeValue, onRefresh, isLoading }) => {
-//   const downloadQRCodeImage = () => {
-//     const canvas = document.querySelector('canvas'); // Pode precisar de um seletor mais específico
-//     if (canvas) {
-//       const pngUrl = canvas.toDataURL('image/png').replace('image/png', 'image/octet-stream');
-//       let downloadLink = document.createElement('a');
-//       downloadLink.href = pngUrl;
-//       downloadLink.download = 'whatsapp-qr.png';
-//       document.body.appendChild(downloadLink);
-//       downloadLink.click();
-//       document.body.removeChild(downloadLink);
-//     }
-//   };
-
-//   return (
-//     <div className="flex flex-col items-center space-y-4">
-//       <div className="p-2 border-4 border-primary rounded-lg bg-white inline-block">
-//         <QRCodeReact value={qrCodeValue} size={256} level="M" />
-//       </div>
-//       <div className="flex space-x-2">
-//         <Button onClick={onRefresh} disabled={isLoading} variant="outline">
-//           <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} /> Renovar QR
-//         </Button>
-//         <Button onClick={downloadQRCodeImage} variant="outline">
-//           <Download className="mr-2 h-4 w-4" /> Baixar QR
-//         </Button>
-//       </div>
-//     </div>
-//   );
-// };
-// export default QRCodeDisplay;
+// Removida a função downloadQRCode pois não era usada no JSX de QRCodeDisplay
+// e para simplificar, já que QRCodeDisplay não foi fornecido.
+// Se precisar dela, pode adicionar de volta.
