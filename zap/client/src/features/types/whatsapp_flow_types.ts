@@ -1,230 +1,183 @@
 // zap/client/src/features/types/whatsapp_flow_types.ts
-import { Node, Edge } from '@xyflow/react'; // Edge pode ser útil também
+import { Node } from '@xyflow/react';
 
-// Interface Genérica para Erros de API (usada em ZapAnalytics, ZapConversations, etc.)
+// Interface Genérica para Erros de API
 export interface ApiError {
   message: string;
-  details?: any; // Pode ser mais específico se souber a estrutura do erro
+  details?: any;
   statusCode?: number;
 }
 
-// --- Tipos de Nós do Flow Builder ---
+// --- Tipos de Dados para Nós Customizados ---
+// Substitua os comentários com as propriedades reais de cada nó.
 
-// TriggerNode
 export interface TriggerNodeData {
   label?: string;
   triggerType?: 'keyword' | 'manual' | 'webhook' | 'form_submission' | 'api_call';
   keywords?: string[];
-  formId?: string; // Exemplo se for form_submission
-  webhookUrl?: string; // Exemplo se for webhook
-  // ... outras propriedades para TriggerNode
+  formId?: string;
+  webhookUrl?: string;
+  // Adicione aqui as propriedades específicas do TriggerNodeData
 }
-export type TriggerNodeType = Node<TriggerNodeData, 'trigger'>;
 
-// TextMessageNode
 export interface TextMessageNodeData {
   label?: string;
   message?: string;
-  // ... outras propriedades para TextMessageNode
+  // Adicione aqui as propriedades específicas do TextMessageNodeData
 }
-export type TextMessageNodeType = Node<TextMessageNodeData, 'textMessage'>;
 
-// QuestionNode (Input/Quick Reply)
 export interface QuestionNodeData {
   label?: string;
   questionText?: string;
   expectedResponseType?: 'text' | 'number' | 'email' | 'quick_reply';
   variableToSaveAnswer?: string;
-  quickReplies?: string[]; // Se for quick_reply
-  // ... outras propriedades para QuestionNode
+  quickReplies?: string[];
+  // Adicione aqui as propriedades específicas do QuestionNodeData
 }
-export type QuestionNodeType = Node<QuestionNodeData, 'question'>;
 
-// ListMessageNode
-export interface ListItemData {
+export interface ListItemData { // Usado por ListMessageNodeDataFE
   id: string;
   title: string;
   description?: string;
 }
-export interface ListSectionData {
+
+export interface ListSectionData { // Usado por ListMessageNodeDataFE
   title: string;
   rows: ListItemData[];
 }
-export interface ListMessageNodeDataFE { // FE para FrontEnd, se for diferente do backend
-  label?: string;
-  headerText?: string; // Texto do cabeçalho da lista
-  bodyText?: string;   // Corpo da mensagem da lista
-  footerText?: string; // Rodapé da lista
-  buttonText?: string; // Texto do botão que abre a lista
-  sections?: ListSectionData[];
-  // ... outras propriedades para ListMessageNode
-}
-export type ListMessageNodeType = Node<ListMessageNodeDataFE, 'listMessage'>;
 
-// ButtonsMessageNode
-export interface ButtonOptionData {
-  id: string;
-  displayText: string;
-  // type?: 'REPLY' | 'URL' | 'CALL'; // Se os botões tiverem tipos
-  // url?: string; // se for URL
-  // phoneNumber?: string; // se for CALL
+export interface ListMessageNodeDataFE {
+  label?: string;
+  headerText?: string;
+  bodyText?: string;
+  footerText?: string;
+  buttonText?: string;
+  sections?: ListSectionData[];
+  // Adicione aqui as propriedades específicas do ListMessageNodeDataFE
+}
+
+export interface ButtonOptionData { // Usado por ButtonsMessageNodeData
+    id: string;
+    displayText: string;
 }
 export interface ButtonsMessageNodeData {
   label?: string;
   messageText?: string;
-  headerText?: string; // Opcional
-  footerText?: string; // Opcional
+  headerText?: string;
+  footerText?: string;
   buttons?: ButtonOptionData[];
-  // ... outras propriedades para ButtonsMessageNode
+  // Adicione aqui as propriedades específicas do ButtonsMessageNodeData
 }
-export type ButtonsMessageNodeType = Node<ButtonsMessageNodeData, 'buttonsMessage'>;
 
-// MediaMessageNode
 export interface MediaMessageNodeData {
   label?: string;
   mediaType?: 'image' | 'video' | 'audio' | 'document';
   mediaUrl?: string;
   caption?: string;
-  fileName?: string; // Para documentos
-  // ... outras propriedades para MediaMessageNode
+  fileName?: string;
+  // Adicione aqui as propriedades específicas do MediaMessageNodeData
 }
-export type MediaMessageNodeType = Node<MediaMessageNodeData, 'mediaMessage'>;
 
-// ConditionNode
-export interface ConditionBranch {
-  id: string; // para o handle de saída
-  conditionLogic: string; // Ex: "variavel == 'valor'" ou uma descrição
-  // ... outras propriedades da branch
-}
 export interface ConditionNodeData {
   label?: string;
-  // conditions: ConditionBranch[]; // Uma condição pode ter múltiplas branches de saída (Sim/Não, etc.)
-  // Ou uma lógica mais simples:
   variableToCheck?: string;
   operator?: 'equals' | 'not_equals' | 'contains' | 'greater_than' | 'less_than';
   valueToCompare?: string | number;
-  // ... outras propriedades para ConditionNode
+  // Adicione aqui as propriedades específicas do ConditionNodeData
 }
-export type ConditionNodeType = Node<ConditionNodeData, 'condition'>;
 
-// ActionNode
 export interface ActionNodeData {
   label?: string;
   actionType?: 'add_tag' | 'remove_tag' | 'assign_agent' | 'send_email' | 'update_contact_prop';
-  tagName?: string; // se for add_tag/remove_tag
-  agentId?: string; // se for assign_agent
-  emailTemplateId?: string; // se for send_email
+  tagName?: string;
+  agentId?: string;
+  emailTemplateId?: string;
   contactPropertyName?: string;
   contactPropertyValue?: string;
-  // ... outras propriedades para ActionNode
+  // Adicione aqui as propriedades específicas do ActionNodeData
 }
-export type ActionNodeType = Node<ActionNodeData, 'action'>;
 
-// DelayNode
 export interface DelayNodeData {
   label?: string;
-  delayAmount?: number; // em segundos, minutos ou horas
+  delayAmount?: number;
   delayUnit?: 'seconds' | 'minutes' | 'hours';
-  // ... outras propriedades para DelayNode
+  // Adicione aqui as propriedades específicas do DelayNodeData
 }
-export type DelayNodeType = Node<DelayNodeData, 'delay'>;
 
-// EndNode
 export interface EndNodeData {
   label?: string;
   endStateType?: 'completed' | 'abandoned' | 'error';
-  // ... outras propriedades para EndNode
+  // Adicione aqui as propriedades específicas do EndNodeData
 }
-export type EndNodeType = Node<EndNodeData, 'end'>;
 
-// GptQueryNode
 export interface GptQueryNodeData {
   label?: string;
   prompt?: string;
   variableToSaveResult?: string;
-  // ... outras propriedades para GptQueryNode
+  // Adicione aqui as propriedades específicas do GptQueryNodeData
 }
-export type GptQueryNodeType = Node<GptQueryNodeData, 'gptQuery'>;
 
-// AiDecisionNode
 export interface AiDecisionNodeData {
   label?: string;
-  inputVariable?: string; // Variável com o texto para IA analisar
-  decisionCategories?: string[]; // Categorias para a IA classificar
-  // ... outras propriedades para AiDecisionNode
+  inputVariable?: string;
+  decisionCategories?: string[];
+  // Adicione aqui as propriedades específicas do AiDecisionNodeData
 }
-export type AiDecisionNodeType = Node<AiDecisionNodeData, 'aiDecision'>;
 
-// ClonedVoiceNode
 export interface ClonedVoiceNodeData {
   label?: string;
   textToSpeak?: string;
-  voiceId?: string; // ID da voz clonada (ex: ElevenLabs)
-  // ... outras propriedades para ClonedVoiceNode
+  voiceId?: string;
+  // Adicione aqui as propriedades específicas do ClonedVoiceNodeData
 }
-export type ClonedVoiceNodeType = Node<ClonedVoiceNodeData, 'clonedVoice'>;
 
-// TagContactNode
 export interface TagContactNodeData {
   label?: string;
   tagOperation?: 'add' | 'remove';
   tagName?: string;
-  // ... outras propriedades para TagContactNode
+  // Adicione aqui as propriedades específicas do TagContactNodeData
 }
-export type TagContactNodeType = Node<TagContactNodeData, 'tagContact'>;
 
-// SetVariableNode
 export interface SetVariableNodeData {
   label?: string;
   variableName?: string;
-  variableValue?: string | number | boolean; // Pode ser de um input direto ou de outra variável
-  // ... outras propriedades para SetVariableNode
+  variableValue?: string | number | boolean;
+  // Adicione aqui as propriedades específicas do SetVariableNodeData
 }
-export type SetVariableNodeType = Node<SetVariableNodeData, 'setVariable'>;
 
-// ExternalDataNode (ou ExternalDataFetchNodeDataFE)
 export interface ExternalDataFetchNodeDataFE {
   label?: string;
   apiUrl?: string;
   method?: 'GET' | 'POST';
-  headers?: Record<string, string>; // Ex: { "Authorization": "Bearer {{token_var}}" }
-  body?: string; // JSON string, pode usar variáveis
+  headers?: Record<string, string>;
+  body?: string;
   variableToSaveResponse?: string;
-  // ... outras propriedades para ExternalDataNode
+  // Adicione aqui as propriedades específicas do ExternalDataFetchNodeDataFE
 }
-export type ExternalDataNodeType = Node<ExternalDataFetchNodeDataFE, 'externalData'>;
 
-// ApiCallNode
 export interface ApiCallNodeData {
   label?: string;
   url?: string;
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
-  headers?: string; // JSON string para headers
-  body?: string; // JSON string para o corpo
-  responseMapping?: string; // Como mapear a resposta para variáveis
-  // ... outras propriedades para ApiCallNode
+  headers?: string; // JSON string
+  body?: string; // JSON string
+  responseMapping?: string;
+  // Adicione aqui as propriedades específicas do ApiCallNodeData
 }
-export type ApiCallNodeType = Node<ApiCallNodeData, 'apiCall'>;
 
-// Tipo agregando todos os tipos de dados de nós para o Flow Builder
-export type FlowNodeData =
-  | TriggerNodeData
-  | TextMessageNodeData
-  | QuestionNodeData
-  | ListMessageNodeDataFE
-  | ButtonsMessageNodeData
-  | MediaMessageNodeData
-  | ConditionNodeData
-  | ActionNodeData
-  | DelayNodeData
-  | EndNodeData
-  | GptQueryNodeData
-  | AiDecisionNodeData
-  | ClonedVoiceNodeData
-  | TagContactNodeData
-  | SetVariableNodeData
-  | ExternalDataFetchNodeDataFE
-  | ApiCallNodeData;
+// Tipo para FlowElementData, se ainda for usado em ZapFlowsList,
+// ajuste conforme a estrutura real dos seus dados de fluxo.
+// Se for para os nós em si, eles usarão os tipos acima.
+export interface FlowElementData {
+    id: string;
+    name: string;
+    description?: string;
+    triggerType?: string;
+    status?: 'active' | 'inactive' | 'draft';
+    lastEdited?: string;
+    // ... outras propriedades que você usa para listar fluxos
+}
 
-// Tipo genérico para qualquer nó no seu fluxo
-export type AnyFlowNode = Node<FlowNodeData, string>; // 'string' pode ser o tipo do nó se for dinâmico
+// Seus componentes de nó usarão NodeProps<XyzNodeData>.
+// Não é necessário exportar XyzNodeType = Node<XyzNodeData, 'xyz'> daqui
+// a menos que você os use explicitamente em outro lugar.
