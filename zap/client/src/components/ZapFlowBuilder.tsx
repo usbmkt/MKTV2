@@ -17,11 +17,10 @@ import {
   Panel,
   NodeProps,
   ReactFlowInstance,
-  NodeTypes // Importado para tipar nodeTypes
+  NodeTypes
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-// Importe os componentes de nó
 import TextMessageNode from '@zap_client/components/flow_builder_nodes/TextMessageNode';
 import QuestionNode from '@zap_client/components/flow_builder_nodes/QuestionNode';
 import ConditionNode from '@zap_client/components/flow_builder_nodes/ConditionNode';
@@ -40,7 +39,6 @@ import SetVariableNode from '@zap_client/components/flow_builder_nodes/SetVariab
 import ExternalDataNode from '@zap_client/components/flow_builder_nodes/ExternalDataNode';
 import ApiCallNode from '@zap_client/components/flow_builder_nodes/ApiCallNode';
 
-// Importe os tipos de dados dos nós
 import {
   TriggerNodeData, TextMessageNodeData, QuestionNodeData, ConditionNodeData,
   ActionNodeData, DelayNodeData, EndNodeData, ListMessageNodeDataFE,
@@ -49,22 +47,21 @@ import {
 } from '@zap_client/features/types/whatsapp_flow_types';
 
 import { Button } from '@zap_client/components/ui/button';
-import { Input } from '@zap_client/components/ui/input'; // Import Adicionado
+import { Input } from '@zap_client/components/ui/input';
 import { PlusCircle, Save, Trash2, Zap as ZapIcon, Loader2 } from 'lucide-react';
-
 
 export interface ZapFlowBuilderProps {
   flowId: string;
-  initialNodes?: Node[];
+  initialNodes?: Node<any>[]; // Usar Node<any> ou um tipo união mais específico se souber todos os tipos de dados
   initialEdges?: Edge[];
   initialFlowName?: string | null;
-  onSaveFlow?: (flowId: string, nodes: Node[], edges: Edge[], name?: string) => Promise<void>;
-  onLoadFlow?: (flowId: string) => Promise<{ nodes: Node[], edges: Edge[], name?: string } | null>;
+  onSaveFlow?: (flowId: string, nodes: Node<any>[], edges: Edge[], name?: string) => Promise<void>;
+  onLoadFlow?: (flowId: string) => Promise<{ nodes: Node<any>[], edges: Edge[], name?: string } | null>;
   onCloseEditor?: () => void;
   onSaveSuccess?: (flowId: string, flowName: string) => void;
 }
 
-const nodeTypes: NodeTypes = { // Tipagem explícita
+const nodeTypes: NodeTypes = {
   trigger: TriggerNode as React.ComponentType<NodeProps<TriggerNodeData>>,
   textMessage: TextMessageNode as React.ComponentType<NodeProps<TextMessageNodeData>>,
   question: QuestionNode as React.ComponentType<NodeProps<QuestionNodeData>>,
@@ -106,30 +103,35 @@ const ZapFlowBuilderWrapper: React.FC<ZapFlowBuilderProps> = ({
   useEffect(() => {
     const load = async () => {
       setIsLoading(true);
-      if (onLoadFlow && flowId !== 'new') {
+      let defaultInitialNodes: Node<any>[] = [{ id: 'trigger_0', type: 'trigger', position: { x: 250, y: 5 }, data: { label: 'Início do Fluxo' } as TriggerNodeData }];
+      
+      if (onLoadFlow && flowId && flowId !== 'new') {
         try {
           const loadedData = await onLoadFlow(flowId);
           if (loadedData) {
-            setNodes(loadedData.nodes || []);
+            setNodes(loadedData.nodes || defaultInitialNodes);
             setEdges(loadedData.edges || []);
             if(loadedData.name) setFlowName(loadedData.name);
+            else setFlowName(`Fluxo ${flowId}`);
           } else {
-            setNodes([{ id: 'trigger_0', type: 'trigger', position: { x: 250, y: 5 }, data: { label: 'Início do Fluxo' } as TriggerNodeData }]);
+            setNodes(defaultInitialNodes);
             setEdges([]);
-            setFlowName(`Novo Fluxo ${new Date().toLocaleTimeString()}`);
+            setFlowName(initialFlowName || `Novo Fluxo`);
           }
         } catch (error) {
           console.error("Erro ao carregar fluxo:", error);
-           setNodes([{ id: 'trigger_0', type: 'trigger', position: { x: 250, y: 5 }, data: { label: 'Início do Fluxo (Erro ao Carregar)' } as TriggerNodeData }]);
+           setNodes(defaultInitialNodes); // Fallback para nó de trigger
+           setEdges([]);
+           setFlowName(initialFlowName || `Fluxo (Erro ao Carregar)`);
         }
       } else {
-         setNodes([{ id: 'trigger_0', type: 'trigger', position: { x: 250, y: 5 }, data: { label: 'Novo Fluxo' } as TriggerNodeData }]);
+         setNodes(defaultInitialNodes);
          setEdges([]);
          setFlowName(initialFlowName || `Novo Fluxo`);
       }
       setIsLoading(false);
     };
-    load();
+    if(flowId) load(); else setIsLoading(false); // Apenas carrega se flowId existir
   }, [flowId, onLoadFlow, initialFlowName]);
 
   const onNodesChange = useCallback(
@@ -148,10 +150,8 @@ const ZapFlowBuilderWrapper: React.FC<ZapFlowBuilderProps> = ({
   const addNode = (type: keyof typeof nodeTypes) => {
     const newNodeId = `${type}_${nodes.length + Date.now()}`;
     let initialData: any = { label: `Novo ${type}` };
-
-    if (type === 'trigger') initialData = { label: 'Início', triggerType: 'manual' } as TriggerNodeData;
-    if (type === 'textMessage') initialData = { label: 'Mensagem', message: 'Olá!' } as TextMessageNodeData;
-    // Adicione mais defaults para outros tipos de nós aqui se desejar
+    // Você pode adicionar dados iniciais mais específicos por tipo de nó aqui
+    // Exemplo: if (type === 'textMessage') initialData = { label: 'Mensagem', message: 'Texto padrão' };
 
     const newNode: Node = {
       id: newNodeId,
@@ -191,7 +191,7 @@ const ZapFlowBuilderWrapper: React.FC<ZapFlowBuilderProps> = ({
     }
   };
 
-  if (isLoading && flowId !== 'new') {
+  if (isLoading && flowId && flowId !== 'new') {
     return <div className="flex items-center justify-center h-full"><Loader2 className="w-8 h-8 animate-spin text-primary" /> Carregando fluxo...</div>;
   }
 
@@ -231,10 +231,11 @@ const ZapFlowBuilderWrapper: React.FC<ZapFlowBuilderProps> = ({
            <Button onClick={() => addNode('condition')} size="sm" variant="outline" className="neu-button text-xs">
              <PlusCircle className="mr-1 h-3 w-3" /> Condição
           </Button>
+          {/* Adicione botões para mais tipos de nós aqui */}
           <Button onClick={handleSave} size="sm" variant="default" className="neu-button-primary text-xs" disabled={isLoading}>
             {isLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />} Salvar
           </Button>
-          {flowId !== 'new' && (
+          {flowId && flowId !== 'new' && ( // Verifique se flowId existe
             <Button onClick={handleDeleteFlow} size="sm" variant="destructive" className="text-xs">
               <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Excluir
             </Button>
@@ -249,5 +250,4 @@ const ZapFlowBuilderWrapper: React.FC<ZapFlowBuilderProps> = ({
     </div>
   );
 };
-
 export default ZapFlowBuilderWrapper;
