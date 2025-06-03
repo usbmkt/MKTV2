@@ -1,25 +1,22 @@
 import React, { memo, useState, useEffect, useCallback, ChangeEvent, KeyboardEvent } from 'react';
 import { Handle, Position, useReactFlow, NodeToolbar, NodeProps as ReactFlowNodeProps } from '@xyflow/react';
-// CORRIGIDO: Path Aliases
-import { QuestionNodeData, FlowNodeType, HandleData } from '@zap_client/features/types/whatsapp_flow_types';
-import { Card, CardContent, CardHeader, CardTitle } from '@zap_client/components/ui/card';
-import { Textarea } from '@zap_client/components/ui/textarea';
-import { Input } from '@zap_client/components/ui/input';
-import { Label } from '@zap_client/components/ui/label';
-import { Button } from '@zap_client/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@zap_client/components/ui/select';
-import { Checkbox } from '@zap_client/components/ui/checkbox';
+import { QuestionNodeData, FlowNodeType, HandleData } from '@zap_client/features/types/whatsapp_flow_types'; // Path Alias Corrigido
+import { Card, CardContent, CardHeader, CardTitle } from '@zap_client/components/ui/card'; // Path Alias Corrigido
+import { Textarea } from '@zap_client/components/ui/textarea'; // Path Alias Corrigido
+import { Input } from '@zap_client/components/ui/input'; // Path Alias Corrigido
+import { Label } from '@zap_client/components/ui/label'; // Path Alias Corrigido
+import { Button } from '@zap_client/components/ui/button'; // Path Alias Corrigido
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@zap_client/components/ui/select'; // Path Alias Corrigido
+import { Checkbox } from '@zap_client/components/ui/checkbox'; // Path Alias Corrigido
 import { HelpCircle, Trash2, Edit3, PlusCircle, XCircle } from 'lucide-react';
-import { cn } from '@zap_client/lib/utils';
-import { Badge } from '@zap_client/components/ui/badge';
+import { cn } from '@zap_client/lib/utils'; // Path Alias Corrigido
+import { Badge } from '@zap_client/components/ui/badge'; // Path Alias Corrigido
 
 const defaultHandles: HandleData[] = [
   { id: 'input', type: 'target', position: Position.Left, label: 'Entrada', style: {top: '50%'} },
-  // As saídas serão dinâmicas com base nas opções, ou uma saída padrão
   { id: 'output_default', type: 'source', position: Position.Right, label: 'Próximo (Padrão)', style: {top: '50%'} },
 ];
 
-// Tipagem correta das props
 const QuestionNodeComponent: React.FC<ReactFlowNodeProps<QuestionNodeData>> = ({ id, data, selected }) => {
   const { setNodes } = useReactFlow();
 
@@ -99,7 +96,7 @@ const QuestionNodeComponent: React.FC<ReactFlowNodeProps<QuestionNodeData>> = ({
   };
 
   const removeOption = (indexToRemove: number) => {
-    const newOptions = options.filter((_: any, index: number) => index !== indexToRemove);
+    const newOptions = options.filter((_: { id: string; label: string; value: string }, index: number) => index !== indexToRemove);
     setOptions(newOptions);
     updateNodePartialData({ options: newOptions });
   };
@@ -114,9 +111,10 @@ const QuestionNodeComponent: React.FC<ReactFlowNodeProps<QuestionNodeData>> = ({
     updateNodePartialData({ errorMessage: e.target.value });
   };
   
-  const handleAiSuggestionsChange = (checked: boolean) => {
-    setEnableAiSuggestions(checked);
-    updateNodePartialData({ enableAiSuggestions: checked });
+  const handleAiSuggestionsChange = (checked: boolean | string) => { // Shadcn checkbox onCheckedChange can return 'indeterminate'
+    const isChecked = typeof checked === 'boolean' ? checked : false;
+    setEnableAiSuggestions(isChecked);
+    updateNodePartialData({ enableAiSuggestions: isChecked });
   };
 
 
@@ -125,21 +123,23 @@ const QuestionNodeComponent: React.FC<ReactFlowNodeProps<QuestionNodeData>> = ({
   };
 
   const handlesToRender = useMemo(() => {
-    const baseHandles = data.handles || defaultHandles;
-    if (expectedResponseType === 'options') {
-        // Remover a saída padrão se houver opções, pois cada opção terá sua própria saída
-        const inputHandle = baseHandles.find(h => h.type === 'target');
-        const optionHandles = options.map((opt, index) => ({
-            id: `option_output_${opt.id || index}`, // Usar ID da opção ou índice
+    const baseHandles: HandleData[] = data.handles || defaultHandles; // data.handles pode ser undefined
+    const inputHandle = baseHandles.find(h => h.type === 'target') || defaultHandles.find(h => h.type === 'target');
+    
+    if (expectedResponseType === 'options' && data.options && data.options.length > 0) { // Checa se data.options existe
+        const optionHandles = data.options.map((opt, index) => ({
+            id: `option_output_${opt.id || index}`, 
             type: 'source' as 'source',
             position: Position.Right,
             label: `Saída: ${opt.label || `Opção ${index + 1}`}`,
-            style: { top: `${(index + 1) * (100 / (options.length +1 ))}%` },
+            style: { top: `${(index + 1) * (100 / (data.options!.length +1 ))}%` }, // Adicionado ! pois checamos acima
         }));
         return inputHandle ? [inputHandle, ...optionHandles] : optionHandles;
     }
-    return baseHandles;
-  }, [data.handles, options, expectedResponseType]);
+    // Retorna o input e a saída padrão se não for 'options' ou se não houver opções
+    const outputHandle = baseHandles.find(h => h.type === 'source' && h.id === 'output_default') || defaultHandles.find(h => h.type === 'source');
+    return inputHandle && outputHandle ? [inputHandle, outputHandle] : (inputHandle ? [inputHandle] : (outputHandle ? [outputHandle] : []));
+  }, [data.handles, data.options, expectedResponseType, options]); // Adicionado options aqui, pois ele é usado para calcular style
 
 
   return (
@@ -190,7 +190,7 @@ const QuestionNodeComponent: React.FC<ReactFlowNodeProps<QuestionNodeData>> = ({
         {expectedResponseType === 'options' && (
           <div className="space-y-2 border-t pt-2">
             <Label className="text-xs">Opções de Resposta</Label>
-            {options.map((opt, index) => (
+            {options.map((opt: { id: string; label: string; value: string }, index: number) => ( // Adicionado tipo para opt
               <div key={opt.id || index} className="flex items-center gap-2">
                 <Input value={opt.label} onChange={(e: ChangeEvent<HTMLInputElement>) => handleOptionChange(index, 'label', e.target.value)} placeholder={`Label Opção ${index + 1}`} className="neu-input text-xs h-8"/>
                 <Input value={opt.value} onChange={(e: ChangeEvent<HTMLInputElement>) => handleOptionChange(index, 'value', e.target.value)} placeholder={`Valor Opção ${index + 1}`} className="neu-input text-xs h-8"/>
@@ -200,7 +200,7 @@ const QuestionNodeComponent: React.FC<ReactFlowNodeProps<QuestionNodeData>> = ({
             <Button variant="outline" size="sm" onClick={addOption} className="mt-1 text-xs"> <PlusCircle className="h-3 w-3 mr-1"/> Adicionar Opção </Button>
           </div>
         )}
-         {(expectedResponseType !== 'options' && expectedResponseType !== 'text') && ( // Para tipos como number, email, phone, date
+         {(expectedResponseType !== 'options' && expectedResponseType !== 'text') && ( 
             <div>
                 <Label htmlFor={`validation-regex-${id}`} className="text-xs">Regex de Validação (Opcional)</Label>
                 <Input id={`validation-regex-${id}`} value={validationRegex} onChange={handleRegexChange} placeholder="Ex: ^\d+$ para números" className="mt-1 neu-input"/>
@@ -224,7 +224,7 @@ const QuestionNodeComponent: React.FC<ReactFlowNodeProps<QuestionNodeData>> = ({
           type={handleItem.type}
           position={handleItem.position}
           isConnectable={true}
-          style={{ ...handleItem.style, background: '#a855f7', width: '10px', height: '10px' }} // Cor Roxo
+          style={{ ...handleItem.style, background: '#a855f7', width: '10px', height: '10px' }}
           aria-label={handleItem.label}
         />
       ))}
