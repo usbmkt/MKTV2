@@ -9,21 +9,19 @@ export interface ApiError {
 }
 
 // --- Tipos de Dados para Nós Customizados ---
-// Substitua os comentários com as propriedades reais de cada nó.
+// !! VOCÊ PRECISA COMPLETAR AS PROPRIEDADES DENTRO DE CADA INTERFACE ABAIXO !!
 
 export interface TriggerNodeData {
   label?: string;
   triggerType?: 'keyword' | 'manual' | 'webhook' | 'form_submission' | 'api_call';
   keywords?: string[];
-  formId?: string;
-  webhookUrl?: string;
-  // Adicione aqui as propriedades específicas do TriggerNodeData
+  // Ex: formId?: string; webhookUrl?: string;
 }
 
 export interface TextMessageNodeData {
   label?: string;
   message?: string;
-  // Adicione aqui as propriedades específicas do TextMessageNodeData
+  // Ex: useVariables?: boolean;
 }
 
 export interface QuestionNodeData {
@@ -32,20 +30,17 @@ export interface QuestionNodeData {
   expectedResponseType?: 'text' | 'number' | 'email' | 'quick_reply';
   variableToSaveAnswer?: string;
   quickReplies?: string[];
-  // Adicione aqui as propriedades específicas do QuestionNodeData
 }
 
-export interface ListItemData { // Usado por ListMessageNodeDataFE
+export interface ListItemData {
   id: string;
   title: string;
   description?: string;
 }
-
-export interface ListSectionData { // Usado por ListMessageNodeDataFE
+export interface ListSectionData {
   title: string;
   rows: ListItemData[];
 }
-
 export interface ListMessageNodeDataFE {
   label?: string;
   headerText?: string;
@@ -53,131 +48,141 @@ export interface ListMessageNodeDataFE {
   footerText?: string;
   buttonText?: string;
   sections?: ListSectionData[];
-  // Adicione aqui as propriedades específicas do ListMessageNodeDataFE
 }
 
-export interface ButtonOptionData { // Usado por ButtonsMessageNodeData
+export interface ButtonOptionData {
     id: string;
     displayText: string;
+    // Adicione type, url, phoneNumber se necessário para diferentes tipos de botões
 }
 export interface ButtonsMessageNodeData {
   label?: string;
-  messageText?: string;
-  headerText?: string;
-  footerText?: string;
+  messageText?: string; // ou headerText, bodyText, footerText
   buttons?: ButtonOptionData[];
-  // Adicione aqui as propriedades específicas do ButtonsMessageNodeData
 }
 
 export interface MediaMessageNodeData {
   label?: string;
   mediaType?: 'image' | 'video' | 'audio' | 'document';
-  mediaUrl?: string;
+  mediaUrl?: string; // URL do arquivo
   caption?: string;
-  fileName?: string;
-  // Adicione aqui as propriedades específicas do MediaMessageNodeData
+  fileName?: string; // Para documentos
 }
 
 export interface ConditionNodeData {
   label?: string;
-  variableToCheck?: string;
-  operator?: 'equals' | 'not_equals' | 'contains' | 'greater_than' | 'less_than';
-  valueToCompare?: string | number;
-  // Adicione aqui as propriedades específicas do ConditionNodeData
+  // Defina como você estrutura suas condições. Exemplo:
+  conditions?: Array<{
+    variable: string;
+    operator: 'eq' | 'neq' | 'gt' | 'lt' | 'contains' | 'startsWith' | 'endsWith';
+    value: string | number | boolean;
+  }>;
+  // Ou uma lógica mais simples
+  // variableToCheck?: string;
+  // operator?: string;
+  // valueToCompare?: string;
 }
 
 export interface ActionNodeData {
   label?: string;
-  actionType?: 'add_tag' | 'remove_tag' | 'assign_agent' | 'send_email' | 'update_contact_prop';
+  actionType?: 'add_tag' | 'remove_tag' | 'assign_agent' | 'send_email' | 'update_contact_prop' | 'call_api';
+  // Propriedades condicionais baseadas em actionType:
   tagName?: string;
   agentId?: string;
   emailTemplateId?: string;
   contactPropertyName?: string;
-  contactPropertyValue?: string;
-  // Adicione aqui as propriedades específicas do ActionNodeData
+  contactPropertyValue?: any;
+  apiUrl?: string;
+  // ...etc.
 }
 
 export interface DelayNodeData {
   label?: string;
   delayAmount?: number;
-  delayUnit?: 'seconds' | 'minutes' | 'hours';
-  // Adicione aqui as propriedades específicas do DelayNodeData
+  delayUnit?: 'seconds' | 'minutes' | 'hours' | 'days';
 }
 
 export interface EndNodeData {
   label?: string;
-  endStateType?: 'completed' | 'abandoned' | 'error';
-  // Adicione aqui as propriedades específicas do EndNodeData
+  endStateType?: 'completed' | 'abandoned' | 'error_fallback';
+  message?: string; // Mensagem final opcional
 }
 
 export interface GptQueryNodeData {
   label?: string;
-  prompt?: string;
-  variableToSaveResult?: string;
-  // Adicione aqui as propriedades específicas do GptQueryNodeData
+  promptTemplate?: string; // Template do prompt, pode incluir variáveis
+  inputVariables?: string[]; // Variáveis a serem injetadas no prompt
+  variableToSaveResult?: string; // Onde salvar a resposta da IA
 }
 
 export interface AiDecisionNodeData {
   label?: string;
-  inputVariable?: string;
-  decisionCategories?: string[];
-  // Adicione aqui as propriedades específicas do AiDecisionNodeData
+  inputVariable?: string; // Variável com texto para IA
+  decisionCategories?: Array<{ id: string; name: string; description?: string }>; // Categorias para classificar
+  // outputVariable?: string; // Onde salvar a categoria decidida
 }
 
 export interface ClonedVoiceNodeData {
   label?: string;
-  textToSpeak?: string;
-  voiceId?: string;
-  // Adicione aqui as propriedades específicas do ClonedVoiceNodeData
+  textToSpeak?: string; // Pode vir de uma variável
+  voiceId?: string; // ID da voz (ex: ElevenLabs)
+  // variableToSaveAudioUrl?: string;
 }
 
 export interface TagContactNodeData {
   label?: string;
   tagOperation?: 'add' | 'remove';
   tagName?: string;
-  // Adicione aqui as propriedades específicas do TagContactNodeData
 }
 
 export interface SetVariableNodeData {
   label?: string;
-  variableName?: string;
-  variableValue?: string | number | boolean;
-  // Adicione aqui as propriedades específicas do SetVariableNodeData
+  assignments?: Array<{ variableName: string; value: string | number | boolean | null }>; // Permitir atribuição de múltiplos valores ou de outras variáveis
 }
 
-export interface ExternalDataFetchNodeDataFE {
+export interface ExternalDataFetchNodeDataFE { // Renomeado de ExternalDataNode para clareza
   label?: string;
   apiUrl?: string;
-  method?: 'GET' | 'POST';
-  headers?: Record<string, string>;
-  body?: string;
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  headers?: string; // JSON string ou objeto
+  body?: string;    // JSON string ou objeto
+  responsePath?: string; // Caminho para extrair dados da resposta (ex: data.user.id)
   variableToSaveResponse?: string;
-  // Adicione aqui as propriedades específicas do ExternalDataFetchNodeDataFE
 }
 
-export interface ApiCallNodeData {
+export interface ApiCallNodeData { // Pode ser similar ou o mesmo que ExternalDataFetchNodeDataFE
   label?: string;
   url?: string;
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
-  headers?: string; // JSON string
-  body?: string; // JSON string
-  responseMapping?: string;
-  // Adicione aqui as propriedades específicas do ApiCallNodeData
+  headers?: string; 
+  body?: string; 
+  responseMapping?: string; 
 }
 
-// Tipo para FlowElementData, se ainda for usado em ZapFlowsList,
-// ajuste conforme a estrutura real dos seus dados de fluxo.
-// Se for para os nós em si, eles usarão os tipos acima.
+
+// Interface para dados de performance de fluxo (usada em ZapAnalytics)
+export interface FlowPerformanceData {
+  flowId: string;
+  flowName?: string; // Adicionado
+  totalStarted: number;
+  totalCompleted: number;
+  completionRate?: number; // Adicionado
+  avgTimeToComplete?: number; // em segundos
+  // Adicione mais métricas se necessário
+}
+
+// Tipo para FlowElementData (usado em ZapFlowsList)
+// Defina as propriedades que você usa para listar os fluxos
 export interface FlowElementData {
     id: string;
     name: string;
     description?: string;
-    triggerType?: string;
+    triggerType?: string; // Ou um tipo mais específico
     status?: 'active' | 'inactive' | 'draft';
-    lastEdited?: string;
-    // ... outras propriedades que você usa para listar fluxos
+    lastEdited?: string; // Ou Date
+    // ... adicione outras propriedades que você precisa para a lista
 }
 
-// Seus componentes de nó usarão NodeProps<XyzNodeData>.
-// Não é necessário exportar XyzNodeType = Node<XyzNodeData, 'xyz'> daqui
-// a menos que você os use explicitamente em outro lugar.
+// Não é estritamente necessário exportar os XyzNodeType = Node<XyzNodeData, 'type'>
+// se você estiver usando React.FC<NodeProps<XyzNodeData>> nos seus componentes de nó.
+// O ZapFlowBuilder usará os componentes diretamente.
