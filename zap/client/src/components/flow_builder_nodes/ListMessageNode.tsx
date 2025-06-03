@@ -1,176 +1,214 @@
-import React, { memo, useState, ChangeEvent, useCallback } from 'react';
-import { Handle, Position, NodeProps, useReactFlow, Node } from '@xyflow/react';
+import React, { memo, useState, useEffect, useCallback, ChangeEvent, KeyboardEvent } from 'react';
+import { Handle, Position, useReactFlow, NodeToolbar, NodeProps as ReactFlowNodeProps } from '@xyflow/react';
+// CORRIGIDO: Path Aliases
+import { ListMessageNodeData, FlowNodeType, HandleData, ListMessageSection, ListMessageItem } from '@zap_client/features/types/whatsapp_flow_types';
 import { Card, CardContent, CardHeader, CardTitle } from '@zap_client/components/ui/card';
 import { Input } from '@zap_client/components/ui/input';
+import { Label } from '@zap_client/components/ui/label';
 import { Button } from '@zap_client/components/ui/button';
 import { Textarea } from '@zap_client/components/ui/textarea';
-import { GripVertical, PlusCircle, Trash2 } from 'lucide-react';
-import { ListMessageNodeData, ListSection, ListItem } from '@zap_client/features/types/whatsapp_flow_types'; // Ajustado o import
+import { ListChecks, Trash2, Edit3, PlusCircle, XCircle } from 'lucide-react';
+import { cn } from '@zap_client/lib/utils';
+import { Badge } from '@zap_client/components/ui/badge';
+import { ScrollArea } from '@zap_client/components/ui/scroll-area'; // Adicionado ScrollArea
 
-const ListMessageNode: React.FC<NodeProps<ListMessageNodeData>> = ({ id, data, selected }) => {
+const defaultHandles: HandleData[] = [
+  { id: 'input', type: 'target', position: Position.Left, label: 'Entrada', style: {top: '50%'} },
+  // Saídas podem ser dinâmicas baseadas nas seleções da lista, ou uma saída padrão
+  { id: 'output_default', type: 'source', position: Position.Right, label: 'Após Seleção', style: {top: '50%'} },
+];
+
+// CORRIGIDO: Tipagem explícita das props
+const ListMessageNodeComponent: React.FC<ReactFlowNodeProps<ListMessageNodeData>> = ({ id, data, selected }) => {
   const { setNodes } = useReactFlow();
-  const [nodeData, setNodeData] = useState<ListMessageNodeData>(data);
 
-  const updateNodeData = useCallback((newData: Partial<ListMessageNodeData>) => {
-    setNodes((nds) =>
-      nds.map((node: Node) => {
-        if (node.id === id) {
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              ...newData,
-            },
-          };
-        }
-        return node;
-      })
-    );
-    setNodeData(prev => ({ ...prev, ...newData }));
-  }, [id, setNodes]);
+  // Estados locais baseados em `data`
+  const [label, setLabel] = useState<string>(data.label || 'Mensagem de Lista');
+  const [isEditingLabel, setIsEditingLabel] = useState<boolean>(false);
+  const [titleText, setTitleText] = useState<string>(data.titleText || '');
+  const [bodyText, setBodyText] = useState<string>(data.bodyText || 'Selecione uma das opções:');
+  const [buttonText, setButtonText] = useState<string>(data.buttonText || 'Ver Opções');
+  const [sections, setSections] = useState<ListMessageSection[]>(data.sections || [{ id: Date.now().toString(), title: 'Seção Principal', rows: [{ id: (Date.now()+1).toString(), title: 'Item 1' }] }]);
+  const [footerText, setFooterText] = useState<string>(data.footerText || '');
+  const [variableToStoreSelection, setVariableToStoreSelection] = useState<string>(data.variableToStoreSelection || '');
 
 
-  const handleInputChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    updateNodeData({ [name]: value });
+  useEffect(() => {
+    setLabel(data.label || 'Mensagem de Lista');
+    setTitleText(data.titleText || '');
+    setBodyText(data.bodyText || 'Selecione uma das opções:');
+    setButtonText(data.buttonText || 'Ver Opções');
+    setSections(data.sections || [{ id: Date.now().toString(), title: 'Seção Principal', rows: [{ id: (Date.now()+1).toString(), title: 'Item 1' }] }]);
+    setFooterText(data.footerText || '');
+    setVariableToStoreSelection(data.variableToStoreSelection || '');
+  }, [data]);
+
+  const updateNodePartialData = useCallback(
+    (newData: Partial<ListMessageNodeData>) => {
+      setNodes((nds) =>
+        nds.map((node) => {
+          if (node.id === id) {
+            const currentData = node.data as ListMessageNodeData;
+            return { ...node, data: { ...currentData, ...newData } };
+          }
+          return node;
+        })
+      );
+    },
+    [id, setNodes]
+  );
+
+  const handleGenericChange = (field: keyof ListMessageNodeData, value: string) => {
+    // @ts-ignore - Permitir atribuição para campos específicos
+    updateNodePartialData({ [field]: value });
+    if (field === 'titleText') setTitleText(value);
+    if (field === 'bodyText') setBodyText(value);
+    if (field === 'buttonText') setButtonText(value);
+    if (field === 'footerText') setFooterText(value);
+    if (field === 'variableToStoreSelection') setVariableToStoreSelection(value);
   };
 
-  const handleSectionTitleChange = (sectionIndex: number, value: string) => {
-    const newSections = [...(nodeData.sections || [])];
-    newSections[sectionIndex] = { ...newSections[sectionIndex], title: value };
-    updateNodeData({ sections: newSections });
+  const handleLabelChange = (e: ChangeEvent<HTMLInputElement>) => setLabel(e.target.value);
+  const handleLabelSave = () => {
+    updateNodePartialData({ label });
+    setIsEditingLabel(false);
   };
 
-  const handleItemChange = (sectionIndex: number, itemIndex: number, field: keyof ListItem, value: string) => {
-    const newSections = [...(nodeData.sections || [])];
-    if (newSections[sectionIndex] && newSections[sectionIndex].rows[itemIndex]) {
-      (newSections[sectionIndex].rows[itemIndex] as any)[field] = value; // Usar 'as any' temporariamente se ListItem for complexo
-      updateNodeData({ sections: newSections });
-    }
+  // Seção e Item Handlers
+  const handleSectionTitleChange = (sectionIndex: number, title: string) => {
+    const newSections = [...sections];
+    newSections[sectionIndex].title = title;
+    setSections(newSections);
+    updateNodePartialData({ sections: newSections });
   };
-
   const addSection = () => {
-    const newSection: ListSection = { title: 'Nova Seção', rows: [{ id: `item-${Date.now()}`, title: 'Novo Item', description: '' }] };
-    updateNodeData({ sections: [...(nodeData.sections || []), newSection] });
+    const newSectionId = `section-${Date.now()}`;
+    const newSections = [...sections, { id: newSectionId, title: `Nova Seção ${sections.length + 1}`, rows: [{ id: `item-${Date.now()}`, title: 'Novo Item 1' }] }];
+    setSections(newSections);
+    updateNodePartialData({ sections: newSections });
   };
-
   const removeSection = (sectionIndex: number) => {
-    const newSections = (nodeData.sections || []).filter((_, index) => index !== sectionIndex);
-    updateNodeData({ sections: newSections });
+    if (sections.length <= 1) {
+        alert("Deve haver pelo menos uma seção.");
+        return;
+    }
+    const newSections = sections.filter((_: ListMessageSection, i: number) => i !== sectionIndex);
+    setSections(newSections);
+    updateNodePartialData({ sections: newSections });
   };
 
+  const handleItemChange = (sectionIndex: number, rowIndex: number, field: keyof ListMessageItem, value: string) => {
+    const newSections = [...sections];
+    const targetSection = { ...newSections[sectionIndex] };
+    const targetRow = { ...targetSection.rows[rowIndex] };
+    (targetRow as any)[field] = value; // Simples para label e value
+    targetSection.rows[rowIndex] = targetRow;
+    newSections[sectionIndex] = targetSection;
+    setSections(newSections);
+    updateNodePartialData({ sections: newSections });
+  };
   const addItemToSection = (sectionIndex: number) => {
-    const newSections = [...(nodeData.sections || [])];
-    if (newSections[sectionIndex]) {
-      newSections[sectionIndex].rows.push({ id: `item-${Date.now()}`, title: 'Novo Item', description: '' });
-      updateNodeData({ sections: newSections });
+    const newSections = [...sections];
+    const targetSection = { ...newSections[sectionIndex] };
+    targetSection.rows = [...targetSection.rows, { id: `item-${Date.now()}`, title: `Novo Item ${targetSection.rows.length + 1}` }];
+    newSections[sectionIndex] = targetSection;
+    setSections(newSections);
+    updateNodePartialData({ sections: newSections });
+  };
+  const removeItemFromSection = (sectionIndex: number, rowIndex: number) => {
+    const newSections = [...sections];
+    const targetSection = { ...newSections[sectionIndex] };
+    if (targetSection.rows.length <= 1 && sections.length <= 1) {
+        alert("Deve haver pelo menos um item em uma seção, e pelo menos uma seção.");
+        return;
     }
+     if (targetSection.rows.length <= 1 && sections.length > 1) { // Se for o último item da seção e houver outras seções, remove a seção
+        removeSection(sectionIndex);
+        return;
+    }
+    targetSection.rows = targetSection.rows.filter((_: ListMessageItem, i: number) => i !== rowIndex);
+    newSections[sectionIndex] = targetSection;
+    setSections(newSections);
+    updateNodePartialData({ sections: newSections });
   };
 
-  const removeItemFromSection = (sectionIndex: number, itemIndex: number) => {
-    const newSections = [...(nodeData.sections || [])];
-    if (newSections[sectionIndex]) {
-      newSections[sectionIndex].rows = newSections[sectionIndex].rows.filter((_, index) => index !== itemIndex);
-      updateNodeData({ sections: newSections });
-    }
+  const handleDeleteNode = () => {
+    setNodes((nds) => nds.filter(node => node.id !== id));
   };
+
+  // Os handles de saída para cada item da lista seriam gerenciados pelo React Flow conectando-se a partir do nó.
+  // Para fins de UI, podemos apenas ter um handle de saída padrão.
+  const handlesToRender = data.handles || defaultHandles;
 
 
   return (
-    <Card className={`w-80 shadow-md ${selected ? 'ring-2 ring-blue-500' : ''}`}>
-      <CardHeader className="bg-gray-100 p-4 rounded-t-lg flex flex-row items-center justify-between">
-        <CardTitle className="text-sm font-medium">Mensagem de Lista</CardTitle>
-        <GripVertical className="w-5 h-5 text-gray-400 cursor-grab drag-handle" />
-      </CardHeader>
-      <CardContent className="p-4 space-y-3">
-        <Handle type="target" position={Position.Left} className="w-3 h-3 bg-blue-500 rounded-full" />
-        <div>
-          <label htmlFor={`messageText-${id}`} className="text-xs font-medium text-gray-700">Texto Principal</label>
-          <Textarea
-            id={`messageText-${id}`}
-            name="messageText"
-            placeholder="Olá! Escolha uma opção:"
-            value={nodeData.messageText || ''}
-            onChange={handleInputChange}
-            className="mt-1 w-full nodrag" // nodrag para permitir interação com textarea
-            rows={2}
-          />
-        </div>
-        <div>
-          <label htmlFor={`buttonText-${id}`} className="text-xs font-medium text-gray-700">Texto do Botão da Lista</label>
-          <Input
-            id={`buttonText-${id}`}
-            name="buttonText"
-            placeholder="Ver Opções"
-            value={nodeData.buttonText || ''}
-            onChange={handleInputChange}
-            className="mt-1 w-full nodrag"
-          />
-        </div>
-        <div>
-          <label htmlFor={`footerText-${id}`} className="text-xs font-medium text-gray-700">Texto do Rodapé (opcional)</label>
-          <Input
-            id={`footerText-${id}`}
-            name="footerText"
-            placeholder="Rodapé da lista"
-            value={nodeData.footerText || ''}
-            onChange={handleInputChange}
-            className="mt-1 w-full nodrag"
-          />
-        </div>
+    <Card className={cn("w-96 shadow-md neu-card", selected && "ring-2 ring-teal-500 ring-offset-2")}>
+      <NodeToolbar isVisible={selected} position={Position.Top} className="flex gap-2">
+        <Button variant="outline" size="sm" onClick={() => setIsEditingLabel(true)} title="Editar Nome"><Edit3 className="h-4 w-4" /></Button>
+        <Button variant="destructive" size="sm" onClick={handleDeleteNode} title="Remover Nó"><Trash2 className="h-4 w-4" /></Button>
+      </NodeToolbar>
 
-        <div className="space-y-2">
-          <div className="flex justify-between items-center">
-            <h4 className="text-xs font-semibold text-gray-800">Seções e Itens</h4>
-            <Button variant="outline" size="sm" onClick={addSection} className="nodrag">
-              <PlusCircle className="w-3 h-3 mr-1" /> Adicionar Seção
-            </Button>
-          </div>
-          {(nodeData.sections || []).map((section: ListSection, sectionIndex: number) => (
-            <div key={sectionIndex} className="p-2 border rounded bg-gray-50 space-y-2">
-              <div className="flex items-center space-x-2">
-                <Input
-                  placeholder="Título da Seção"
-                  value={section.title}
-                  onChange={(e: ChangeEvent<HTMLInputElement>) => handleSectionTitleChange(sectionIndex, e.target.value)}
-                  className="flex-grow nodrag"
-                />
-                <Button variant="ghost" size="icon" onClick={() => removeSection(sectionIndex)} className="nodrag">
-                  <Trash2 className="w-4 h-4 text-red-500" />
-                </Button>
-              </div>
-              {section.rows.map((item: ListItem, itemIndex: number) => (
-                <div key={item.id || itemIndex} className="pl-4 space-y-1">
-                  <div className="flex items-center space-x-2">
-                    <Input
-                      placeholder="Título do Item"
-                      value={item.title}
-                      onChange={(e: ChangeEvent<HTMLInputElement>) => handleItemChange(sectionIndex, itemIndex, 'title', e.target.value)}
-                      className="flex-grow nodrag"
-                    />
-                     <Button variant="ghost" size="icon" onClick={() => removeItemFromSection(sectionIndex, itemIndex)} className="nodrag">
-                        <Trash2 className="w-3 h-3 text-red-400" />
-                    </Button>
-                  </div>
-                  <Textarea
-                    placeholder="Descrição do Item (opcional)"
-                    value={item.description || ''}
-                    onChange={(e: ChangeEvent<HTMLTextAreaElement>) => handleItemChange(sectionIndex, itemIndex, 'description', e.target.value)}
-                    className="w-full text-xs nodrag"
-                    rows={1}
-                  />
-                </div>
-              ))}
-              <Button variant="outline" size="xs" onClick={() => addItemToSection(sectionIndex)} className="mt-1 nodrag">
-                <PlusCircle className="w-3 h-3 mr-1" /> Adicionar Item à Seção
-              </Button>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 pt-3 px-4 bg-teal-500/10 dark:bg-teal-700/20 rounded-t-lg">
+        {isEditingLabel ? (
+            <div className="flex items-center gap-2">
+                <Input value={label} onChange={handleLabelChange} className="text-sm h-7" autoFocus onBlur={handleLabelSave} onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => e.key === 'Enter' && handleLabelSave()} />
+                <Button size="sm" onClick={handleLabelSave} className="h-7">Salvar</Button>
             </div>
-          ))}
-        </div>
-        <Handle type="source" position={Position.Right} className="w-3 h-3 bg-green-500 rounded-full" />
+        ) : (
+            <CardTitle className="text-sm font-semibold flex items-center cursor-pointer" onClick={() => setIsEditingLabel(true)}>
+                <ListChecks className="h-4 w-4 mr-2 text-teal-600 dark:text-teal-400" />
+                {data.label || 'Mensagem de Lista'}
+            </CardTitle>
+        )}
+        <Badge variant="default" className="bg-teal-500 text-white capitalize">{data.nodeType.replace('Node', '')}</Badge>
+      </CardHeader>
+      <CardContent className="p-3 space-y-3 max-h-96"> {/* Adicionado max-h e overflow-y-auto */}
+        <ScrollArea className="h-80 pr-3"> {/* ScrollArea para o conteúdo configurável */}
+            <div><Label htmlFor={`list-title-${id}`} className="text-xs">Título da Lista (Opcional)</Label><Input id={`list-title-${id}`} value={titleText} onChange={(e: ChangeEvent<HTMLInputElement>) => handleGenericChange('titleText', e.target.value)} placeholder="Título que aparece acima da lista" className="mt-1 neu-input"/></div>
+            <div><Label htmlFor={`list-body-${id}`} className="text-xs">Texto do Corpo *</Label><Textarea id={`list-body-${id}`} value={bodyText} onChange={(e: ChangeEvent<HTMLTextAreaElement>) => handleGenericChange('bodyText', e.target.value)} placeholder="Corpo da mensagem da lista" className="mt-1 neu-input" rows={2}/></div>
+            <div><Label htmlFor={`list-button-${id}`} className="text-xs">Texto do Botão da Lista *</Label><Input id={`list-button-${id}`} value={buttonText} onChange={(e: ChangeEvent<HTMLInputElement>) => handleGenericChange('buttonText', e.target.value)} placeholder="Ex: Ver Opções" className="mt-1 neu-input"/></div>
+            
+            <div className="space-y-2 border-t pt-2 mt-2">
+                <div className="flex justify-between items-center">
+                    <Label className="text-xs">Seções e Itens</Label>
+                    <Button variant="outline" size="xs" onClick={addSection} className="text-xs"><PlusCircle className="h-3 w-3 mr-1"/> Add Seção</Button>
+                </div>
+                {sections.map((section, sectionIndex) => (
+                    <Card key={section.id || sectionIndex} className="p-2 neu-card-inset space-y-1">
+                        <div className="flex items-center gap-2">
+                            <Input value={section.title} onChange={(e: ChangeEvent<HTMLInputElement>) => handleSectionTitleChange(sectionIndex, e.target.value)} placeholder={`Título Seção ${sectionIndex + 1}`} className="neu-input text-xs h-7 flex-grow"/>
+                            {sections.length > 1 && <Button variant="ghost" size="icon" onClick={() => removeSection(sectionIndex)} className="h-7 w-7 text-destructive"><XCircle className="h-4 w-4"/></Button>}
+                        </div>
+                        {section.rows.map((row, rowIndex) => (
+                             <div key={row.id || rowIndex} className="flex items-center gap-1 pl-2">
+                                <Input value={row.title} onChange={(e: ChangeEvent<HTMLInputElement>) => handleItemChange(sectionIndex, rowIndex, 'title', e.target.value)} placeholder={`Item ${rowIndex + 1} Título`} className="neu-input text-xs h-7 flex-grow"/>
+                                <Input value={row.description || ''} onChange={(e: ChangeEvent<HTMLInputElement>) => handleItemChange(sectionIndex, rowIndex, 'description', e.target.value)} placeholder="Descrição (Opcional)" className="neu-input text-xs h-7 flex-grow"/>
+                                <Button variant="ghost" size="icon" onClick={() => removeItemFromSection(sectionIndex, rowIndex)} className="h-7 w-7 text-destructive"><XCircle className="h-3 w-3"/></Button>
+                             </div>
+                        ))}
+                        <Button variant="link" size="xs" onClick={() => addItemToSection(sectionIndex)} className="text-xs mt-1"><PlusCircle className="h-3 w-3 mr-1"/> Add Item à Seção</Button>
+                    </Card>
+                ))}
+            </div>
+
+            <div><Label htmlFor={`list-footer-${id}`} className="text-xs">Rodapé (Opcional)</Label><Input id={`list-footer-${id}`} value={footerText} onChange={(e: ChangeEvent<HTMLInputElement>) => handleGenericChange('footerText', e.target.value)} placeholder="Texto de rodapé" className="mt-1 neu-input"/></div>
+            <div><Label htmlFor={`list-variable-${id}`} className="text-xs">Salvar Seleção na Variável (Opcional)</Label><Input id={`list-variable-${id}`} value={variableToStoreSelection} onChange={(e: ChangeEvent<HTMLInputElement>) => handleGenericChange('variableToStoreSelection', e.target.value)} placeholder="Ex: produto_escolhido" className="mt-1 neu-input"/></div>
+        </ScrollArea>
       </CardContent>
+
+      {handlesToRender.map((handleItem: HandleData) => (
+        <Handle
+          key={handleItem.id}
+          id={handleItem.id}
+          type={handleItem.type}
+          position={handleItem.position}
+          isConnectable={true}
+          style={{ ...handleItem.style, background: '#14b8a6', width: '10px', height: '10px' }} // Cor Teal
+          aria-label={handleItem.label}
+        />
+      ))}
     </Card>
   );
 };
 
-export default memo(ListMessageNode);
+export default memo(ListMessageNodeComponent);
