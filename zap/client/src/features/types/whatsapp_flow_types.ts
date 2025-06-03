@@ -1,4 +1,4 @@
-import { Node, Edge, Position, XYPosition, OnNodesChange, OnEdgesChange, OnConnect, NodeProps as ReactFlowNodeProps, EdgeProps as ReactFlowEdgeProps } from '@xyflow/react';
+import { Node, Edge, Position, XYPosition, OnNodesChange, OnEdgesChange, OnConnect, NodeProps as ReactFlowNodeProps, EdgeProps as ReactFlowEdgeProps, NodeChange, EdgeChange } from '@xyflow/react';
 
 // -----------------------------------------------------------------------------
 // ENUMS E TIPOS BÁSICOS
@@ -290,19 +290,14 @@ export type FlowNodeData =
   | ExternalDataNodeData
   | EndNodeData;
 
-// Tipos para Node e Edge do React Flow
-// TData é o tipo do campo `data` do nó.
-// TType é o tipo do campo `type` do nó (string).
-export type CustomFlowNodeType = Extract<FlowNodeType | string, string>; 
-export type CustomFlowNode<TData extends FlowNodeData = FlowNodeData> = Node<TData, CustomFlowNodeType>;    
+export type CustomFlowNodeType = FlowNodeType | string; // Permite tipos de string literais do enum ou strings genéricas
+export type CustomFlowNode = Node<FlowNodeData, CustomFlowNodeType>;    
 
 export interface FlowEdgeData { 
   conditionLabel?: string;
 }
-// TData é o tipo do campo `data` da aresta (opcional).
-export type CustomFlowEdge<TData extends Record<string, any> | undefined = FlowEdgeData> = Edge<TData>; 
+export type CustomFlowEdge = Edge<FlowEdgeData>; 
 
-// Props para os componentes de nó customizados.
 export type CustomNodeProps<TData extends FlowNodeData = FlowNodeData> = ReactFlowNodeProps<TData>;
 
 
@@ -310,32 +305,37 @@ export interface FlowData {
   id: string;
   name: string;
   description?: string;
-  nodes: CustomFlowNode<FlowNodeData>[]; 
-  edges: CustomFlowEdge<FlowEdgeData | undefined>[]; 
+  nodes: CustomFlowNode[]; 
+  edges: CustomFlowEdge[]; 
   variables?: Variable[];
   createdAt?: string | Date;
   updatedAt?: string | Date;
   status?: 'draft' | 'active' | 'inactive' | 'archived';
 }
 
+// Tipagem para os hooks useNodesState e useEdgesState
+// OnNodesChange e OnEdgesChange já são tipados genericamente pela biblioteca.
+// As funções setNodes e setEdges devem aceitar Node<FlowNodeData>[] e Edge<FlowEdgeData>[]
+export type CustomOnNodesChange = OnNodesChange; // React Flow lida com o genérico NodeChange<Node<T>>
+export type CustomOnEdgesChange = OnEdgesChange; // React Flow lida com o genérico EdgeChange<Edge<U>>
+
+
 export type FlowBuilderContextType = {
-  nodes: CustomFlowNode<FlowNodeData>[];
-  edges: CustomFlowEdge<FlowEdgeData | undefined>[];
-  onNodesChange: OnNodesChange; 
-  onEdgesChange: OnEdgesChange; 
+  nodes: CustomFlowNode[]; // Ou Node<FlowNodeData, CustomFlowNodeType>[]
+  edges: CustomFlowEdge[];   // Ou Edge<FlowEdgeData>[]
+  onNodesChange: CustomOnNodesChange; 
+  onEdgesChange: CustomOnEdgesChange; 
   onConnect: OnConnect;         
   addNode: (type: FlowNodeType, position: XYPosition, data?: Partial<FlowNodeData>) => void;
   updateNodeData: <T extends FlowNodeData>(nodeId: string, newData: Partial<T>) => void; 
   getNodeData: <T extends FlowNodeData>(nodeId: string) => T | undefined;
-  setNodes: React.Dispatch<React.SetStateAction<CustomFlowNode<FlowNodeData>[]>>;
-  setEdges: React.Dispatch<React.SetStateAction<CustomFlowEdge<FlowEdgeData | undefined>[]>>;
+  setNodes: React.Dispatch<React.SetStateAction<CustomFlowNode[]>>; // Ou Node<FlowNodeData>[]
+  setEdges: React.Dispatch<React.SetStateAction<CustomFlowEdge[]>>;   // Ou Edge<FlowEdgeData>[]
   selectedNodeId: string | null;
   setSelectedNodeId: (id: string | null) => void;
 };
 
-// -----------------------------------------------------------------------------
-// TIPOS RELACIONADOS AO WHATSAPP (Conexão, Mensagens, Templates)
-// -----------------------------------------------------------------------------
+// ... (restante dos tipos WhatsApp...)
 export interface WhatsAppConnectionStatus {
   instanceName: string;
   qrCode?: string;
