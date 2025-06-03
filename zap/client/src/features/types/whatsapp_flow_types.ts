@@ -10,86 +10,87 @@ export interface ApiError {
 }
 
 // Para listar fluxos na UI do Zap
-export interface FlowListElement { // Renomeado de FlowElementData para evitar conflito com React Flow
-  id: string; // Ou number, dependendo do seu backend do Zap
+export interface FlowListElement { 
+  id: string; 
   name: string;
   description?: string;
   trigger?: string; 
   isActive?: boolean;
-  campaign_id?: string | null; // Se fluxos podem ser associados a campanhas do MKTV2 principal
-  updated_at?: string;
+  status?: 'active' | 'inactive' | 'draft' | 'archived'; // Adicionado do seu ZapFlowsList
+  campaign_id?: string | null; 
+  updatedAt?: string; // Era updated_at no seu ZapFlowsList
+  triggerType?: string; // Do seu ZapFlowsList
   // Adicione outras props que você usa para exibir a lista de fluxos
 }
 
-export interface FlowPerformanceData { // Conforme documentação do Módulo Zap
+// (FlowPerformanceData e CampaignSelectItem mantidos como antes, se necessários)
+export interface FlowPerformanceData {
   flowId: string;
   flowName: string;
   totalStarted: number;
   totalCompleted: number;
-  completionRate: number;
-  avgDurationSeconds?: number;
+  completionRate: number; // Em porcentagem
+  avgTimeToComplete?: number; // Adicionado do seu ZapAnalytics (era avgDurationSeconds)
+  // Outras métricas relevantes
 }
 
-// --- DEFINIÇÕES DE DADOS PARA NÓS CUSTOMIZADOS ---
-// Baseado no seu zap/client/src/features/types/whatsapp_flow_types.ts
-// e nos componentes de nó que você forneceu (tanto da pasta zap/ quanto do flow.tsx)
 
-// Sua NodeData original era muito genérica com [key: string]: any.
-// Vamos tentar ser mais específicos, mas mantendo a propriedade 'label' que você usa.
+// --- DEFINIÇÕES DE DADOS PARA NÓS CUSTOMIZADOS ---
 export interface BaseNodeData {
-  label?: string; // Usado como título do nó no card
-  // Se algum nó REALMENTE precisar de dados totalmente dinâmicos,
-  // podemos adicionar uma propriedade como 'dynamicProps?: Record<string, any>' nele.
+  label?: string; 
+  // Manter [key: string]: any; do seu arquivo original se for estritamente necessário
+  // para alguns nós, mas tentaremos evitar.
+  // [key: string]: any; 
 }
 
 export interface TriggerNodeData extends BaseNodeData {
   triggerType?: 'keyword' | 'form_submission' | 'webhook' | 'manual' | 'scheduled' | '';
   keywords?: string[]; 
   formId?: string;
-  webhookUrl?: string; // Para exibição, gerado pelo sistema
+  webhookUrl?: string; 
   scheduleDateTime?: string; 
   exactMatch?: boolean;
 }
 
 export interface TextMessageNodeData extends BaseNodeData {
-  message?: string; // Usado em seu TextMessageNode.tsx (era messageText em alguns tipos)
+  message?: string; // Usado em seu TextMessageNode.tsx (era messageText em seu types original)
 }
 
-export interface ButtonOption { // Renomeado de ButtonOptionData para consistência
+export interface ButtonOption { // Renomeado de ButtonOptionData
   id: string; 
-  displayText: string; 
+  displayText: string; // Era 'label' no seu types original, mas 'displayText' no ButtonsMessageNode.tsx
   value?: string; 
 }
 export interface ButtonsMessageNodeData extends BaseNodeData {
-  messageText?: string;
-  buttons?: ButtonOption[];
-  headerText?: string;
-  footerText?: string;
+  messageText?: string; // Do seu types original
+  buttons?: ButtonOption[]; // Do seu types original
+  headerText?: string; // Do seu ButtonsMessageNode.tsx
+  footerText?: string; // Do seu types original
 }
 
-export interface ImageNodeData extends BaseNodeData { // Do flow.tsx
+export interface ImageNodeData extends BaseNodeData {
   url?: string;
   caption?: string;
 }
 
-export interface AudioNodeData extends BaseNodeData { // Do flow.tsx
+export interface AudioNodeData extends BaseNodeData {
   url?: string;
+  caption?: string; 
   ptt?: boolean;    
-  // caption?: string; // Adicionar se necessário
 }
 
-export interface FileNodeData extends BaseNodeData { // Do flow.tsx
+export interface FileNodeData extends BaseNodeData {
   url?: string;
-  filename?: string;
-  mimetype?: string;
-  // caption?: string; // Adicionar se necessário
+  fileName?: string; 
+  mimeType?: string; 
+  caption?: string;
 }
 
-export interface LocationNodeData extends BaseNodeData { // Do flow.tsx
+export interface LocationNodeData extends BaseNodeData {
   latitude?: string; 
   longitude?: string; 
-  name?: string; // Nome do local
-  address?: string; // Endereço
+  name?: string;
+  address?: string;
 }
 
 export interface DelayNodeData extends BaseNodeData { // Do seu zap/DelayNode.tsx
@@ -103,25 +104,26 @@ export interface ListItem { // Renomeado de ListItemData
   description?: string; 
 }
 export interface ListSection { // Renomeado de ListSectionData
-  id: string; 
+  id: string; // Adicionado id para key e manipulação
   title: string; 
   rows: ListItem[]; 
 }
-export interface ListMessageNodeData extends BaseNodeData { // Do seu zap/ListMessageNode.tsx
+// Corrigido nome para ListMessageNodeData (era ListMessageNodeDataFE e causava erro no ZapFlowBuilder)
+export interface ListMessageNodeData extends BaseNodeData { 
   messageText?: string; 
   buttonText?: string; 
-  title?: string; // Título da lista em si
+  title?: string; 
   footerText?: string; 
   sections?: ListSection[]; 
 }
 
-export interface WaitInputNodeData extends BaseNodeData { // Do flow.tsx
-  variableName?: string; // Onde salvar a resposta
-  message?: string; // Mensagem de prompt
+export interface WaitInputNodeData extends BaseNodeData {
+  variableName?: string;
+  message?: string; 
   timeoutSeconds?: number;
 }
 
-export interface VariableAssignment { // Do seu zap/SetVariableNode.tsx
+export interface VariableAssignment { 
     variableName: string;
     value?: string; 
     source?: 'static' | 'expression' | 'contact_data' | 'message_data'; 
@@ -129,31 +131,43 @@ export interface VariableAssignment { // Do seu zap/SetVariableNode.tsx
     contactField?: string; 
     messagePath?: string; 
 }
-export interface SetVariableNodeData extends BaseNodeData { // Do seu zap/SetVariableNode.tsx
+export interface SetVariableNodeData extends BaseNodeData { 
   assignments?: VariableAssignment[];
 }
 
-export interface ConditionNodeData extends BaseNodeData { // Do seu zap/ConditionNode.tsx
+export interface Condition { // Do seu types original
+    id: string; 
+    variable?: string; 
+    operator?: string; 
+    value?: string; 
+    outputLabel?: string; 
+}
+export interface ConditionNodeData extends BaseNodeData { // Do seu types original
+  // Se for a estrutura com múltiplas conditions:
+  conditions?: Condition[]; 
+  defaultOutputLabel?: string;
+  // Se for a estrutura mais simples do seu ConditionNode.tsx:
   variableToCheck?: string; 
-  operator?: 'equals' | 'not_equals' | 'contains' | 'greater_than' | 'less_than' | 'startsWith' | 'endsWith' | 'isSet' | 'isNotSet' | 'regex';
+  // operator?: 'equals' | 'not_equals' | ... (já definido na Condition, mas pode ser duplicado aqui se a UI for simples)
   valueToCompare?: string; 
 }
 
-export interface TimeConditionNodeData extends BaseNodeData { // Do flow.tsx
+
+export interface TimeConditionNodeData extends BaseNodeData {
   startTime?: string; // HH:MM
   endTime?: string;   // HH:MM
 }
 
-export interface ApiCallNodeData extends BaseNodeData { // Do seu zap/ApiCallNode.tsx
-  url?: string;
+export interface ApiCallNodeData extends BaseNodeData { // Do seu types original
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+  url?: string;
   headers?: string; // JSON string
   body?: string;    // JSON string ou texto
-  responseMapping?: string; // Ex: "data.token para var {{api_token}}"
-  // saveResponseTo?: string; // Alternativa mais simples se for só salvar em uma var
+  saveResponseTo?: string; // Era responseMapping no seu componente ApiCallNode.tsx
+  // responseMapping?: string; // Se preferir este nome
 }
 
-export interface WebhookCallNodeData extends BaseNodeData { // Do flow.tsx
+export interface WebhookCallNodeData extends BaseNodeData { 
   url?: string;
   method?: 'GET' | 'POST';
   headers?: string;
@@ -161,7 +175,8 @@ export interface WebhookCallNodeData extends BaseNodeData { // Do flow.tsx
   saveResponseTo?: string;
 }
 
-export interface GPTQueryNodeData extends BaseNodeData { // Do seu zap/GptQueryNode.tsx
+// Corrigido nome para GPTQueryNodeData (era GptQueryNodeData e causava erro no ZapFlowBuilder)
+export interface GPTQueryNodeData extends BaseNodeData { 
   promptTemplate?: string; 
   variableToSaveResult?: string; 
   apiKeyVariable?: string; 
@@ -171,7 +186,7 @@ export interface GPTQueryNodeData extends BaseNodeData { // Do seu zap/GptQueryN
   maxTokens?: number; 
 }
 
-export interface AssignAgentNodeData extends BaseNodeData { // Do flow.tsx
+export interface AssignAgentNodeData extends BaseNodeData {
   department?: string;
   agentId?: string;
   message?: string; 
@@ -179,10 +194,10 @@ export interface AssignAgentNodeData extends BaseNodeData { // Do flow.tsx
 
 export interface EndNodeData extends BaseNodeData { // Do seu zap/EndNode.tsx
   endStateType?: 'completed' | 'abandoned' | 'error_fallback' | string; 
-  message?: string; // Mensagem final
+  message?: string; 
 }
 
-export interface GoToFlowNodeData extends BaseNodeData { // Do flow.tsx
+export interface GoToFlowNodeData extends BaseNodeData {
   targetFlowId?: string; 
 }
 
@@ -191,7 +206,7 @@ export interface TagContactNodeData extends BaseNodeData { // Do seu zap/TagCont
   tagOperation?: 'add' | 'remove'; 
 }
 
-export interface LoopNodeData extends BaseNodeData { // Do flow.tsx
+export interface LoopNodeData extends BaseNodeData {
   repetitions?: number;
 }
 
@@ -200,24 +215,26 @@ export interface QuickReply { // Do seu zap/QuestionNode.tsx
     text: string;
     payload?: string;
 }
-export interface QuestionNodeData extends BaseNodeData { // Do seu zap/QuestionNode.tsx
+export interface QuestionNodeData extends BaseNodeData { // Do seu types original e QuestionNode.tsx
   questionText?: string;
-  expectedResponseType?: 'text' | 'number' | 'email' | 'quick_reply' | 'list_reply' | '';
-  variableToSaveAnswer?: string;
-  quickReplies?: QuickReply[];
-  // listOptions?: ListMessageNodeData; // Se for usar estrutura de Lista para resposta
+  variableToSave?: string; // Do seu types original
+  variableToSaveAnswer?: string; // Do seu QuestionNode.tsx
+  expectedResponseType?: 'text' | 'number' | 'email' | 'quick_reply' | 'list_reply' | ''; // Do seu QuestionNode.tsx
+  quickReplies?: QuickReply[]; // Do seu QuestionNode.tsx
 }
 
-export interface MediaMessageNodeData extends BaseNodeData { // Do seu zap/MediaMessageNode.tsx
+export interface MediaMessageNodeData extends BaseNodeData { // Do seu types original e MediaMessageNode.tsx
   mediaType?: 'image' | 'video' | 'audio' | 'document' | '';
-  mediaUrl?: string; 
+  url?: string; // Do seu types original (era mediaUrl no componente)
+  mediaUrl?: string; // Do seu MediaMessageNode.tsx
   caption?: string;
   fileName?: string; 
   mimeType?: string; 
   ptt?: boolean; 
 }
 
-export interface ExternalDataFetchNodeData extends BaseNodeData { // Do seu zap/ExternalDataNode.tsx
+// Corrigido nome para ExternalDataFetchNodeData (era ExternalDataFetchNodeDataFE e causava erro no ZapFlowBuilder)
+export interface ExternalDataFetchNodeData extends BaseNodeData { 
   url?: string;
   method?: 'GET'; 
   saveToVariable?: string; 
@@ -230,22 +247,19 @@ export interface ActionNodeData extends BaseNodeData { // Do seu zap/ActionNode.
   emailTemplateId?: string; 
   contactPropertyName?: string; 
   contactPropertyValue?: string | number | boolean; 
-  apiUrl?: string; // Para actionType 'call_api'
-  // Adicionar aqui outras props para 'call_api' se necessário: method, headers, body, saveResponseTo
+  apiUrl?: string; 
 }
 
 export interface AiDecisionNodeData extends BaseNodeData { // Do seu zap/AiDecisionNode.tsx
   inputVariable?: string; 
   decisionCategories?: Array<{ id: string; name: string; keywords?: string; }>; 
-  // model?: string;
-  // decisionPrompt?: string;
 }
 
 export interface ClonedVoiceNodeData extends BaseNodeData { // Do seu zap/ClonedVoiceNode.tsx
   textToSpeak?: string; 
   voiceId?: string; 
-  // apiKeyVariable?: string; 
 }
+
 
 // --- União de todos os tipos de dados de nós ---
 export type CustomNodeDataType =
@@ -278,21 +292,33 @@ export type CustomNodeDataType =
   | AiDecisionNodeData
   | ClonedVoiceNodeData;
 
-// Tipo para um nó do React Flow que usa seus dados customizados
 export type ZapFlowNode = Node<CustomNodeDataType, string | undefined>;
 
 // Definição da estrutura do fluxo para o FlowBuilder
-export interface FlowDefinition { // Era FlowElementData no seu zap/types, mas esse nome é usado pelo React Flow
+export interface FlowDefinition { // Era FlowElementData no seu types/zap.ts
   nodes: ZapFlowNode[];
   edges: Edge[];
   viewport?: { x: number; y: number; zoom: number };
 }
 
-// Outros tipos que estavam no seu zap/types (se ainda forem relevantes fora dos nós)
-// export interface SendMessagePayload { /* ... */ }
-// export interface ZapUser { /* ... */ }
-// export interface WhatsAppConnectionStatus { /* ... */ }
-
+// Tipos que estavam no seu whatsapp_flow_types.ts original
+export interface FlowNode { // Este é o seu FlowNode original
+  id: string;
+  type?: string; 
+  data: BaseNodeData; // Usando BaseNodeData aqui, pois CustomNodeDataType é para o <Node> do ReactFlow
+  position: { x: number; y: number };
+}
+export interface FlowEdge { // Este é o seu FlowEdge original
+  id: string;
+  source: string;
+  target: string;
+  sourceHandle?: string | null; 
+  targetHandle?: string | null; 
+  label?: string;
+  animated?: boolean;
+  type?: 'smoothstep' | 'default' | string; 
+  markerEnd?: any; 
+}
 
 // Reexportar tipos do React Flow para conveniência
-export type { NodeProps, Edge, Node };
+export type { NodeProps, Edge }; // Node já está reexportado como ZapFlowNode
