@@ -1,11 +1,12 @@
 import React, { memo, useState, useEffect, useCallback, ChangeEvent, KeyboardEvent } from 'react';
 import { Handle, Position, useReactFlow, NodeToolbar, NodeProps as ReactFlowNodeProps } from '@xyflow/react';
+// CORRIGIDO: Path Aliases para @zap_client
 import { TextMessageNodeData, FlowNodeType, HandleData } from '@zap_client/features/types/whatsapp_flow_types';
 import { Card, CardContent, CardHeader, CardTitle } from '@zap_client/components/ui/card';
 import { Textarea } from '@zap_client/components/ui/textarea';
 import { Label } from '@zap_client/components/ui/label';
 import { Button } from '@zap_client/components/ui/button';
-import { Input } from '@zap_client/components/ui/input'; // Adicionado Input se for usar para editar label
+import { Input } from '@zap_client/components/ui/input'; 
 import { MessageSquareText, Trash2, Edit3 } from 'lucide-react';
 import { cn } from '@zap_client/lib/utils';
 import { Badge } from '@zap_client/components/ui/badge';
@@ -101,8 +102,9 @@ const TextMessageNodeComponent: React.FC<ReactFlowNodeProps<TextMessageNodeData>
             className="text-xs min-h-[80px] neu-input"
             rows={3}
           />
+          {/* CORRIGIDO: Sintaxe JSX para exibir o texto corretamente */}
           <p className="text-xs text-muted-foreground">
-            Use `{"{{variavel}}`}` para inserir variáveis.
+            Use <code>{"{{variavel}}"}</code> para inserir variáveis.
           </p>
         </div>
       </CardContent>
@@ -114,7 +116,7 @@ const TextMessageNodeComponent: React.FC<ReactFlowNodeProps<TextMessageNodeData>
           type={handleItem.type}
           position={handleItem.position}
           isConnectable={handleItem.isConnectable !== undefined ? handleItem.isConnectable : true}
-          style={{ ...handleItem.style, background: '#38bdf8', width: '10px', height: '10px' }} // Cor Sky
+          style={{ ...handleItem.style, background: '#38bdf8', width: '10px', height: '10px' }}
           aria-label={handleItem.label}
         />
       ))}
