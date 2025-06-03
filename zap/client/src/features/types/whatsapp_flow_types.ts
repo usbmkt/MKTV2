@@ -1,15 +1,12 @@
-// Em zap/client/src/features/types/whatsapp_flow_types.ts
-import { Node } from '@xyflow/react';
+import { Node } from '@xyflow/react'; // Ou do 'reactflow' se ainda estiver usando ele
 
 export interface ActionNodeData {
   label?: string;
   actionType?: string;
-  // outras propriedades específicas...
+  // ... outras propriedades
 }
+export type ActionNodeType = Node<ActionNodeData, 'action'>;
 
-export type ActionNodeType = Node<ActionNodeData, 'action'>; // Exemplo de tipo específico
-
-// EXPORTE TODOS OS OUTROS TIPOS DE DADOS DOS NÓS AQUI
-// export interface AiDecisionNodeData { ... }
-// export interface DelayNodeData { ... }
-// etc.
+export interface AiDecisionNodeData { /* ...definições... */ }
+export interface DelayNodeData { /* ...definições... */ }
+// ... e assim por diante para todos os tipos de nós
