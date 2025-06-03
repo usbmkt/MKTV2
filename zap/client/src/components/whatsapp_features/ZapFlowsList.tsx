@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { MoreHorizontal, PlayCircle, PauseCircle, Copy, Trash2, PlusCircle, Search, Loader2, Users, BarChart2, Clock, Zap as BotIcon } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import React, { useState, useEffect, useCallback, ChangeEvent } from 'react';
+import { MoreHorizontal, PlayCircle, PauseCircle, Copy, Trash2, PlusCircle, Search, Loader2, Users, BarChart2, Clock, Settings, Bot as BotIcon } from 'lucide-react'; // Adicionado Settings
+// CORRIGIDO: Path Aliases para @zap_client
+import { Button } from '@zap_client/components/ui/button';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@zap_client/components/ui/card';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,18 +10,18 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { WhatsAppSavedFlow, FlowNodeType, CustomFlowNode } from '@/types/whatsapp_flow_types'; // Atualizado
-import { useToast } from '@/hooks/use-toast'; // Atualizado
-import { apiRequest } from '@/lib/api'; // Atualizado
-import { cn } from '@/lib/utils';
+} from '@zap_client/components/ui/dropdown-menu';
+import { Input } from '@zap_client/components/ui/input';
+import { Badge } from '@zap_client/components/ui/badge';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@zap_client/components/ui/dialog';
+import { Label } from '@zap_client/components/ui/label';
+import { Textarea } from '@zap_client/components/ui/textarea';
+import { WhatsAppSavedFlow } from '@zap_client/features/types/whatsapp_flow_types'; // Corrigido para o local correto
+import { useToast } from '@zap_client/hooks/use-toast';
+import { apiRequest } from '@zap_client/lib/api'; // Assumindo que apiRequest está em lib do zap
+import { cn } from '@zap_client/lib/utils';
 
-// Mock data (substituir com chamadas de API reais)
+
 const mockFlows: WhatsAppSavedFlow[] = [
   {
     id: 'flow1',
@@ -31,8 +32,8 @@ const mockFlows: WhatsAppSavedFlow[] = [
     triggerKeywords: ['oi', 'olá', 'bom dia'],
     totalUsers: 1520,
     completionRate: 85,
-    averageTime: 120, // seconds
-    nodes: [], edges: [], // Simplificado para mock
+    averageTime: 120, 
+    nodes: [], edges: [], 
     createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5).toISOString(),
     updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2).toISOString(),
   },
@@ -50,24 +51,14 @@ const mockFlows: WhatsAppSavedFlow[] = [
     createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 10).toISOString(),
     updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3).toISOString(),
   },
-  {
-    id: 'flow3',
-    name: 'Suporte Nível 1',
-    description: 'Fluxo de triagem para dúvidas comuns de suporte.',
-    status: 'draft',
-    version: 1,
-    nodes: [], edges: [],
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 1).toISOString(),
-    updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
-  }
 ];
 
 
-interface WhatsappFlowsListProps {
-  onEditFlow: (flowId: string, flowData?: WhatsAppSavedFlow) => void; // Callback para abrir o editor de fluxo
+interface ZapFlowsListProps {
+  onEditFlow: (flowId: string, flowData?: WhatsAppSavedFlow) => void; 
 }
 
-const WhatsappFlowsList: React.FC<WhatsappFlowsListProps> = ({ onEditFlow }) => {
+const ZapFlowsList: React.FC<ZapFlowsListProps> = ({ onEditFlow }) => {
   const [flows, setFlows] = useState<WhatsAppSavedFlow[]>(mockFlows);
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -78,9 +69,8 @@ const WhatsappFlowsList: React.FC<WhatsappFlowsListProps> = ({ onEditFlow }) => 
   const fetchFlows = useCallback(async () => {
     setIsLoading(true);
     try {
-      // const response = await apiRequest('GET', '/api/whatsapp/flows');
-      // setFlows(response.data as WhatsAppSavedFlow[]);
-      setFlows(mockFlows); // Usando mock por enquanto
+      // const response = await apiRequest('GET', '/zap-api/flows'); // Exemplo de rota no backend do Zap
+      setFlows(mockFlows); 
     } catch (error) {
       toast({ title: 'Erro ao buscar fluxos', description: String(error), variant: 'destructive' });
     } finally {
@@ -101,22 +91,22 @@ const WhatsappFlowsList: React.FC<WhatsappFlowsListProps> = ({ onEditFlow }) => 
 
     const flowPayload: Partial<WhatsAppSavedFlow> = {
       ...editingFlow,
-      id: editingFlow.id || `flow-${Date.now()}`, // Gerar ID se for novo
+      id: editingFlow.id || `flow-${Date.now()}`, 
       status: editingFlow.status || 'draft',
-      nodes: editingFlow.nodes || [], // Default para novo fluxo
-      edges: editingFlow.edges || [], // Default para novo fluxo
+      nodes: editingFlow.nodes || [], 
+      edges: editingFlow.edges || [], 
     };
 
     try {
       setIsLoading(true);
-      if (editingFlow.id && flows.find(f => f.id === editingFlow.id)) { // Check if it's an update by seeing if id exists in current flows
-        // await apiRequest('PUT', `/api/whatsapp/flows/${editingFlow.id}`, flowPayload);
-        setFlows(prev => prev.map(f => f.id === editingFlow!.id ? { ...f, ...flowPayload } as WhatsAppSavedFlow : f));
+      if (editingFlow.id && flows.find(f => f.id === editingFlow.id)) { 
+        // await apiRequest('PUT', `/zap-api/flows/${editingFlow.id}`, flowPayload);
+        setFlows((prevFlows: WhatsAppSavedFlow[]) => prevFlows.map(f => f.id === editingFlow!.id ? { ...f, ...flowPayload } as WhatsAppSavedFlow : f));
         toast({ title: "Fluxo atualizado!", description: `O fluxo "${flowPayload.name}" foi salvo.` });
       } else {
-        // const response = await apiRequest('POST', '/api/whatsapp/flows', flowPayload);
-        // setFlows(prev => [...prev, response.data as WhatsAppSavedFlow]);
-        setFlows(prev => [...prev, flowPayload as WhatsAppSavedFlow]);
+        // const response = await apiRequest('POST', '/zap-api/flows', flowPayload);
+        // setFlows(prevFlows => [...prevFlows, response.data as WhatsAppSavedFlow]);
+        setFlows((prevFlows: WhatsAppSavedFlow[]) => [...prevFlows, flowPayload as WhatsAppSavedFlow]);
         toast({ title: "Fluxo criado!", description: `O fluxo "${flowPayload.name}" foi criado.` });
       }
       setIsFormOpen(false);
@@ -132,8 +122,8 @@ const WhatsappFlowsList: React.FC<WhatsappFlowsListProps> = ({ onEditFlow }) => 
     if (!window.confirm("Tem certeza que deseja excluir este fluxo? Esta ação não pode ser desfeita.")) return;
     try {
       setIsLoading(true);
-      // await apiRequest('DELETE', `/api/whatsapp/flows/${flowId}`);
-      setFlows(prev => prev.filter(f => f.id !== flowId));
+      // await apiRequest('DELETE', `/zap-api/flows/${flowId}`);
+      setFlows((prevFlows: WhatsAppSavedFlow[]) => prevFlows.filter(f => f.id !== flowId));
       toast({ title: "Fluxo excluído!", variant: "default" });
     } catch (error) {
       toast({ title: "Erro ao excluir fluxo", description: String(error), variant: "destructive" });
@@ -145,15 +135,15 @@ const WhatsappFlowsList: React.FC<WhatsappFlowsListProps> = ({ onEditFlow }) => 
   const handleDuplicateFlow = async (flow: WhatsAppSavedFlow) => {
      const newFlowData: Partial<WhatsAppSavedFlow> = {
         ...flow,
-        id: `flow-copy-${Date.now()}`, // Novo ID
+        id: `flow-copy-${Date.now()}`, 
         name: `${flow.name} (Cópia)`,
         status: 'draft',
      };
     try {
       setIsLoading(true);
-      // const response = await apiRequest('POST', '/api/whatsapp/flows', newFlowData); // Endpoint de criação
-      // setFlows(prev => [...prev, response.data as WhatsAppSavedFlow]);
-      setFlows(prev => [...prev, newFlowData as WhatsAppSavedFlow]);
+      // const response = await apiRequest('POST', '/zap-api/flows', newFlowData); 
+      // setFlows(prevFlows => [...prevFlows, response.data as WhatsAppSavedFlow]);
+      setFlows((prevFlows: WhatsAppSavedFlow[]) => [...prevFlows, newFlowData as WhatsAppSavedFlow]);
       toast({ title: "Fluxo duplicado!", description: `Fluxo "${newFlowData.name}" criado.` });
     } catch (error) {
       toast({ title: "Erro ao duplicar fluxo", description: String(error), variant: "destructive" });
@@ -165,8 +155,8 @@ const WhatsappFlowsList: React.FC<WhatsappFlowsListProps> = ({ onEditFlow }) => 
   const handleUpdateStatus = async (flowId: string, newStatus: 'active' | 'inactive' | 'draft' | 'archived') => {
     try {
       setIsLoading(true);
-      // await apiRequest('PATCH', `/api/whatsapp/flows/${flowId}/status`, { status: newStatus });
-      setFlows(prev => prev.map(f => f.id === flowId ? { ...f, status: newStatus, updatedAt: new Date().toISOString() } : f));
+      // await apiRequest('PATCH', `/zap-api/flows/${flowId}/status`, { status: newStatus });
+      setFlows((prevFlows: WhatsAppSavedFlow[]) => prevFlows.map(f => f.id === flowId ? { ...f, status: newStatus, updatedAt: new Date().toISOString() } : f));
       toast({ title: "Status do fluxo atualizado!", variant: "default" });
     } catch (error) {
       toast({ title: "Erro ao atualizar status", description: String(error), variant: "destructive" });
@@ -188,7 +178,7 @@ const WhatsappFlowsList: React.FC<WhatsappFlowsListProps> = ({ onEditFlow }) => 
 
   const filteredFlows = flows.filter(flow =>
     flow.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    flow.description?.toLowerCase().includes(searchTerm.toLowerCase())
+    (flow.description && flow.description.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   if (isLoading && !flows.length) {
@@ -204,7 +194,7 @@ const WhatsappFlowsList: React.FC<WhatsappFlowsListProps> = ({ onEditFlow }) => 
             type="text"
             placeholder="Buscar fluxos..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
             className="pl-10 neu-input w-full sm:w-64"
           />
         </div>
@@ -238,7 +228,7 @@ const WhatsappFlowsList: React.FC<WhatsappFlowsListProps> = ({ onEditFlow }) => 
                         <PlayCircle className="h-4 w-4 mr-2" /> Editar no Construtor
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => openEditFormModal(flow)}>
-                        <Settings2 className="h-4 w-4 mr-2" /> Configurações
+                        <Settings className="h-4 w-4 mr-2" /> Configurações
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => handleDuplicateFlow(flow)}>
                         <Copy className="h-4 w-4 mr-2" /> Duplicar
@@ -276,7 +266,7 @@ const WhatsappFlowsList: React.FC<WhatsappFlowsListProps> = ({ onEditFlow }) => 
                 {flow.triggerKeywords && flow.triggerKeywords.length > 0 && (
                     <div className="pt-1">
                         <span className="font-medium text-foreground/80">Gatilhos: </span>
-                        {flow.triggerKeywords.slice(0,3).map(kw => <Badge key={kw} variant="outline" className="mr-1 text-xs">{kw}</Badge>)}
+                        {flow.triggerKeywords.slice(0,3).map((kw: string) => <Badge key={kw} variant="outline" className="mr-1 text-xs">{kw}</Badge>)}
                         {flow.triggerKeywords.length > 3 && <Badge variant="outline" className="text-xs">...</Badge>}
                     </div>
                 )}
@@ -306,7 +296,7 @@ const WhatsappFlowsList: React.FC<WhatsappFlowsListProps> = ({ onEditFlow }) => 
                 <Input
                   id="flow-name"
                   value={editingFlow?.name || ''}
-                  onChange={(e) => setEditingFlow(prev => ({ ...prev, name: e.target.value }))}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => setEditingFlow((prev: Partial<WhatsAppSavedFlow> | null) => ({ ...prev, name: e.target.value }))}
                   className="col-span-3 neu-input"
                   placeholder="Ex: Boas Vindas VIP"
                 />
@@ -318,7 +308,7 @@ const WhatsappFlowsList: React.FC<WhatsappFlowsListProps> = ({ onEditFlow }) => 
                 <Textarea
                   id="flow-description"
                   value={editingFlow?.description || ''}
-                  onChange={(e) => setEditingFlow(prev => ({ ...prev, description: e.target.value }))}
+                  onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setEditingFlow((prev: Partial<WhatsAppSavedFlow> | null) => ({ ...prev, description: e.target.value }))}
                   className="col-span-3 neu-input"
                   placeholder="Descreva o objetivo deste fluxo."
                   rows={3}
@@ -331,7 +321,7 @@ const WhatsappFlowsList: React.FC<WhatsappFlowsListProps> = ({ onEditFlow }) => 
                 <Input
                   id="flow-keywords"
                   value={editingFlow?.triggerKeywords?.join(', ') || ''}
-                  onChange={(e) => setEditingFlow(prev => ({ ...prev, triggerKeywords: e.target.value.split(',').map(k => k.trim()).filter(k => k) }))}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => setEditingFlow((prev: Partial<WhatsAppSavedFlow> | null) => ({ ...prev, triggerKeywords: e.target.value.split(',').map((k: string) => k.trim()).filter((k: string) => k) }))}
                   className="col-span-3 neu-input"
                   placeholder="oi, olá, ajuda (separado por vírgula)"
                 />
@@ -351,4 +341,4 @@ const WhatsappFlowsList: React.FC<WhatsappFlowsListProps> = ({ onEditFlow }) => 
   );
 };
 
-export default WhatsappFlowsList;
+export default ZapFlowsList;
