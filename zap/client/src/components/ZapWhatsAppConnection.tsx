@@ -3,10 +3,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@zap_client/components/ui/card';
 import { Button } from '@zap_client/components/ui/button';
 import { Badge } from '@zap_client/components/ui/badge';
-import { Input } from '@zap_client/components/ui/input'; // Importado, mas não usado diretamente no JSX abaixo
-import { Label } from '@zap_client/components/ui/label';   // Importado, mas não usado diretamente no JSX abaixo
+import { Input } from '@zap_client/components/ui/input';
+import { Label } from '@zap_client/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@zap_client/components/ui/tabs';
-import { Alert, AlertDescription as UIAlertDescription } from '@zap_client/components/ui/alert'; // Renomeado para UIAlertDescription
+import { Alert, AlertDescription as UIAlertDescription } from '@zap_client/components/ui/alert';
 import {
   Smartphone,
   QrCode,
@@ -17,14 +17,13 @@ import {
   Copy,
   Download,
   Shield,
-  Zap as ZapIcon, // Renomeado para evitar conflito com o nome do módulo/componente
+  Zap as ZapIcon,
   Loader2,
   Unlink,
   Info
 } from 'lucide-react';
-import QRCodeReact from 'qrcode.react'; // Importado corretamente
+import QRCodeReact from 'qrcode.react';
 
-// Definições de Interface (ajustadas para corresponder ao uso no código)
 interface WhatsAppConnectionStatus {
   status: 'DISCONNECTED' | 'CONNECTED' | 'PENDING_QR' | 'ERROR' | 'INITIALIZING';
   qrCode?: string | null;
@@ -32,15 +31,14 @@ interface WhatsAppConnectionStatus {
   deviceName?: string | null;
   batteryLevel?: number | null;
   lastSeen?: string | null;
-  lastError?: string | null; // Adicionado
+  lastError?: string | null;
 }
 
-interface ApiError { // Adicionado
+interface ApiError {
     message: string;
     details?: any;
 }
 
-// Simulação de chamada de API
 const mockApiCall = async (action: string, payload?: any): Promise<any> => {
   console.log(`[API Mock] Action: ${action}`, payload);
   await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
@@ -68,7 +66,6 @@ const mockApiCall = async (action: string, payload?: any): Promise<any> => {
   return { status: 'INITIALIZING' };
 };
 
-
 interface ZapWhatsAppConnectionProps {
   onConnectionChange?: (status: WhatsAppConnectionStatus) => void;
 }
@@ -76,7 +73,7 @@ interface ZapWhatsAppConnectionProps {
 export default function ZapWhatsAppConnection({ onConnectionChange }: ZapWhatsAppConnectionProps) {
   const [connectionStatus, setConnectionStatus] = useState<WhatsAppConnectionStatus>({ status: 'INITIALIZING' });
   const [isLoading, setIsLoading] = useState(false);
-  const [apiToken, setApiToken] = useState(''); // Para o input de token
+  const [apiToken, setApiToken] = useState('');
 
   const fetchStatus = useCallback(async (showLoading = true) => {
     if(showLoading) setIsLoading(true);
@@ -122,13 +119,13 @@ export default function ZapWhatsAppConnection({ onConnectionChange }: ZapWhatsAp
 
   useEffect(() => {
     fetchStatus();
-    const interval = setInterval(() => fetchStatus(false), 15000); // Checa status periodicamente
+    const interval = setInterval(() => fetchStatus(false), 15000);
     return () => clearInterval(interval);
   }, [fetchStatus]);
 
   useEffect(() => {
     if (connectionStatus.status === 'PENDING_QR' && !connectionStatus.qrCode) {
-      generateAndSetQRCode(); // Gera um novo QR se estiver pendente mas sem QR
+      generateAndSetQRCode();
     }
   }, [connectionStatus.status, connectionStatus.qrCode, generateAndSetQRCode]);
 
@@ -141,7 +138,7 @@ export default function ZapWhatsAppConnection({ onConnectionChange }: ZapWhatsAp
     });
   };
   
-  const webhookUrlToCopy = `${window.location.origin}/api/zap/webhooks/whatsapp`; // Ajuste o caminho conforme sua estrutura de rotas do backend "zap"
+  const webhookUrlToCopy = `${window.location.origin}/api/zap/webhooks/whatsapp`;
 
 
   return (
@@ -260,7 +257,11 @@ export default function ZapWhatsAppConnection({ onConnectionChange }: ZapWhatsAp
                         <Label htmlFor="apiToken" className="text-xs">Seu Token de API (se usar provedor externo)</Label>
                         <Input id="apiToken" type="password" placeholder="Cole seu token aqui se necessário" value={apiToken} onChange={(e) => setApiToken(e.target.value)} className="neu-input mt-1"/>
                     </div>
-                    <Button className="neu-button text-xs" size="sm"><Settings className="mr-1.5 h-3.5 w-3.5"/> Salvar Token</Button>
+                    {/* Linha 201 com correção: type="button" e <span> para o texto */}
+                    <Button className="neu-button text-xs" size="sm" type="button">
+                        <Settings className="mr-1.5 h-3.5 w-3.5"/>
+                        <span>Salvar Token</span>
+                    </Button>
                 </CardContent>
             </Card>
              <Card className="neu-card">
