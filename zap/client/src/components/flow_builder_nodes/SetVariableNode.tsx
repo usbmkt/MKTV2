@@ -1,12 +1,13 @@
 import React, { memo, useState, useEffect, useCallback, ChangeEvent, KeyboardEvent } from 'react';
 import { Handle, Position, useReactFlow, NodeToolbar, NodeProps as ReactFlowNodeProps } from '@xyflow/react';
+// CORRIGIDO: Path Aliases
 import { SetVariableNodeData, FlowNodeType, HandleData, VariableAssignment, VariableType } from '@zap_client/features/types/whatsapp_flow_types';
 import { Card, CardContent, CardHeader, CardTitle } from '@zap_client/components/ui/card';
 import { Input } from '@zap_client/components/ui/input';
 import { Label } from '@zap_client/components/ui/label';
 import { Button } from '@zap_client/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@zap_client/components/ui/select';
-import { VariableIcon as VarIconPojo, Trash2, Edit3, PlusCircle, XCircle } from 'lucide-react'; // Renomeado para evitar conflito
+import { VariableIcon as VarIconPojo, Trash2, Edit3, PlusCircle, XCircle } from 'lucide-react';
 import { cn } from '@zap_client/lib/utils';
 import { Badge } from '@zap_client/components/ui/badge';
 import { ScrollArea } from '@zap_client/components/ui/scroll-area';
@@ -19,6 +20,7 @@ const defaultHandles: HandleData[] = [
 
 const valueSourceTypes: VariableAssignment['sourceType'][] = ['static', 'variable', 'expression', 'api_response'];
 
+// CORRIGIDO: Tipagem explícita das props
 const SetVariableNodeComponent: React.FC<ReactFlowNodeProps<SetVariableNodeData>> = ({ id, data, selected }) => {
   const { setNodes } = useReactFlow();
 
@@ -27,7 +29,6 @@ const SetVariableNodeComponent: React.FC<ReactFlowNodeProps<SetVariableNodeData>
   const [assignments, setAssignments] = useState<VariableAssignment[]>(
     data.assignments || [{ id: `asg-${Date.now()}`, variableName: 'novaVariavel', value: '', sourceType: 'static' }]
   );
-
 
   useEffect(() => {
     setLabel(data.label || 'Definir Variável');
@@ -39,7 +40,7 @@ const SetVariableNodeComponent: React.FC<ReactFlowNodeProps<SetVariableNodeData>
       setNodes((nds) =>
         nds.map((node) => {
           if (node.id === id) {
-            const currentData = node.data as SetVariableNodeData;
+            const currentData = node.data as SetVariableNodeData; // Cast para o tipo específico
             return { ...node, data: { ...currentData, assignments: newAssignments } };
           }
           return node;
@@ -51,7 +52,6 @@ const SetVariableNodeComponent: React.FC<ReactFlowNodeProps<SetVariableNodeData>
   
   const handleLabelChange = (e: ChangeEvent<HTMLInputElement>) => setLabel(e.target.value);
   const handleLabelSave = () => {
-    // Atualizar apenas o label no data do nó
     setNodes((nds) =>
         nds.map((node) => {
           if (node.id === id) {
@@ -65,7 +65,7 @@ const SetVariableNodeComponent: React.FC<ReactFlowNodeProps<SetVariableNodeData>
   };
   
   const handleAssignmentChange = (index: number, field: keyof VariableAssignment, value: string | VariableAssignment['sourceType']) => {
-    const newAssignments = assignments.map((asg, i) => {
+    const newAssignments = assignments.map((asg: VariableAssignment, i: number) => { // Tipado asg
         if (i === index) {
             return { ...asg, [field]: value };
         }
@@ -88,7 +88,7 @@ const SetVariableNodeComponent: React.FC<ReactFlowNodeProps<SetVariableNodeData>
   };
 
   const removeAssignment = (indexToRemove: number) => {
-    const newAssignments = assignments.filter((_: VariableAssignment, index: number) => index !== indexToRemove);
+    const newAssignments = assignments.filter((_: VariableAssignment, index: number) => index !== indexToRemove); // Tipado _
     setAssignments(newAssignments);
     updateNodeAssignments(newAssignments);
   };
@@ -125,7 +125,7 @@ const SetVariableNodeComponent: React.FC<ReactFlowNodeProps<SetVariableNodeData>
             {assignments.map((assignment: VariableAssignment, index: number) => (
                 <Card key={assignment.id || index} className="p-2 mb-2 neu-card-inset space-y-1">
                     <div className="flex items-center justify-end">
-                        {assignments.length > 0 &&  // Permitir remover mesmo se for o último, para limpar
+                        {assignments.length > 0 && 
                             <Button variant="ghost" size="icon" onClick={() => removeAssignment(index)} className="h-6 w-6 text-destructive"><XCircle className="h-3.5 w-3.5"/></Button>
                         }
                     </div>
