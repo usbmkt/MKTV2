@@ -1,7 +1,7 @@
 import React, { memo, useState, useEffect, useCallback, ChangeEvent, KeyboardEvent } from 'react';
 import { Handle, Position, useReactFlow, NodeToolbar, NodeProps as ReactFlowNodeProps } from '@xyflow/react';
 // CORRIGIDO: Path Aliases
-import { ExternalDataNodeData, FlowNodeType, HandleData, ApiResponseMapping } from '@zap_client/features/types/whatsapp_flow_types'; // Reutilizar ApiResponseMapping
+import { ExternalDataNodeData, FlowNodeType, HandleData, ApiResponseMapping } from '@zap_client/features/types/whatsapp_flow_types';
 import { Card, CardContent, CardHeader, CardTitle } from '@zap_client/components/ui/card';
 import { Input } from '@zap_client/components/ui/input';
 import { Label } from '@zap_client/components/ui/label';
@@ -27,7 +27,7 @@ const ExternalDataNodeComponent: React.FC<ReactFlowNodeProps<ExternalDataNodeDat
   const [isEditingLabel, setIsEditingLabel] = useState<boolean>(false);
   const [dataSourceUrl, setDataSourceUrl] = useState<string>(data.dataSourceUrl || '');
   const [requestType, setRequestType] = useState<ExternalDataNodeData['requestType']>(data.requestType || 'GET');
-  const [requestPayload, setRequestPayload] = useState<string>( // Armazenar como string JSON
+  const [requestPayload, setRequestPayload] = useState<string>(
     typeof data.requestPayload === 'string' ? data.requestPayload : (data.requestPayload ? JSON.stringify(data.requestPayload, null, 2) : '')
   );
   const [responseMapping, setResponseMapping] = useState<ApiResponseMapping[]>(data.responseMapping || []);
@@ -48,7 +48,16 @@ const ExternalDataNodeComponent: React.FC<ReactFlowNodeProps<ExternalDataNodeDat
         nds.map((node) => {
           if (node.id === id) {
             const currentData = node.data as ExternalDataNodeData;
-            return { ...node, data: { ...currentData, ...newData } };
+             // Se o payload for um objeto, converter para string JSON antes de salvar nos dados do nó
+             let processedNewData = { ...newData };
+             if (newData.requestPayload && typeof newData.requestPayload !== 'string') {
+                 try {
+                     processedNewData.requestPayload = JSON.stringify(newData.requestPayload, null, 2);
+                 } catch (e) {
+                     console.error("Erro ao serializar payload para JSON:", e);
+                 }
+             }
+            return { ...node, data: { ...currentData, ...processedNewData } };
           }
           return node;
         })
@@ -75,13 +84,13 @@ const ExternalDataNodeComponent: React.FC<ReactFlowNodeProps<ExternalDataNodeDat
   };
 
   const handlePayloadChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
-    setRequestPayload(e.target.value);
+    const payloadString = e.target.value;
+    setRequestPayload(payloadString);
     try {
-        // Tenta parsear para validar, mas armazena como string
-        const parsed = JSON.parse(e.target.value);
-        updateNodePartialData({ requestPayload: parsed }); // Envia objeto parseado se válido
+        updateNodePartialData({ requestPayload: JSON.parse(payloadString) });
     } catch (error) {
-        updateNodePartialData({ requestPayload: e.target.value }); // Envia string se inválido
+        // Se não for JSON válido, talvez salvar como string ou mostrar erro
+        updateNodePartialData({ requestPayload: payloadString });
     }
   };
   
@@ -93,7 +102,7 @@ const ExternalDataNodeComponent: React.FC<ReactFlowNodeProps<ExternalDataNodeDat
   };
 
   const addMapping = () => {
-    const newMap: ApiResponseMapping = { id: `map-${Date.now()}`, sourcePath: '', targetVariable: '' };
+    const newMap: ApiResponseMapping = { id: `map-<span class="math-inline">\{Date\.now\(\)\}\-</span>{Math.random().toString(36).substring(2,7)}`, sourcePath: '', targetVariable: '' };
     const newMappings = [...responseMapping, newMap];
     setResponseMapping(newMappings);
     updateNodePartialData({ responseMapping: newMappings });
@@ -150,10 +159,10 @@ const ExternalDataNodeComponent: React.FC<ReactFlowNodeProps<ExternalDataNodeDat
             )}
              <div className="space-y-1 border-t pt-2 mt-2">
                 <div className="flex justify-between items-center"><Label className="text-xs">Mapeamento da Resposta para Variáveis</Label><Button variant="link" size="xs" onClick={addMapping}><PlusCircle className="h-3 w-3 mr-1"/>Add Mapeamento</Button></div>
-                {responseMapping.map((map: ApiResponseMapping, index: number) => (
-                    <div key={map.id || index} className="flex items-center gap-1">
-                        <Input value={map.sourcePath} onChange={(e: ChangeEvent<HTMLInputElement>) => handleMappingChange(index, 'sourcePath', e.target.value)} placeholder="Caminho JSON (Ex: $.user.id)" className="neu-input text-xs h-7"/>
-                        <Input value={map.targetVariable} onChange={(e: ChangeEvent<HTMLInputElement>) => handleMappingChange(index, 'targetVariable', e.target.value)} placeholder="Nome Variável (Ex: id_usuario_api)" className="neu-input text-xs h-7"/>
+                {responseMapping.map((mapItem: ApiResponseMapping, index: number) => ( // Tipado mapItem
+                    <div key={mapItem.id || index} className="flex items-center gap-1">
+                        <Input value={mapItem.sourcePath} onChange={(e: ChangeEvent<HTMLInputElement>) => handleMappingChange(index, 'sourcePath', e.target.value)} placeholder="Caminho JSON (Ex: $.user.id)" className="neu-input text-xs h-7"/>
+                        <Input value={mapItem.targetVariable} onChange={(e: ChangeEvent<HTMLInputElement>) => handleMappingChange(index, 'targetVariable', e.target.value)} placeholder="Nome Variável (Ex: id_usuario_api)" className="neu-input text-xs h-7"/>
                         <Button variant="ghost" size="icon" onClick={() => removeMapping(index)} className="h-7 w-7 text-destructive"><XCircle className="h-3 w-3"/></Button>
                     </div>
                 ))}
@@ -168,12 +177,4 @@ const ExternalDataNodeComponent: React.FC<ReactFlowNodeProps<ExternalDataNodeDat
           type={handleItem.type}
           position={handleItem.position}
           isConnectable={true}
-          style={{ ...handleItem.style, background: '#10b981', width: '10px', height: '10px' }} // Cor Emerald
-          aria-label={handleItem.label}
-        />
-      ))}
-    </Card>
-  );
-};
-
-export default memo(ExternalDataNodeComponent);
+          style={{
