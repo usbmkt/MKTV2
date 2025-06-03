@@ -1,24 +1,23 @@
 import React, { memo, useState, useEffect, useCallback } from 'react';
-import { Handle, Position, useReactFlow, NodeToolbar, NodeProps } from '@xyflow/react';
-import { TriggerNodeData, FlowNodeType, HandleData } from '@/types/whatsapp_flow_types';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
-import { Zap, Trash2, Edit3, PlusCircle, Settings2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { Badge } from '@/components/ui/badge';
+import { Handle, Position, useReactFlow, NodeToolbar, NodeProps as ReactFlowNodeProps } from '@xyflow/react';
+import { TriggerNodeData, FlowNodeType, HandleData } from '@zap_client/features/types/whatsapp_flow_types';
+import { Card, CardContent, CardHeader, CardTitle } from '@zap_client/components/ui/card';
+import { Input } from '@zap_client/components/ui/input';
+import { Label } from '@zap_client/components/ui/label';
+import { Button } from '@zap_client/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@zap_client/components/ui/select';
+import { Textarea } from '@zap_client/components/ui/textarea';
+import { Zap, Trash2, Edit3 } from 'lucide-react';
+import { cn } from '@zap_client/lib/utils';
+import { Badge } from '@zap_client/components/ui/badge';
 
 const defaultHandles: HandleData[] = [
   { id: 'output', type: 'source', position: Position.Right, label: 'Início do Fluxo', style: { top: '50%' } },
 ];
 
-// Usando NodeProps do React Flow diretamente, já que CustomNodeProps estava causando problemas
-// e TriggerNodeData é a forma dos 'data' props.
-const TriggerNode: React.FC<NodeProps<TriggerNodeData>> = ({ id, data, selected }) => {
+const TriggerNodeComponent: React.FC<ReactFlowNodeProps<TriggerNodeData>> = ({ id, data, selected }) => {
   const { setNodes } = useReactFlow();
+  
   const [triggerType, setTriggerType] = useState(data.triggerType || 'keyword');
   const [keywords, setKeywords] = useState(data.keywords?.join(', ') || '');
   const [pattern, setPattern] = useState(data.pattern || '');
@@ -37,13 +36,13 @@ const TriggerNode: React.FC<NodeProps<TriggerNodeData>> = ({ id, data, selected 
       setNodes((nds) =>
         nds.map((node) => {
           if (node.id === id) {
-            return { ...node, data: { ...node.data, ...newData } };
+            return { ...node, data: { ...(node.data as TriggerNodeData), ...newData } };
           }
           return node;
         })
       );
     },
-    [id, setNodes]
+    [id, setNodes] // Adicionado setNodes às dependências
   );
 
   const handleLabelChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -58,17 +57,26 @@ const TriggerNode: React.FC<NodeProps<TriggerNodeData>> = ({ id, data, selected 
   const handleTriggerTypeChange = (value: string) => {
     const newType = value as TriggerNodeData['triggerType'];
     setTriggerType(newType);
-    updateNodeData({ triggerType: newType });
+    // Ao mudar o tipo, preservamos os valores relevantes se possível
+    const currentKeywordsArray = keywords.split(',').map(k => k.trim()).filter(k => k);
+    const currentPattern = pattern;
+    updateNodeData({ 
+        triggerType: newType, 
+        keywords: (newType === 'keyword' || newType === 'exact_match') ? currentKeywordsArray : undefined, 
+        pattern: newType === 'pattern' ? currentPattern : undefined 
+    });
   };
 
   const handleKeywordsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setKeywords(e.target.value);
-    updateNodeData({ keywords: e.target.value.split(',').map(k => k.trim()).filter(k => k) });
+    const newKeywords = e.target.value;
+    setKeywords(newKeywords);
+    updateNodeData({ keywords: newKeywords.split(',').map(k => k.trim()).filter(k => k) });
   };
 
   const handlePatternChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setPattern(e.target.value);
-    updateNodeData({ pattern: e.target.value });
+    const newPattern = e.target.value;
+    setPattern(newPattern);
+    updateNodeData({ pattern: newPattern });
   };
 
   const handleDeleteNode = () => {
@@ -91,7 +99,7 @@ const TriggerNode: React.FC<NodeProps<TriggerNodeData>> = ({ id, data, selected 
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 pt-3 px-4 bg-green-500/10 dark:bg-green-700/20 rounded-t-lg">
         {isEditingLabel ? (
           <div className="flex items-center gap-2">
-            <Input value={label} onChange={handleLabelChange} className="text-sm h-7" autoFocus />
+            <Input value={label} onChange={handleLabelChange} className="text-sm h-7" autoFocus onBlur={handleLabelSave} onKeyDown={(e) => e.key === 'Enter' && handleLabelSave()}/>
             <Button size="sm" onClick={handleLabelSave} className="h-7">Salvar</Button>
           </div>
         ) : (
@@ -100,7 +108,7 @@ const TriggerNode: React.FC<NodeProps<TriggerNodeData>> = ({ id, data, selected 
             {data.label || 'Gatilho do Fluxo'}
           </CardTitle>
         )}
-         <Badge variant="default" className="bg-green-600 text-white">Gatilho</Badge>
+         <Badge variant="default" className="bg-green-600 text-white capitalize">{data.nodeType.replace('Node', '')}</Badge>
       </CardHeader>
       <CardContent className="p-3 space-y-3">
         <div>
@@ -151,7 +159,7 @@ const TriggerNode: React.FC<NodeProps<TriggerNodeData>> = ({ id, data, selected 
         )}
          {triggerType === 'api_call' && (
           <p className="text-xs text-muted-foreground p-2 bg-muted rounded-md">
-            Este fluxo pode ser iniciado por uma chamada de API externa para um endpoint específico (a ser configurado no backend).
+            Este fluxo pode ser iniciado por uma chamada de API externa para um endpoint específico.
           </p>
         )}
         {triggerType === 'manual' && (
@@ -164,22 +172,19 @@ const TriggerNode: React.FC<NodeProps<TriggerNodeData>> = ({ id, data, selected 
           </p>
       </CardContent>
 
-      {handlesToRender.map(handle => (
+      {handlesToRender.map((handleItem: HandleData) => ( 
         <Handle
-          key={handle.id}
-          id={handle.id}
-          type={handle.type}
-          position={handle.position}
-          isConnectable={handle.isConnectable !== undefined ? handle.isConnectable : true}
-          style={{ ...handle.style, background: '#22c55e', width: '12px', height: '12px', borderColor: 'white', borderWidth: '1px' }}
-          aria-label={handle.label}
+          key={handleItem.id}
+          id={handleItem.id}
+          type={handleItem.type}
+          position={handleItem.position}
+          isConnectable={handleItem.isConnectable !== undefined ? handleItem.isConnectable : true}
+          style={{ ...handleItem.style, background: '#22c55e', width: '12px', height: '12px', borderColor: 'white', borderWidth: '1px' }}
+          aria-label={handleItem.label}
         />
       ))}
     </Card>
   );
 };
 
-// O erro sobre 'checked' era de um Switch que removi, pois não estava sendo usado no código original do TriggerNode.
-// Se um Switch for necessário, o parâmetro 'checked' em onCheckedChange precisaria de tipo: (isChecked: boolean) => void.
-
-export default memo(TriggerNode);
+export default memo(TriggerNodeComponent);
