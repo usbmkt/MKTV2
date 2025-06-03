@@ -72,11 +72,14 @@ export interface HandleData {
 // TIPOS DE DADOS PARA NÓS (NodeData) - O que vai em `node.data`
 // -----------------------------------------------------------------------------
 
+// Base para todos os tipos de dados de nó. Não deve incluir 'id' ou 'position'
+// que são gerenciados pelo React Flow no objeto Node principal.
 export interface BaseNodeData {
   label: string; 
   description?: string;
   nodeType: FlowNodeType; 
   handles?: HandleData[];
+  // Adicionar 'id' aqui era um erro comum, pois o 'id' do nó é uma prop do objeto Node, não do data.
 }
 
 export interface TriggerNodeData extends BaseNodeData {
@@ -259,7 +262,8 @@ export interface EndNodeData extends BaseNodeData {
   finalMessage?: string; 
 }
 
-export type FlowNodeSpecificData =
+// União de todos os tipos de dados específicos. Este é o tipo para o campo `data` de um nó.
+export type FlowNodeData =
   | TriggerNodeData
   | TextMessageNodeData
   | QuestionNodeData
@@ -278,22 +282,23 @@ export type FlowNodeSpecificData =
   | ExternalDataNodeData
   | EndNodeData;
 
-// FlowNodeData é a união de todos os tipos de dados específicos que podem ir em `node.data`.
-export type FlowNodeData = FlowNodeSpecificData;
-
-// Tipos para Node e Edge do React Flow, usando nossos tipos de dados customizados.
+// Tipo para o campo `type` de um nó, garantindo que seja uma string.
 export type CustomFlowNodeType = Extract<FlowNodeType | string, string>; 
-// Um Nó do React Flow onde o campo `data` é do tipo `FlowNodeData` e o campo `type` é `CustomFlowNodeType`.
-export type CustomFlowNode = Node<FlowNodeData, CustomFlowNodeType>;    
 
-// Opcionalmente, o campo `data` de uma Aresta pode ser do tipo `FlowEdgeData`.
+// Definição de um Nó Customizado do React Flow.
+// O primeiro genérico `TData` é o tipo do campo `data`.
+// O segundo genérico `TType` é o tipo do campo `type`.
+export type CustomFlowNode<TData extends FlowNodeData = FlowNodeData> = Node<TData, CustomFlowNodeType>;
+
+// Definição de uma Aresta Customizada do React Flow.
+// O genérico `TData` é o tipo do campo `data` da aresta (opcional).
 export interface FlowEdgeData { 
   conditionLabel?: string;
 }
-export type CustomFlowEdge = Edge<FlowEdgeData>; 
+export type CustomFlowEdge<TData extends FlowEdgeData | undefined = FlowEdgeData> = Edge<TData>; 
 
 // Props para os componentes de nó customizados.
-// ReactFlowNodeProps<TData> é NodeProps<TData> do React Flow, onde TData é o tipo do campo `data` do nó.
+// `ReactFlowNodeProps<TData>` é `NodeProps<TData>` do React Flow.
 export type CustomNodeProps<TData extends FlowNodeData> = ReactFlowNodeProps<TData>;
 
 
@@ -301,8 +306,8 @@ export interface FlowData {
   id: string;
   name: string;
   description?: string;
-  nodes: CustomFlowNode[]; 
-  edges: CustomFlowEdge[]; 
+  nodes: CustomFlowNode[]; // Array de nós customizados
+  edges: CustomFlowEdge[]; // Array de arestas customizadas
   variables?: Variable[];
   createdAt?: string | Date;
   updatedAt?: string | Date;
@@ -312,9 +317,9 @@ export interface FlowData {
 export type FlowBuilderContextType = {
   nodes: CustomFlowNode[];
   edges: CustomFlowEdge[];
-  onNodesChange: OnNodesChange;
-  onEdgesChange: OnEdgesChange;
-  onConnect: OnConnect;
+  onNodesChange: OnNodesChange; // Aceita NodeChange<CustomFlowNode>[]
+  onEdgesChange: OnEdgesChange; // Aceita EdgeChange<CustomFlowEdge>[]
+  onConnect: OnConnect;         // Aceita Connection
   addNode: (type: FlowNodeType, position: XYPosition, data?: Partial<FlowNodeData>) => void;
   updateNodeData: <T extends FlowNodeData>(nodeId: string, newData: Partial<T>) => void; 
   getNodeData: <T extends FlowNodeData>(nodeId: string) => T | undefined;
@@ -376,8 +381,8 @@ export interface WhatsAppMessage {
 }
 
 export interface WhatsAppTemplateCategory {
-  id: string; // ex: 'UTILITY', 'MARKETING'
-  name: string; // ex: 'UTILITY', 'MARKETING'
+  id: string; 
+  name: string; 
 }
 
 export interface WhatsAppTemplateComponent {
@@ -407,7 +412,7 @@ export interface WhatsAppTemplate {
   name: string;
   language: string;
   status: 'APPROVED' | 'PENDING' | 'REJECTED' | 'PAUSED' | 'DISABLED' | 'IN_APPEAL';
-  category: string; // Deveria ser string, ou um tipo mais específico se tivermos categorias fixas
+  category: string; 
   components: WhatsAppTemplateComponent[];
   qualityScore?: {
     score: 'GREEN' | 'YELLOW' | 'RED' | 'UNKNOWN';
@@ -426,4 +431,24 @@ export interface WhatsAppSavedFlow extends FlowData {
   completionRate?: number;
   averageTime?: number;
   triggerKeywords?: string[];
+}
+
+// Placeholder types para resolver erros de importação em ZapAnalytics
+export type ApiError = {
+  message: string;
+  statusCode?: number;
+  details?: any;
+};
+
+export interface FlowPerformanceData {
+  flowId: string;
+  flowName: string;
+  totalStarted: number;
+  totalCompleted: number;
+  completionRate: number; // Em percentual
+  averageDurationSeconds: number;
+  // Outras métricas relevantes
+  errorCount?: number;
+  // Pode incluir dados de série temporal para gráficos
+  // timeSeries?: Array<{ date: string; started: number; completed: number }>;
 }
