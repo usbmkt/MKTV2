@@ -1,25 +1,28 @@
 // zap/client/src/components/flow_builder_nodes/MediaMessageNode.tsx
-import React, { memo } from 'react';
+import React, { memo, ChangeEvent } from 'react'; // Adicionado ChangeEvent
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import { Card, CardContent, CardHeader, CardTitle } from '@zap_client/components/ui/card';
 import { Input } from '@zap_client/components/ui/input';
 import { Label } from '@zap_client/components/ui/label';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@zap_client/components/ui/select';
 import { Textarea } from '@zap_client/components/ui/textarea';
-import { Image as ImageIcon, Video, FileText, Mic } from 'lucide-react'; // Usando Mic para áudio
+import { Image as ImageIcon, Video, FileText, Mic } from 'lucide-react';
 import { MediaMessageNodeData } from '@zap_client/features/types/whatsapp_flow_types';
 
 const MediaMessageNode: React.FC<NodeProps<MediaMessageNodeData>> = ({ data, id, selected }) => {
+  // Desestruture TODAS as props de MediaMessageNodeData com valores padrão
   const {
     label = 'Mensagem de Mídia',
     mediaType = 'image',
     mediaUrl = '',
     caption = '',
-    fileName = '' // Para documentos
+    fileName = ''
   } = data;
 
-  // Lógica para atualizar 'data'
-  // const updateData = (field: keyof MediaMessageNodeData, value: any) => { /* ... */ };
+  // Lógica para atualizar 'data' (ex: via onNodesChange passada como prop ou contexto)
+  // const updateData = (field: keyof MediaMessageNodeData, value: any) => {
+  //   console.log(`Node ${id} data update:`, { [field]: value });
+  // };
 
   const getIcon = () => {
     switch (mediaType) {
@@ -64,7 +67,7 @@ const MediaMessageNode: React.FC<NodeProps<MediaMessageNodeData>> = ({ data, id,
             type="text"
             placeholder="https://servidor.com/arquivo.jpg"
             value={mediaUrl}
-            // onChange={(e) => updateData('mediaUrl', e.target.value)}
+            // onChange={(e: ChangeEvent<HTMLInputElement>) => updateData('mediaUrl', e.target.value)}
             className="w-full h-8 text-xs"
           />
         </div>
@@ -76,7 +79,7 @@ const MediaMessageNode: React.FC<NodeProps<MediaMessageNodeData>> = ({ data, id,
               type="text"
               placeholder="Ex: proposta.pdf"
               value={fileName}
-              // onChange={(e) => updateData('fileName', e.target.value)}
+              // onChange={(e: ChangeEvent<HTMLInputElement>) => updateData('fileName', e.target.value)}
               className="w-full h-8 text-xs"
             />
           </div>
@@ -88,7 +91,7 @@ const MediaMessageNode: React.FC<NodeProps<MediaMessageNodeData>> = ({ data, id,
               id={`caption-${id}`}
               placeholder="Legenda da mídia..."
               value={caption}
-              // onChange={(e) => updateData('caption', e.target.value)}
+              // onChange={(e: ChangeEvent<HTMLTextAreaElement>) => updateData('caption', e.target.value)}
               rows={2}
               className="w-full text-xs"
             />
