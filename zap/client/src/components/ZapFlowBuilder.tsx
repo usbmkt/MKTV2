@@ -21,6 +21,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
+// Importe os componentes de nó
 import TextMessageNode from '@zap_client/components/flow_builder_nodes/TextMessageNode';
 import QuestionNode from '@zap_client/components/flow_builder_nodes/QuestionNode';
 import ConditionNode from '@zap_client/components/flow_builder_nodes/ConditionNode';
@@ -39,6 +40,7 @@ import SetVariableNode from '@zap_client/components/flow_builder_nodes/SetVariab
 import ExternalDataNode from '@zap_client/components/flow_builder_nodes/ExternalDataNode';
 import ApiCallNode from '@zap_client/components/flow_builder_nodes/ApiCallNode';
 
+// Importe os tipos de dados dos nós (ASSUMINDO QUE VOCÊ OS DEFINIU E EXPORTOU)
 import {
   TriggerNodeData, TextMessageNodeData, QuestionNodeData, ConditionNodeData,
   ActionNodeData, DelayNodeData, EndNodeData, ListMessageNodeDataFE,
@@ -47,8 +49,9 @@ import {
 } from '@zap_client/features/types/whatsapp_flow_types';
 
 import { Button } from '@zap_client/components/ui/button';
-import { Input } from '@zap_client/components/ui/input';
-import { PlusCircle, Save, Trash2, Zap as ZapIcon, Loader2 } from 'lucide-react';
+import { Input } from '@zap_client/components/ui/input'; // Corrigido
+import { PlusCircle, Save, Trash2, Zap as ZapIcon, Loader2 } from 'lucide-react'; // Corrigido
+
 
 export interface ZapFlowBuilderProps {
   flowId: string;
@@ -61,7 +64,6 @@ export interface ZapFlowBuilderProps {
   onSaveSuccess?: (flowId: string, flowName: string) => void;
 }
 
-// Tipagem explícita para NodeTypes
 const nodeTypes: NodeTypes = {
   trigger: TriggerNode as React.FC<NodeProps<TriggerNodeData>>,
   textMessage: TextMessageNode as React.FC<NodeProps<TextMessageNodeData>>,
@@ -104,6 +106,7 @@ const ZapFlowBuilderWrapper: React.FC<ZapFlowBuilderProps> = ({
   useEffect(() => {
     const load = async () => {
       setIsLoading(true);
+      // Certifique-se que TriggerNodeData está definido com 'label' opcional em whatsapp_flow_types.ts
       let defaultInitialNodes: Node<TriggerNodeData>[] = [{ id: 'trigger_0', type: 'trigger', position: { x: 250, y: 5 }, data: { label: 'Início do Fluxo' } }];
       
       if (onLoadFlow && flowId && flowId !== 'new') {
@@ -151,7 +154,9 @@ const ZapFlowBuilderWrapper: React.FC<ZapFlowBuilderProps> = ({
   const addNode = (type: keyof typeof nodeTypes) => {
     const newNodeId = `${type}_${nodes.length + Date.now()}`;
     let initialData: any = { label: `Novo ${type}` };
-    // Defina dados iniciais mais específicos se necessário
+    // Você PODE definir dados iniciais mais específicos aqui se quiser
+    // Ex: if (type === 'textMessage') initialData = { label: 'Mensagem', message: 'Olá!' } as TextMessageNodeData;
+
     const newNode: Node = {
       id: newNodeId,
       type,
@@ -171,13 +176,13 @@ const ZapFlowBuilderWrapper: React.FC<ZapFlowBuilderProps> = ({
         if (flowName) {
             await onSaveFlow(flowId, nodes, edges, flowName);
             if (onSaveSuccess) onSaveSuccess(flowId, flowName);
-            alert('Fluxo salvo com sucesso!');
+            alert('Fluxo salvo com sucesso!'); // Considere usar seu componente Toast aqui
         } else {
-            alert('Salvamento cancelado. Nome do fluxo é necessário.');
+            alert('Nome do fluxo é necessário para salvar.'); // Considere usar seu componente Toast aqui
         }
       } catch (error) {
         console.error("Erro ao salvar fluxo:", error);
-        alert('Falha ao salvar o fluxo.');
+        alert('Falha ao salvar o fluxo.'); // Considere usar seu componente Toast aqui
       }
       setIsLoading(false);
     }
@@ -186,7 +191,8 @@ const ZapFlowBuilderWrapper: React.FC<ZapFlowBuilderProps> = ({
   const handleDeleteFlow = () => {
     if (window.confirm(`Tem certeza que deseja excluir o fluxo "${flowName}"?`)) {
       console.log("Excluir fluxo:", flowId);
-      if (onCloseEditor) onCloseEditor();
+      // Aqui você chamaria a API para deletar o fluxo
+      if (onCloseEditor) onCloseEditor(); // Fecha o editor após a confirmação (ou após a chamada da API)
     }
   };
 
@@ -230,10 +236,11 @@ const ZapFlowBuilderWrapper: React.FC<ZapFlowBuilderProps> = ({
            <Button onClick={() => addNode('condition')} size="sm" variant="outline" className="neu-button text-xs">
              <PlusCircle className="mr-1 h-3 w-3" /> Condição
           </Button>
+          {/* Adicione mais botões para outros tipos de nós aqui */}
           <Button onClick={handleSave} size="sm" variant="default" className="neu-button-primary text-xs" disabled={isLoading}>
             {isLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />} Salvar
           </Button>
-          {flowId && flowId !== 'new' && (
+          {flowId && flowId !== 'new' && ( 
             <Button onClick={handleDeleteFlow} size="sm" variant="destructive" className="text-xs">
               <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Excluir
             </Button>
