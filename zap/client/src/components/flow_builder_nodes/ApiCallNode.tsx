@@ -1,6 +1,5 @@
 import React, { memo, useState, useEffect, useCallback, ChangeEvent, KeyboardEvent } from 'react';
 import { Handle, Position, useReactFlow, NodeToolbar, NodeProps as ReactFlowNodeProps } from '@xyflow/react';
-// CORRIGIDO: Path Aliases
 import { ApiCallNodeData, FlowNodeType, HandleData, ApiHeader, ApiQueryParam, ApiResponseMapping } from '@zap_client/features/types/whatsapp_flow_types';
 import { Card, CardContent, CardHeader, CardTitle } from '@zap_client/components/ui/card';
 import { Input } from '@zap_client/components/ui/input';
@@ -22,7 +21,6 @@ const defaultHandles: HandleData[] = [
 
 const httpMethods: ApiCallNodeData['method'][] = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'];
 
-// CORRIGIDO: Tipagem explícita das props
 const ApiCallNodeComponent: React.FC<ReactFlowNodeProps<ApiCallNodeData>> = ({ id, data, selected }) => {
   const { setNodes } = useReactFlow();
 
@@ -32,7 +30,7 @@ const ApiCallNodeComponent: React.FC<ReactFlowNodeProps<ApiCallNodeData>> = ({ i
   const [method, setMethod] = useState<ApiCallNodeData['method']>(data.method || 'GET');
   const [headers, setHeaders] = useState<ApiHeader[]>(data.headers || []);
   const [queryParams, setQueryParams] = useState<ApiQueryParam[]>(data.queryParams || []);
-  const [body, setBody] = useState<string>(data.body || '');
+  const [body, setBody] = useState<string>(data.body || ''); // Armazenar como string JSON
   const [variableToStoreResponse, setVariableToStoreResponse] = useState<string>(data.variableToStoreResponse || '');
   const [responsePath, setResponsePath] = useState<string>(data.responsePath || '');
   const [responseMappings, setResponseMappings] = useState<ApiResponseMapping[]>(data.responseMappings || []);
@@ -43,19 +41,29 @@ const ApiCallNodeComponent: React.FC<ReactFlowNodeProps<ApiCallNodeData>> = ({ i
     setMethod(data.method || 'GET');
     setHeaders(data.headers || []);
     setQueryParams(data.queryParams || []);
-    setBody(data.body || '');
+    setBody(typeof data.body === 'string' ? data.body : (data.body ? JSON.stringify(data.body, null, 2) : ''));
     setVariableToStoreResponse(data.variableToStoreResponse || '');
     setResponsePath(data.responsePath || '');
     setResponseMappings(data.responseMappings || []);
   }, [data]);
 
-  const updateNodePartialData = useCallback(
+  const updateNodeDataCallback = useCallback(
     (newData: Partial<ApiCallNodeData>) => {
       setNodes((nds) =>
         nds.map((node) => {
           if (node.id === id) {
             const currentData = node.data as ApiCallNodeData;
-            return { ...node, data: { ...currentData, ...newData } };
+            // Se o body for um objeto, converter para string JSON antes de salvar nos dados do nó
+            let processedNewData = { ...newData };
+            if (newData.body && typeof newData.body !== 'string') {
+                try {
+                    processedNewData.body = JSON.stringify(newData.body, null, 2);
+                } catch (e) {
+                    console.error("Erro ao serializar body para JSON:", e);
+                    // Manter como está ou tratar o erro
+                }
+            }
+            return { ...node, data: { ...currentData, ...processedNewData } };
           }
           return node;
         })
@@ -66,27 +74,29 @@ const ApiCallNodeComponent: React.FC<ReactFlowNodeProps<ApiCallNodeData>> = ({ i
   
   const handleLabelChange = (e: ChangeEvent<HTMLInputElement>) => setLabel(e.target.value);
   const handleLabelSave = () => {
-    updateNodePartialData({ label });
+    updateNodeDataCallback({ label });
     setIsEditingLabel(false);
   };
 
   const handleGenericInputChange = (field: keyof ApiCallNodeData, value: string | ApiCallNodeData['method']) => {
-    // @ts-ignore
-    updateNodePartialData({ [field]: value });
-    if (field === 'apiUrl') setApiUrl(value as string);
-    if (field === 'method') setMethod(value as ApiCallNodeData['method']);
-    if (field === 'body') setBody(value as string);
-    if (field === 'variableToStoreResponse') setVariableToStoreResponse(value as string);
-    if (field === 'responsePath') setResponsePath(value as string);
+    if (field === 'body') {
+        setBody(value as string); // O Textarea já fornece string
+        updateNodeDataCallback({ body: value as string });
+    } else {
+        (field === 'apiUrl') && setApiUrl(value as string);
+        (field === 'method') && setMethod(value as ApiCallNodeData['method']);
+        (field === 'variableToStoreResponse') && setVariableToStoreResponse(value as string);
+        (field === 'responsePath') && setResponsePath(value as string);
+        updateNodeDataCallback({ [field]: value });
+    }
   };
 
-  // Headers, Query Params, Response Mappings
-  const createNewItem = (type: 'header' | 'queryParam' | 'responseMapping') => {
-    const newItemId = `${type}-${Date.now()}`;
+  const createNewItem = (type: 'header' | 'queryParam' | 'responseMapping'): ApiHeader | ApiQueryParam | ApiResponseMapping => {
+    const newItemId = `${type}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     if (type === 'header') return { id: newItemId, key: '', value: '' };
     if (type === 'queryParam') return { id: newItemId, key: '', value: '' };
-    if (type === 'responseMapping') return { id: newItemId, sourcePath: '', targetVariable: '' };
-    return {id: ''}; // fallback
+    // if (type === 'responseMapping')
+    return { id: newItemId, sourcePath: '', targetVariable: '' };
   };
 
   const handleArrayItemChange = (
@@ -106,35 +116,35 @@ const ApiCallNodeComponent: React.FC<ReactFlowNodeProps<ApiCallNodeData>> = ({ i
     else if (arrayType === 'queryParams') setQueryParams(newArray as ApiQueryParam[]);
     else setResponseMappings(newArray as ApiResponseMapping[]);
     
-    updateNodePartialData({ [arrayType]: newArray });
+    updateNodeDataCallback({ [arrayType]: newArray });
   };
 
   const addArrayItem = (arrayType: 'headers' | 'queryParams' | 'responseMappings') => {
     if (arrayType === 'headers') {
         const newHeaders = [...headers, createNewItem('header') as ApiHeader];
-        setHeaders(newHeaders); updateNodePartialData({ headers: newHeaders });
+        setHeaders(newHeaders); updateNodeDataCallback({ headers: newHeaders });
     } else if (arrayType === 'queryParams') {
         const newParams = [...queryParams, createNewItem('queryParam') as ApiQueryParam];
-        setQueryParams(newParams); updateNodePartialData({ queryParams: newParams });
+        setQueryParams(newParams); updateNodeDataCallback({ queryParams: newParams });
     } else {
         const newMappings = [...responseMappings, createNewItem('responseMapping') as ApiResponseMapping];
-        setResponseMappings(newMappings); updateNodePartialData({ responseMappings: newMappings });
+        setResponseMappings(newMappings); updateNodeDataCallback({ responseMappings: newMappings });
     }
   };
 
-  const removeArrayItem = (index: number, arrayType: 'headers' | 'queryParams' | 'responseMappings') => {
+  const removeArrayItem = (indexToRemove: number, arrayType: 'headers' | 'queryParams' | 'responseMappings') => {
     let newArray: any[];
     if (arrayType === 'headers') {
-        newArray = headers.filter((_: ApiHeader, i: number) => i !== index);
+        newArray = headers.filter((_: ApiHeader, i: number) => i !== indexToRemove);
         setHeaders(newArray as ApiHeader[]);
     } else if (arrayType === 'queryParams') {
-        newArray = queryParams.filter((_: ApiQueryParam, i: number) => i !== index);
+        newArray = queryParams.filter((_: ApiQueryParam, i: number) => i !== indexToRemove);
         setQueryParams(newArray as ApiQueryParam[]);
     } else {
-        newArray = responseMappings.filter((_: ApiResponseMapping, i: number) => i !== index);
+        newArray = responseMappings.filter((_: ApiResponseMapping, i: number) => i !== indexToRemove);
         setResponseMappings(newArray as ApiResponseMapping[]);
     }
-    updateNodePartialData({ [arrayType]: newArray });
+    updateNodeDataCallback({ [arrayType]: newArray });
   };
 
   const handleDeleteNode = () => {
@@ -144,13 +154,13 @@ const ApiCallNodeComponent: React.FC<ReactFlowNodeProps<ApiCallNodeData>> = ({ i
   const handlesToRender = data.handles || defaultHandles;
 
   return (
-    <Card className={cn("w-96 shadow-md neu-card", selected && "ring-2 ring-gray-500 ring-offset-2")}>
+    <Card className={cn("w-96 shadow-md neu-card", selected && "ring-2 ring-slate-500 ring-offset-2")}>
       <NodeToolbar isVisible={selected} position={Position.Top} className="flex gap-2">
         <Button variant="outline" size="sm" onClick={() => setIsEditingLabel(true)} title="Editar Nome"><Edit3 className="h-4 w-4" /></Button>
         <Button variant="destructive" size="sm" onClick={handleDeleteNode} title="Remover Nó"><Trash2 className="h-4 w-4" /></Button>
       </NodeToolbar>
 
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 pt-3 px-4 bg-gray-500/10 dark:bg-gray-700/20 rounded-t-lg">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 pt-3 px-4 bg-slate-500/10 dark:bg-slate-700/20 rounded-t-lg">
          {isEditingLabel ? (
             <div className="flex items-center gap-2">
                 <Input value={label} onChange={handleLabelChange} className="text-sm h-7" autoFocus onBlur={handleLabelSave} onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => e.key === 'Enter' && handleLabelSave()} />
@@ -158,11 +168,11 @@ const ApiCallNodeComponent: React.FC<ReactFlowNodeProps<ApiCallNodeData>> = ({ i
             </div>
         ) : (
             <CardTitle className="text-sm font-semibold flex items-center cursor-pointer" onClick={() => setIsEditingLabel(true)}>
-                <Webhook className="h-4 w-4 mr-2 text-gray-600 dark:text-gray-400" />
+                <Webhook className="h-4 w-4 mr-2 text-slate-600 dark:text-slate-400" />
                 {data.label || 'Chamada API'}
             </CardTitle>
         )}
-        <Badge variant="default" className="bg-gray-500 text-white capitalize">{data.nodeType.replace('Node', '')}</Badge>
+        <Badge variant="default" className="bg-slate-500 text-white capitalize">{data.nodeType.replace('Node', '')}</Badge>
       </CardHeader>
       <CardContent className="p-3 space-y-3 max-h-96">
         <ScrollArea className="h-80 pr-3">
@@ -201,10 +211,10 @@ const ApiCallNodeComponent: React.FC<ReactFlowNodeProps<ApiCallNodeData>> = ({ i
             )}
             
             <div><Label htmlFor={`api-store-var-${id}`} className="text-xs">Salvar Resposta Completa na Variável (Opcional)</Label><Input id={`api-store-var-${id}`} value={variableToStoreResponse} onChange={(e: ChangeEvent<HTMLInputElement>) => handleGenericInputChange('variableToStoreResponse', e.target.value)} placeholder="Ex: dados_api" className="mt-1 neu-input"/></div>
-            <div><Label htmlFor={`api-resp-path-${id}`} className="text-xs">Extrair via JSONPath (Opcional, se var acima não preenchida)</Label><Input id={`api-resp-path-${id}`} value={responsePath} onChange={(e: ChangeEvent<HTMLInputElement>) => handleGenericInputChange('responsePath', e.target.value)} placeholder="Ex: $.data.token" className="mt-1 neu-input"/></div>
+            <div><Label htmlFor={`api-resp-path-${id}`} className="text-xs">Extrair de JSONPath da Resposta (Opcional)</Label><Input id={`api-resp-path-${id}`} value={responsePath} onChange={(e: ChangeEvent<HTMLInputElement>) => handleGenericInputChange('responsePath', e.target.value)} placeholder="Ex: $.data.token (para var acima)" className="mt-1 neu-input"/></div>
             
             <div className="space-y-1 border-t pt-2 mt-2">
-                <div className="flex justify-between items-center"><Label className="text-xs">Mapeamento da Resposta para Variáveis (Opcional)</Label><Button variant="link" size="xs" onClick={() => addArrayItem('responseMappings')}><PlusCircle className="h-3 w-3 mr-1"/>Add Mapping</Button></div>
+                <div className="flex justify-between items-center"><Label className="text-xs">Mapear Resposta para Variáveis (Opcional)</Label><Button variant="link" size="xs" onClick={() => addArrayItem('responseMappings')}><PlusCircle className="h-3 w-3 mr-1"/>Add Mapping</Button></div>
                 {responseMappings.map((map: ApiResponseMapping, index: number) => (
                     <div key={map.id || index} className="flex items-center gap-1">
                         <Input value={map.sourcePath} onChange={(e: ChangeEvent<HTMLInputElement>) => handleArrayItemChange(index, 'sourcePath', e.target.value, 'responseMappings')} placeholder="Caminho JSON (Ex: $.user.id)" className="neu-input text-xs h-7"/>
@@ -223,7 +233,7 @@ const ApiCallNodeComponent: React.FC<ReactFlowNodeProps<ApiCallNodeData>> = ({ i
           type={handleItem.type}
           position={handleItem.position}
           isConnectable={true}
-          style={{ ...handleItem.style, background: '#64748b', width: '10px', height: '10px' }} // Cor Cinza
+          style={{ ...handleItem.style, background: '#64748b', width: '10px', height: '10px' }} 
           aria-label={handleItem.label}
         />
       ))}
