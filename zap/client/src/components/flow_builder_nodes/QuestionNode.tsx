@@ -1,16 +1,17 @@
 // zap/client/src/components/flow_builder_nodes/QuestionNode.tsx
-import React, { memo, ChangeEvent } from 'react'; // Adicionado ChangeEvent
+import React, { memo, ChangeEvent } from 'react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import { Card, CardContent, CardHeader, CardTitle } from '@zap_client/components/ui/card';
 import { Textarea } from '@zap_client/components/ui/textarea';
 import { Label } from '@zap_client/components/ui/label';
 import { Input } from '@zap_client/components/ui/input';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@zap_client/components/ui/select';
-import { Button } from '@zap_client/components/ui/button'; // Import Button
+import { Button } from '@zap_client/components/ui/button';
 import { MessageCircleQuestion, Trash2, PlusCircle } from 'lucide-react';
-import { QuestionNodeData } from '@zap_client/features/types/whatsapp_flow_types';
+import { QuestionNodeData } from '@zap_client/features/types/whatsapp_flow_types'; // Importe o tipo
 
 const QuestionNode: React.FC<NodeProps<QuestionNodeData>> = ({ data, id, selected }) => {
+  // Desestruture TODAS as propriedades de QuestionNodeData com valores padrão
   const {
     label = 'Pergunta',
     questionText = '',
@@ -19,28 +20,10 @@ const QuestionNode: React.FC<NodeProps<QuestionNodeData>> = ({ data, id, selecte
     quickReplies = []
   } = data;
 
-  // Lógica para atualizar 'data' (ex: via onNodesChange passada como prop ou contexto)
+  // Implemente a lógica de atualização de dados se este nó for editável
   // const updateData = (field: keyof QuestionNodeData, value: any) => {
-  //   console.log(`Node ${id} data update:`, { [field]: value });
-  //   // Ex: onNodesChange([{ id, type: 'dataUpdate', data: { ...data, [field]: value } }]);
+  //   // Chamar a função onNodesChange do ReactFlow ou um setter de estado global
   // };
-
-  // const handleQuickReplyChange = (index: number, value: string) => {
-  //   const newReplies = [...quickReplies];
-  //   newReplies[index] = value;
-  //   updateData('quickReplies', newReplies);
-  // };
-
-  // const addQuickReply = () => {
-  //   if (quickReplies.length < 10) { // Exemplo de limite
-  //     updateData('quickReplies', [...quickReplies, `Opção ${quickReplies.length + 1}`]);
-  //   }
-  // };
-
-  // const removeQuickReply = (index: number) => {
-  //   updateData('quickReplies', quickReplies.filter((_, i) => i !== index));
-  // };
-
 
   return (
     <Card className={`text-xs shadow-md w-72 ${selected ? 'ring-2 ring-blue-500' : 'border-border'} bg-card`}>
@@ -82,32 +65,26 @@ const QuestionNode: React.FC<NodeProps<QuestionNodeData>> = ({ data, id, selecte
         {expectedResponseType === 'quick_reply' && (
           <div className="space-y-1">
             <Label className="text-xs font-medium">Respostas Rápidas (Botões)</Label>
-            {(quickReplies || []).map((reply: string, index: number) => ( // Tipagem adicionada
+            {(quickReplies).map((reply: string, index: number) => ( // Tipagem adicionada para reply e index
               <div key={index} className="flex items-center space-x-1">
                 <Input
                   type="text"
                   value={reply}
-                  // onChange={(e: ChangeEvent<HTMLInputElement>) => handleQuickReplyChange(index, e.target.value)}
+                  // onChange={(e: ChangeEvent<HTMLInputElement>) => {/* Lógica para atualizar reply específico */}}
                   className="w-full h-7 text-xs"
                   placeholder={`Opção ${index + 1}`}
                 />
-                {/* <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => removeQuickReply(index)}>
-                  <Trash2 className="w-3 h-3 text-destructive" />
-                </Button> */}
-                 <Handle
+                {/* Botão de remover e Handle aqui como no exemplo anterior, se necessário */}
+                <Handle
                     type="source"
                     position={Position.Right}
-                    id={`qr-${id}-${index}`} // ID do handle deve ser único
-                    style={{ top: 'auto', background: '#555', right: -5 }} // Ajuste o posicionamento
-                    className="!w-2 !h-2 !relative" // Classes para melhor posicionamento se necessário
+                    id={`qr-${id}-${index}`}
+                    style={{ top: 'auto', background: '#555', right: -5, marginTop: `${index * 30}px` }} // Ajuste dinâmico de marginTop
+                    className="!w-2 !h-2 !relative"
                 />
               </div>
             ))}
-            {/* {(quickReplies || []).length < 10 && (
-              <Button variant="outline" size="xs" className="text-xs mt-1 w-full h-7" onClick={addQuickReply}>
-                <PlusCircle className="w-3 h-3 mr-1" /> Adicionar Resposta
-              </Button>
-            )} */}
+            {/* Botão para adicionar mais quick replies */}
           </div>
         )}
         <div>
@@ -129,5 +106,4 @@ const QuestionNode: React.FC<NodeProps<QuestionNodeData>> = ({ data, id, selecte
     </Card>
   );
 };
-
 export default memo(QuestionNode);
