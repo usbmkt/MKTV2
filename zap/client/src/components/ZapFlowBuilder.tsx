@@ -1,9 +1,25 @@
 import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import { ReactFlow, MiniMap, Controls, Background, useNodesState, useEdgesState, addEdge, Connection, Edge, Node, Panel, NodeTypes, ReactFlowProvider, useReactFlow, NodeProps, BackgroundVariant } from '@xyflow/react';
+import { 
+    ReactFlow, 
+    MiniMap, 
+    Controls, 
+    Background, 
+    useNodesState, 
+    useEdgesState, 
+    addEdge, 
+    Connection, 
+    Edge, 
+    Node, 
+    Panel, 
+    NodeTypes, 
+    ReactFlowProvider, 
+    useReactFlow, 
+    NodeProps,
+    BackgroundVariant 
+} from '@xyflow/react';
 
 import '@xyflow/react/dist/style.css';
 import '@xyflow/react/dist/base.css';
-
 
 // Importações de Nós Customizados (usando alias @zap_client)
 import TriggerNodeComponent from '@zap_client/components/flow_builder_nodes/TriggerNode';
@@ -27,10 +43,10 @@ import EndNodeComponent from '@zap_client/components/flow_builder_nodes/EndNode'
 // Importações de Tipos (usando alias @zap_client)
 import {
   FlowNodeType,
-  CustomFlowNode,
-  CustomFlowEdge,
-  FlowData,
-  FlowNodeData, // Tipo base para `node.data`
+  CustomFlowNode, 
+  CustomFlowEdge, 
+  FlowData,       
+  FlowNodeData,   // Tipo para `node.data`
   TriggerNodeData,
   TextMessageNodeData,
   QuestionNodeData,
@@ -40,6 +56,7 @@ import {
   ConditionNodeData,
   DelayNodeData,
   ActionNodeData,
+  ActionType, // Adicionado para uso em default node data
   GptQueryNodeData,
   AiDecisionNodeData,
   ClonedVoiceNodeData,
@@ -48,7 +65,8 @@ import {
   ExternalDataNodeData,
   ApiCallNodeData,
   EndNodeData,
-  FlowEdgeData, // Adicionado para tipar useEdgesState
+  FlowEdgeData, 
+  CustomFlowNodeType, // Adicionado para cast em onDrop
 } from '@zap_client/features/types/whatsapp_flow_types';
 
 import { Button } from '@zap_client/components/ui/button';
@@ -56,10 +74,13 @@ import { Input } from '@zap_client/components/ui/input';
 import { Card, CardContent } from '@zap_client/components/ui/card';
 import { ScrollArea } from '@zap_client/components/ui/scroll-area';
 import { Separator } from '@zap_client/components/ui/separator';
-import { PlusCircle, Save, Upload, Download, Eraser, Search, Settings, Play, Zap, Maximize, Minimize, MessageSquareText, List, MousePointerClick, Image as ImageIcon, Headphones, Share2, AlertTriangle, Shuffle, Tag, VariableIcon, CloudCog, DatabaseZap, LogOut } from 'lucide-react';
+import { PlusCircle, Save, Upload, Download, Eraser, Search, Settings, Play, Zap, Maximize, Minimize, MessageSquareText, List, MousePointerClick, Image as ImageIcon, Headphones, Share2, Clock, Shuffle, Tag, VariableIcon, CloudCog, DatabaseZap, LogOut, HelpCircle } from 'lucide-react';
 import { nanoid } from 'nanoid';
-import { useToast } from '@zap_client/hooks/use-toast';
+import { useToast } from '@zap_client/hooks/use-toast'; // Mantendo @zap_client, verificar build e existência do arquivo
 
+
+// Correção: Tipar explicitamente os componentes para NodeTypes
+// NodeProps<T> onde T é o tipo específico de data do nó.
 const nodeTypes: NodeTypes = {
   [FlowNodeType.TRIGGER]: TriggerNodeComponent as React.ComponentType<NodeProps<TriggerNodeData>>,
   [FlowNodeType.TEXT_MESSAGE]: TextMessageNodeComponent as React.ComponentType<NodeProps<TextMessageNodeData>>,
@@ -87,26 +108,31 @@ interface ZapFlowBuilderProps {
 }
 
 const ZapFlowBuilderInternal: React.FC<ZapFlowBuilderProps> = ({ initialFlowData, onSaveFlow, flowId }) => {
-  const [nodes, setNodes, onNodesChange] = useNodesState<FlowNodeData>(initialFlowData?.nodes || []);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<FlowEdgeData>(initialFlowData?.edges || []);
+  // Correção: `useNodesState` e `useEdgesState` são genéricos sobre o TIPO DE DADOS do nó/aresta, não o objeto Node/Edge completo.
+  // No entanto, o estado que eles gerenciam É um array de Node<TData> ou Edge<EData>.
+  // O `initialFlowData?.nodes` já é CustomFlowNode[] (ou seja, Node<FlowNodeData>[]).
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialFlowData?.nodes || []);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialFlowData?.edges || []);
+  
   const [flowName, setFlowName] = useState(initialFlowData?.name || 'Novo Fluxo');
   const [flowDescription, setFlowDescription] = useState(initialFlowData?.description || '');
   const [isSaving, setIsSaving] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
-  const reactFlowInstance = useReactFlow<FlowNodeData, FlowEdgeData>();
+  const reactFlowInstance = useReactFlow<FlowNodeData, FlowEdgeData>(); // Tipos de dados para os genéricos
   const { toast } = useToast();
 
   useEffect(() => {
     if (initialFlowData) {
-      setNodes(initialFlowData.nodes as Node<FlowNodeData, FlowNodeType | string>[]);
-      setEdges(initialFlowData.edges as Edge<FlowEdgeData>[]);
+      // O estado inicial já deve ser do tipo Node<FlowNodeData>[] e Edge<FlowEdgeData>[]
+      setNodes(initialFlowData.nodes);
+      setEdges(initialFlowData.edges);
       setFlowName(initialFlowData.name || 'Novo Fluxo');
       setFlowDescription(initialFlowData.description || '');
     }
   }, [initialFlowData, setNodes, setEdges]);
 
   const onConnect = useCallback(
-    (params: Connection | Edge) => setEdges((eds) => addEdge(params, eds as Edge<FlowEdgeData>[])),
+    (params: Connection | Edge) => setEdges((eds) => addEdge(params, eds)),
     [setEdges]
   );
 
@@ -131,68 +157,47 @@ const ZapFlowBuilderInternal: React.FC<ZapFlowBuilderProps> = ({ initialFlowData
       });
       
       const baseId = getNodeId();
+      let specificNodeData: FlowNodeData; // Tipo base para todos os dados de nó
 
-      const newNodeData: FlowNodeData = { // Garantir que FlowNodeData seja usado como tipo base
-        id: baseId, 
-        label: type, 
-        nodeType: type,
-      };
-
+      // Default data para cada tipo de nó
       switch (type) {
         case FlowNodeType.TRIGGER:
-          (newNodeData as TriggerNodeData).triggerType = 'keyword';
-          (newNodeData as TriggerNodeData).keywords = ['oi'];
-          newNodeData.label = 'Gatilho';
+          specificNodeData = { id: baseId, label: 'Gatilho', nodeType: type, triggerType: 'keyword', keywords: ['oi'] } as TriggerNodeData;
           break;
         case FlowNodeType.TEXT_MESSAGE:
-          (newNodeData as TextMessageNodeData).message = 'Olá!';
-          newNodeData.label = 'Mensagem Texto';
+          specificNodeData = { id: baseId, label: 'Mensagem Texto', nodeType: type, message: 'Olá!' } as TextMessageNodeData;
           break;
         case FlowNodeType.QUESTION:
-          (newNodeData as QuestionNodeData).questionText = 'Qual sua dúvida?';
-          (newNodeData as QuestionNodeData).expectedResponseType = 'text';
-          (newNodeData as QuestionNodeData).variableToStoreAnswer = 'user_reply';
-           newNodeData.label = 'Pergunta';
+          specificNodeData = { id: baseId, label: 'Pergunta', nodeType: type, questionText: 'Qual sua dúvida?', expectedResponseType: 'text', variableToStoreAnswer: 'user_reply' } as QuestionNodeData;
           break;
         case FlowNodeType.LIST_MESSAGE:
-          (newNodeData as ListMessageNodeData).bodyText = 'Selecione uma opção:';
-          (newNodeData as ListMessageNodeData).buttonText = 'Opções';
-          (newNodeData as ListMessageNodeData).sections = [{ title: 'Seção 1', rows: [{id: 'item1', title: 'Item 1'}]}];
-           newNodeData.label = 'Mensagem Lista';
+          specificNodeData = { id: baseId, label: 'Mensagem Lista', nodeType: type, bodyText: 'Selecione uma opção:', buttonText: 'Opções', sections: [{ title: 'Seção 1', rows: [{id: 'item1', title: 'Item 1'}]}] } as ListMessageNodeData;
           break;
         case FlowNodeType.BUTTONS_MESSAGE:
-          (newNodeData as ButtonsMessageNodeData).bodyText = 'Escolha uma ação:';
-          (newNodeData as ButtonsMessageNodeData).buttons = [{id: 'btn1', type: 'reply', title: 'Opção A'}];
-           newNodeData.label = 'Mensagem Botões';
+          specificNodeData = { id: baseId, label: 'Mensagem Botões', nodeType: type, bodyText: 'Escolha uma ação:', buttons: [{id: 'btn1', type: 'reply', title: 'Opção A'}] } as ButtonsMessageNodeData;
           break;
-         case FlowNodeType.MEDIA_MESSAGE:
-          (newNodeData as MediaMessageNodeData).mediaType = 'image';
-          (newNodeData as MediaMessageNodeData).media = { url: 'https://via.placeholder.com/150', caption: 'Exemplo de imagem' };
-           newNodeData.label = 'Mensagem Mídia';
+        case FlowNodeType.MEDIA_MESSAGE:
+          specificNodeData = { id: baseId, label: 'Mensagem Mídia', nodeType: type, mediaType: 'image', media: { url: 'https://via.placeholder.com/150', caption: 'Exemplo de imagem' } } as MediaMessageNodeData;
           break;
         case FlowNodeType.CONDITION:
-          (newNodeData as ConditionNodeData).branchConfigs = [{ handleId: 'trueOutput', label: 'Verdadeiro', rules: [], logicalOperator: 'AND' }];
-           newNodeData.label = 'Condição';
+          specificNodeData = { id: baseId, label: 'Condição', nodeType: type, branchConfigs: [{ handleId: 'trueOutput', label: 'Verdadeiro', rules: [], logicalOperator: 'AND' }] } as ConditionNodeData;
           break;
         case FlowNodeType.DELAY:
-          (newNodeData as DelayNodeData).delayDuration = 5;
-          (newNodeData as DelayNodeData).delayUnit = 'seconds';
-           newNodeData.label = 'Aguardar';
+          specificNodeData = { id: baseId, label: 'Aguardar', nodeType: type, delayDuration: 5, delayUnit: 'seconds' } as DelayNodeData;
           break;
         case FlowNodeType.ACTION:
-          (newNodeData as ActionNodeData).actionType = ActionType.ADD_TAG;
-          (newNodeData as ActionNodeData).actionParams = { tagName: 'novo_lead' };
-           newNodeData.label = 'Ação';
+          specificNodeData = { id: baseId, label: 'Ação', nodeType: type, actionType: ActionType.ADD_TAG, actionParams: { tagName: 'novo_lead' } } as ActionNodeData;
           break;
+        // Adicionar outros cases conforme necessário, garantindo que 'id', 'label', e 'nodeType' estejam presentes.
         default:
-          newNodeData.label = `Novo ${type.replace('Node', '')}`;
+          specificNodeData = { id: baseId, label: `Novo ${type.replace('Node', '')}`, nodeType: type } as FlowNodeData; // Fallback genérico
       }
 
       const newNode: CustomFlowNode = {
         id: baseId, 
-        type: type as CustomFlowNodeType, // Cast para o tipo correto
+        type: type as CustomFlowNodeType,
         position,
-        data: newNodeData,
+        data: specificNodeData, // Agora specificNodeData é do tipo FlowNodeData (união de todos os ...NodeData)
       };
 
       setNodes((nds) => nds.concat(newNode));
@@ -206,8 +211,8 @@ const ZapFlowBuilderInternal: React.FC<ZapFlowBuilderProps> = ({ initialFlowData
       id: flowId || initialFlowData?.id || `flow_${nanoid()}`,
       name: flowName,
       description: flowDescription,
-      nodes: reactFlowInstance.getNodes() as CustomFlowNode[],
-      edges: reactFlowInstance.getEdges() as CustomFlowEdge[],
+      nodes: reactFlowInstance.getNodes(), // reactFlowInstance.getNodes() já retorna Node<FlowNodeData>[]
+      edges: reactFlowInstance.getEdges(),   // reactFlowInstance.getEdges() já retorna Edge<FlowEdgeData>[]
     };
     try {
       await onSaveFlow(flowToSave);
@@ -238,14 +243,14 @@ const ZapFlowBuilderInternal: React.FC<ZapFlowBuilderProps> = ({ initialFlowData
     const elem = document.querySelector('.reactflow-wrapper-fullscreen-target') || document.documentElement;
     if (!isFullScreen) {
       if (elem.requestFullscreen) {
-        elem.requestFullscreen();
+        elem.requestFullscreen().catch(err => console.error("Erro ao entrar em tela cheia:", err));
       }
     } else {
       if (document.exitFullscreen) {
-        document.exitFullscreen();
+        document.exitFullscreen().catch(err => console.error("Erro ao sair da tela cheia:", err));
       }
     }
-    setIsFullScreen(!isFullScreen);
+    // O estado isFullScreen será atualizado pelo event listener
   };
   
   useEffect(() => {
@@ -294,21 +299,21 @@ const ZapFlowBuilderInternal: React.FC<ZapFlowBuilderProps> = ({ initialFlowData
                   <SidebarNodeItem type={FlowNodeType.TRIGGER} label="Gatilho" icon={Play} />
                   <Separator />
                   <SidebarNodeItem type={FlowNodeType.TEXT_MESSAGE} label="Msg. Texto" icon={MessageSquareText} />
-                  <SidebarNodeItem type={FlowNodeType.QUESTION} label="Pergunta" icon={HelpCircle} /> {/* Usar ícone HelpCircle de lucide */}
+                  <SidebarNodeItem type={FlowNodeType.QUESTION} label="Pergunta" icon={HelpCircle} />
                   <SidebarNodeItem type={FlowNodeType.LIST_MESSAGE} label="Msg. Lista" icon={List} />
                   <SidebarNodeItem type={FlowNodeType.BUTTONS_MESSAGE} label="Msg. Botões" icon={MousePointerClick} />
                   <SidebarNodeItem type={FlowNodeType.MEDIA_MESSAGE} label="Msg. Mídia" icon={ImageIcon} />
                   <SidebarNodeItem type={FlowNodeType.CLONED_VOICE_NODE} label="Voz Clonada" icon={Headphones} />
                   <Separator />
                   <SidebarNodeItem type={FlowNodeType.CONDITION} label="Condição" icon={Share2} />
-                  <SidebarNodeItem type={FlowNodeType.DELAY} label="Aguardar" icon={Clock} /> {/* Corrigido nome do ícone Clock */}
+                  <SidebarNodeItem type={FlowNodeType.DELAY} label="Aguardar" icon={Clock} />
                   <SidebarNodeItem type={FlowNodeType.ACTION} label="Ação" icon={Settings} />
                   <Separator />
                   <SidebarNodeItem type={FlowNodeType.SET_VARIABLE} label="Definir Variável" icon={VariableIcon} />
                   <SidebarNodeItem type={FlowNodeType.TAG_CONTACT} label="Etiquetar Contato" icon={Tag} />
                   <Separator />
                   <SidebarNodeItem type={FlowNodeType.GPT_QUERY} label="Consulta GPT" icon={CloudCog} />
-                  <SidebarNodeItem type={FlowNodeType.AI_DECISION} label="Decisão IA" icon={Shuffle} /> {/* Usar ícone Shuffle */}
+                  <SidebarNodeItem type={FlowNodeType.AI_DECISION} label="Decisão IA" icon={Shuffle} />
                   <Separator />
                   <SidebarNodeItem type={FlowNodeType.API_CALL} label="Chamada API" icon={Webhook} />
                   <SidebarNodeItem type={FlowNodeType.EXTERNAL_DATA} label="Dados Externos" icon={DatabaseZap} />
@@ -328,7 +333,7 @@ const ZapFlowBuilderInternal: React.FC<ZapFlowBuilderProps> = ({ initialFlowData
             onConnect={onConnect}
             nodeTypes={nodeTypes}
             fitView
-            className="bg-background dark:bg-gray-800"
+            className="bg-background dark:bg-gray-800" // Garante que o fundo do ReactFlow corresponda ao tema
             proOptions={{ hideAttribution: true }}
           >
             <Controls />
@@ -353,6 +358,3 @@ const ZapFlowBuilderWrapper: React.FC<ZapFlowBuilderProps> = (props) => {
 };
 
 export default memo(ZapFlowBuilderWrapper);
-
-// Adicionar HelpCircle e Clock aos imports de lucide-react se não estiverem lá
-// import { PlusCircle, Save, Upload, Download, Eraser, Search, Settings, Play, Zap, Maximize, Minimize, MessageSquareText, List, MousePointerClick, ImageIcon, Headphones, Share2, AlertTriangle, Clock, Shuffle, Tag, VariableIcon, CloudCog, DatabaseZap, LogOut, HelpCircle } from 'lucide-react';
