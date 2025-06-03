@@ -263,20 +263,6 @@ export default function ZapWhatsAppConnection({ onConnectionChange }: ZapWhatsAp
                 <CardContent className="space-y-3">
                     <div>
                         <Label htmlFor="apiToken" className="text-xs">Seu Token de API (se usar provedor externo)</Label>
-                        {/* === LINHA PROBLEMÁTICA (antiga linha 198) === 
-                            Por favor, DELETE esta seção de Input e o Label acima e REESCREVA MANUALMENTE em seu editor.
-                            Se o erro persistir, tente a versão simplificada abaixo.
-                        */}
-                        <Input 
-                          id="apiToken" 
-                          type="password" 
-                          placeholder="Cole seu token aqui se necessário" 
-                          value={apiToken} 
-                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setApiToken(e.target.value)} 
-                          className="neu-input mt-1"
-                        />
-                        {/* <Input id="apiTokenTest" type="password" />  // Use esta para testar se a linha acima falhar */}
-                    </div>
                     <Button className="neu-button text-xs" size="sm" type="button">
                         <Settings className="mr-1.5 h-3.5 w-3.5"/>
                         <span>Salvar Token</span>
