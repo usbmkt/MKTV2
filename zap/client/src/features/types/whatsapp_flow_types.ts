@@ -13,29 +13,28 @@ export interface FlowElementData {
     id: string;
     name: string;
     description?: string;
-    triggerType?: 'keyword' | 'manual' | 'webhook' | 'form_submission' | 'api_call';
+    triggerType?: string;
     status?: 'active' | 'inactive' | 'draft';
-    lastEdited?: string; // Ou Date
-    // Adicione outras propriedades que você usa para listar/gerenciar fluxos
+    lastEdited?: string;
 }
 
-// --- Tipos de Dados para Nós Customizados ---
+// --- Tipos de Dados para Nós Customizados (COM PLACEHOLDERS GENÉRICOS) ---
+// !! REVISE E AJUSTE ESTAS INTERFACES COM AS PROPRIEDADES REAIS DE CADA NÓ !!
 
 export interface TriggerNodeData {
   label?: string;
   triggerType?: 'keyword' | 'manual' | 'webhook' | 'form_submission' | 'api_call';
-  keywords?: string[]; // Se triggerType for 'keyword'
-  formId?: string;     // Se triggerType for 'form_submission'
-  webhookUrl?: string; // Se triggerType for 'webhook' (geralmente gerado e somente leitura no nó)
-  // Outras propriedades inferidas do TriggerNode.tsx e erros anteriores:
-  // (Nenhuma outra propriedade explicitamente usada em 'data' no TriggerNode.tsx fornecido)
+  keywords?: string[];
+  formId?: string;
+  webhookUrl?: string;
+  // Adicione outras propriedades conforme necessário
+  [key: string]: any; // Para flexibilidade temporária
 }
 
 export interface TextMessageNodeData {
   label?: string;
   message?: string;
-  // Outras propriedades inferidas do TextMessageNode.tsx e erros anteriores:
-  // (Nenhuma outra propriedade explicitamente usada em 'data' no TextMessageNode.tsx fornecido)
+  [key: string]: any;
 }
 
 export interface QuestionNodeData {
@@ -43,9 +42,8 @@ export interface QuestionNodeData {
   questionText?: string;
   expectedResponseType?: 'text' | 'number' | 'email' | 'quick_reply';
   variableToSaveAnswer?: string;
-  quickReplies?: string[]; // Array de strings para as opções de resposta rápida
-  // Outras propriedades inferidas do QuestionNode.tsx e erros anteriores:
-  // (Nenhuma outra propriedade explicitamente usada em 'data' no QuestionNode.tsx fornecido)
+  quickReplies?: string[];
+  [key: string]: any;
 }
 
 export interface ListItemData {
@@ -64,16 +62,13 @@ export interface ListMessageNodeDataFE {
   footerText?: string;
   buttonText?: string;
   sections?: ListSectionData[];
-  // Outras propriedades inferidas do ListMessageNode.tsx e erros anteriores:
-  // (Nenhuma outra propriedade explicitamente usada em 'data' no ListMessageNode.tsx fornecido)
+  [key: string]: any;
 }
 
 export interface ButtonOptionData {
     id: string;
     displayText: string;
-    // Adicione aqui se seus botões têm tipos diferentes ou valores associados
-    // type?: 'REPLY' | 'URL' | 'CALL';
-    // value?: string; // para URL ou número
+    // value?: string; // Exemplo
 }
 export interface ButtonsMessageNodeData {
   label?: string;
@@ -81,8 +76,7 @@ export interface ButtonsMessageNodeData {
   headerText?: string;
   footerText?: string;
   buttons?: ButtonOptionData[];
-  // Outras propriedades inferidas do ButtonsMessageNode.tsx e erros anteriores:
-  // (Nenhuma outra propriedade explicitamente usada em 'data' no ButtonsMessageNode.tsx fornecido)
+  [key: string]: any;
 }
 
 export interface MediaMessageNodeData {
@@ -91,90 +85,82 @@ export interface MediaMessageNodeData {
   mediaUrl?: string;
   caption?: string;
   fileName?: string;
-  // Outras propriedades inferidas do MediaMessageNode.tsx e erros anteriores:
-  // (Nenhuma outra propriedade explicitamente usada em 'data' no MediaMessageNode.tsx fornecido)
+  [key: string]: any;
 }
 
 export interface ConditionNodeData {
   label?: string;
   variableToCheck?: string;
-  operator?: 'equals' | 'not_equals' | 'contains' | 'greater_than' | 'less_than' | 'startsWith' | 'endsWith' | 'is_empty' | 'is_not_empty';
-  valueToCompare?: string | number | boolean;
-  // Outras propriedades inferidas do ConditionNode.tsx e erros anteriores:
-  // (Nenhuma outra propriedade explicitamente usada em 'data' no ConditionNode.tsx fornecido)
+  operator?: string; // Mantenha genérico por enquanto
+  valueToCompare?: any;
+  // branches?: Array<{ id: string; conditionExpression: string; label?: string }>;
+  [key: string]: any;
 }
 
 export interface ActionNodeData {
   label?: string;
-  actionType?: 'add_tag' | 'remove_tag' | 'assign_agent' | 'send_email' | 'update_contact_prop' | 'call_api';
+  actionType?: string; // Mantenha genérico
   tagName?: string;
   agentId?: string;
   emailTemplateId?: string;
   contactPropertyName?: string;
-  contactPropertyValue?: any; // Pode ser string, number, boolean, etc.
+  contactPropertyValue?: any;
   apiUrl?: string;
-  // Outras propriedades inferidas do ActionNode.tsx e erros anteriores:
-  // (Nenhuma outra propriedade explicitamente usada em 'data' no ActionNode.tsx fornecido)
+  flowToStartId?: string;
+  [key: string]: any;
 }
 
 export interface DelayNodeData {
   label?: string;
   delayAmount?: number;
   delayUnit?: 'seconds' | 'minutes' | 'hours' | 'days';
-  // Outras propriedades inferidas do DelayNode.tsx e erros anteriores:
-  // (Nenhuma outra propriedade explicitamente usada em 'data' no DelayNode.tsx fornecido)
+  [key: string]: any;
 }
 
 export interface EndNodeData {
   label?: string;
-  endStateType?: 'completed' | 'abandoned' | 'error_fallback';
+  endStateType?: string;
   message?: string;
-  // Outras propriedades inferidas do EndNode.tsx e erros anteriores:
-  // (Nenhuma outra propriedade explicitamente usada em 'data' no EndNode.tsx fornecido)
+  [key: string]: any;
 }
 
 export interface GptQueryNodeData {
   label?: string;
   promptTemplate?: string;
-  inputVariables?: string[]; // Se você pretende que seja um array
+  inputVariables?: string[];
   variableToSaveResult?: string;
-  // Outras propriedades inferidas do GptQueryNode.tsx e erros anteriores:
-  // (Nenhuma outra propriedade explicitamente usada em 'data' no GptQueryNode.tsx fornecido)
+  [key: string]: any;
 }
 
 export interface AiDecisionNodeData {
   label?: string;
   inputVariable?: string;
   decisionCategories?: Array<{ id: string; name: string; description?: string; keywords?: string }>;
-  // Outras propriedades inferidas do AiDecisionNode.tsx e erros anteriores:
-  // (Nenhuma outra propriedade explicitamente usada em 'data' no AiDecisionNode.tsx fornecido)
+  [key: string]: any;
 }
 
 export interface ClonedVoiceNodeData {
   label?: string;
   textToSpeak?: string;
   voiceId?: string;
-  // Outras propriedades inferidas do ClonedVoiceNode.tsx e erros anteriores:
-  // (Nenhuma outra propriedade explicitamente usada em 'data' no ClonedVoiceNode.tsx fornecido)
+  [key: string]: any;
 }
 
 export interface TagContactNodeData {
   label?: string;
   tagOperation?: 'add' | 'remove';
   tagName?: string;
-  // Outras propriedades inferidas do TagContactNode.tsx e erros anteriores:
-  // (Nenhuma outra propriedade explicitamente usada em 'data' no TagContactNode.tsx fornecido)
+  [key: string]: any;
 }
 
-export interface SetVariableNodeDataAssignment { // Tipo auxiliar para SetVariableNodeData
+export interface SetVariableNodeDataAssignment {
   variableName: string;
-  value: string | number | boolean | null;
+  value: any; // Mantenha 'any' por enquanto para flexibilidade
 }
 export interface SetVariableNodeData {
   label?: string;
   assignments?: SetVariableNodeDataAssignment[];
-  // Outras propriedades inferidas do SetVariableNode.tsx e erros anteriores:
-  // (Nenhuma outra propriedade explicitamente usada em 'data' no SetVariableNode.tsx fornecido)
+  [key: string]: any;
 }
 
 export interface ExternalDataFetchNodeDataFE {
@@ -185,48 +171,25 @@ export interface ExternalDataFetchNodeDataFE {
   body?: string;    // JSON string
   responsePath?: string;
   variableToSaveResponse?: string;
-  // Outras propriedades inferidas do ExternalDataNode.tsx e erros anteriores:
-  // (Nenhuma outra propriedade explicitamente usada em 'data' no ExternalDataNode.tsx fornecido)
+  [key: string]: any;
 }
 
 export interface ApiCallNodeData {
   label?: string;
   url?: string;
-  method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
-  headers?: string; // JSON string
-  body?: string;    // JSON string
+  method?: string;
+  headers?: string; 
+  body?: string; 
   responseMapping?: string;
-  // Outras propriedades inferidas do ApiCallNode.tsx e erros anteriores:
-  // (Nenhuma outra propriedade explicitamente usada em 'data' no ApiCallNode.tsx fornecido)
+  [key: string]: any;
 }
 
-// Interface para dados de performance de fluxo (usada em ZapAnalytics)
 export interface FlowPerformanceData {
   flowId: string;
-  flowName: string; 
-  totalStarted: number;
-  totalCompleted: number;
-  completionRate: number; 
-  avgTimeToComplete?: number; // em segundos
-  // Adicione outras propriedades se necessário
+  flowName?: string; 
+  totalStarted?: number;
+  totalCompleted?: number;
+  completionRate?: number; 
+  avgTimeToComplete?: number;
+  [key: string]: any; // Para flexibilidade temporária
 }
-
-// União de todos os tipos de dados de nós para uso genérico (opcional, mas pode ser útil)
-export type AnyNodeData =
-  | TriggerNodeData
-  | TextMessageNodeData
-  | QuestionNodeData
-  | ListMessageNodeDataFE
-  | ButtonsMessageNodeData
-  | MediaMessageNodeData
-  | ConditionNodeData
-  | ActionNodeData
-  | DelayNodeData
-  | EndNodeData
-  | GptQueryNodeData
-  | AiDecisionNodeData
-  | ClonedVoiceNodeData
-  | TagContactNodeData
-  | SetVariableNodeData
-  | ExternalDataFetchNodeDataFE
-  | ApiCallNodeData;
