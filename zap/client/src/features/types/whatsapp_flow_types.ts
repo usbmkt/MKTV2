@@ -17,10 +17,10 @@ export enum FlowNodeType {
   ACTION = 'actionNode',
   SET_VARIABLE = 'setVariableNode',
   TAG_CONTACT = 'tagContactNode',
-  GPT_QUERY = 'gptQueryNode',
+  GPT_QUERY = 'gptQueryNode', // Corrigido: GptQueryNode
   API_CALL = 'apiCallNode',
   AI_DECISION = 'aiDecisionNode',
-  EXTERNAL_DATA = 'externalDataNode',
+  EXTERNAL_DATA = 'externalDataNode', // Corrigido: ExternalDataNode
   END = 'endNode',
 }
 
@@ -69,15 +69,17 @@ export interface HandleData {
 }
 
 // -----------------------------------------------------------------------------
-// TIPOS DE DADOS PARA NÓS (NodeData)
+// TIPOS DE DADOS PARA NÓS (NodeData) - O que vai em `node.data`
 // -----------------------------------------------------------------------------
 
 export interface BaseNodeData {
-  id: string;
+  id: string; // Este ID é o ID lógico do nó dentro da definição do fluxo, não o ID do React Flow.
+              // React Flow gerencia seu próprio ID único para cada instância de nó no canvas.
+              // No entanto, para consistência e facilidade, muitas vezes o data.id pode espelhar o node.id.
   label: string;
   description?: string;
-  nodeType: FlowNodeType;
-  handles?: HandleData[];
+  nodeType: FlowNodeType; // O tipo do nó, usado para mapear para um componente.
+  handles?: HandleData[]; // Definições customizadas de handles se necessário.
 }
 
 export interface TriggerNodeData extends BaseNodeData {
@@ -97,7 +99,7 @@ export interface QuestionNodeData extends BaseNodeData {
   questionText: string;
   expectedResponseType: 'text' | 'number' | 'email' | 'phone' | 'date' | 'options';
   variableToStoreAnswer: string;
-  options?: { label: string; value: string; nextNodeId?: string }[];
+  options?: Array<{ label: string; value: string; nextNodeId?: string }>; // QuickReply/Button-like options
   validationRegex?: string;
   errorMessage?: string;
   enableAiSuggestions?: boolean;
@@ -114,14 +116,15 @@ export interface ListMessageSection {
 }
 export interface ListMessageNodeData extends BaseNodeData {
   nodeType: FlowNodeType.LIST_MESSAGE;
-  titleText: string;
-  buttonText: string;
+  titleText: string; // Título da mensagem que aparece antes da lista (opcional)
+  bodyText: string; // Corpo da mensagem (obrigatório)
+  buttonText: string; // Texto do botão que abre a lista (obrigatório)
   sections: ListMessageSection[];
   footerText?: string;
   variableToStoreSelection?: string;
 }
 
-export interface ButtonMessageItem {
+export interface ButtonMessageItem { // Renomeado de ButtonOptionData para consistência
   id: string;
   type: 'reply' | 'url' | 'call';
   title: string;
@@ -131,7 +134,7 @@ export interface ButtonMessageItem {
 export interface ButtonsMessageNodeData extends BaseNodeData {
   nodeType: FlowNodeType.BUTTONS_MESSAGE;
   headerText?: string;
-  bodyText: string;
+  bodyText: string; // Renomeado de messageText
   footerText?: string;
   buttons: ButtonMessageItem[];
   variableToStoreReply?: string;
@@ -147,7 +150,7 @@ export interface MediaContent {
 export interface MediaMessageNodeData extends BaseNodeData {
   nodeType: FlowNodeType.MEDIA_MESSAGE;
   mediaType: MediaType;
-  media: MediaContent;
+  media: MediaContent; // URL, caption etc. (mediaUrl e fileName podem ser parte de 'media')
 }
 
 export interface ClonedVoiceNodeData extends BaseNodeData {
@@ -177,39 +180,47 @@ export interface ConditionRule {
   valueToCompare: any;
   valueType?: VariableType;
 }
-export interface ConditionBranch {
-  id: string;
-  label: string;
-  rules: ConditionRule[];
-  logicalOperator: 'AND' | 'OR';
-}
+
 export interface ConditionNodeData extends BaseNodeData {
   nodeType: FlowNodeType.CONDITION;
+  // A lógica de 'branches' agora é gerenciada pelos handles de saída.
+  // Cada handle de saída pode ter um conjunto de regras associadas.
+  // Esta estrutura define a configuração para cada handle de saída.
   branchConfigs: Array<{
-    handleId: string;
-    label: string;
+    handleId: string; // ID do source handle (ex: 'trueOutput', 'age_gt_18_output')
+    label: string; // Label para o handle ou para a condição no editor de propriedades
     rules: ConditionRule[];
-    logicalOperator: 'AND' | 'OR';
+    logicalOperator: 'AND' | 'OR'; // Como as regras são combinadas para este branch
   }>;
+  // variableToCheck?: string; // Deprecated: use branchConfigs
+  // operator?: ConditionType; // Deprecated: use branchConfigs
+  // valueToCompare?: string; // Deprecated: use branchConfigs
 }
 
 export interface DelayNodeData extends BaseNodeData {
   nodeType: FlowNodeType.DELAY;
-  delayDuration: number;
+  delayDuration: number; // Renomeado de delayAmount
   delayUnit: 'seconds' | 'minutes' | 'hours' | 'days';
 }
 
 export interface ActionNodeData extends BaseNodeData {
   nodeType: FlowNodeType.ACTION;
   actionType: ActionType;
-  actionParams?: Record<string, any>;
+  actionParams?: Record<string, any>; // Ex: { tagName: 'lead' } ou { agentId: 'some_agent_id' }
+                                      // { contactPropertyName: 'city', contactPropertyValue: 'New York' }
+                                      // { apiUrl: '...', emailTemplateId: '...' }
 }
 
+export interface VariableAssignment { // Tipo para SetVariableNode
+    variableName: string;
+    value: any; // Pode ser estático ou outra variável {{var}}
+    sourceType: 'static' | 'variable' | 'expression' | 'api_response'; // como o valor é determinado
+    expression?: string; // se sourceType for expression
+    apiResponsePath?: string; // se sourceType for api_response (json path)
+}
 export interface SetVariableNodeData extends BaseNodeData {
   nodeType: FlowNodeType.SET_VARIABLE;
-  variableName: string;
-  variableValue: any;
-  valueSourceType: 'static' | 'variable' | 'expression' | 'api_response';
+  assignments: VariableAssignment[]; // Múltiplas atribuições
 }
 
 export interface TagContactNodeData extends BaseNodeData {
@@ -218,34 +229,37 @@ export interface TagContactNodeData extends BaseNodeData {
   tagName: string;
 }
 
-export interface GptQueryNodeData extends BaseNodeData {
+export interface GptQueryNodeData extends BaseNodeData { // Nome corrigido
   nodeType: FlowNodeType.GPT_QUERY;
-  prompt: string;
+  prompt: string; // Renomeado de promptTemplate
   model?: string;
   temperature?: number;
   maxTokens?: number;
-  variableToStoreResponse: string;
+  variableToStoreResponse: string; // Renomeado de variableToSaveResult
 }
 
 export interface ApiCallNodeData extends BaseNodeData {
   nodeType: FlowNodeType.API_CALL;
-  apiUrl: string;
+  apiUrl: string; // Renomeado de url
   method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
-  headers?: Record<string, string>;
-  body?: any;
+  headers?: Record<string, string>; // string de JSON -> Record
+  body?: string; // string de JSON ou objeto
   queryParams?: Record<string, string>;
   variableToStoreResponse?: string;
   responsePath?: string;
+  // responseMapping?: Array<{ sourcePath: string; targetVariable: string }>; // Pode ser mais granular
 }
 
 export interface AiDecisionNodeData extends BaseNodeData {
   nodeType: FlowNodeType.AI_DECISION;
-  contextPrompt: string;
-  possibleOutcomes: Array<{ label: string; value: string; handleId: string }>;
+  contextPrompt: string; // Pergunta ou contexto para a IA
+  possibleOutcomes: Array<{ label: string; value: string; handleId: string }>; // Cada outcome é um source handle
   variableToStoreDecision?: string;
+  // inputVariable?: string; // Opcional, variável de entrada para a IA
+  // decisionCategories?: Array<{ categoryName: string; keywords: string[] }>; // Deprecated: usar possibleOutcomes
 }
 
-export interface ExternalDataNodeData extends BaseNodeData {
+export interface ExternalDataNodeData extends BaseNodeData { // Nome corrigido
   nodeType: FlowNodeType.EXTERNAL_DATA;
   dataSourceUrl: string;
   requestType: 'GET' | 'POST';
@@ -256,13 +270,15 @@ export interface ExternalDataNodeData extends BaseNodeData {
 export interface EndNodeData extends BaseNodeData {
   nodeType: FlowNodeType.END;
   endStateType?: 'completed' | 'abandoned' | 'error';
-  finalMessage?: string;
+  finalMessage?: string; // Renomeado de message
 }
 
 // -----------------------------------------------------------------------------
 // TIPOS DE DADOS GENÉRICOS PARA React Flow (Node e Edge)
 // -----------------------------------------------------------------------------
 
+// União de todos os tipos de dados de nó específicos.
+// Esta é a forma do objeto `node.data` para qualquer um dos nossos nós customizados.
 export type FlowNodeSpecificData =
   | TriggerNodeData
   | TextMessageNodeData
@@ -282,55 +298,44 @@ export type FlowNodeSpecificData =
   | ExternalDataNodeData
   | EndNodeData;
 
+// Tipo genérico para os dados de um nó no React Flow
 export type FlowNodeData<T extends FlowNodeSpecificData = FlowNodeSpecificData> = T;
 
-// Correção para erro TS2344: Garantir que o tipo do nó seja sempre uma string.
-// FlowNodeType é um enum string, e `string` é string. Extract garante que o resultado seja string.
+// Tipo para o `type` de um nó, garantindo que seja uma string.
 export type CustomFlowNodeType = Extract<FlowNodeType | string, string>;
+
+// Nó customizado do React Flow. O primeiro genérico é o tipo do `node.data`, o segundo é o `node.type`.
 export type CustomFlowNode = Node<FlowNodeData, CustomFlowNodeType>;
 
-
+// Dados para arestas
 export interface FlowEdgeData {
-  conditionLabel?: string;
+  conditionLabel?: string; // Ex: "Sim", "Não", "Opção A"
 }
 export type CustomFlowEdge = Edge<FlowEdgeData>;
 
 // -----------------------------------------------------------------------------
 // PROPS PARA COMPONENTES DE NÓ CUSTOMIZADOS
 // -----------------------------------------------------------------------------
-export type CustomNodeProps<T extends FlowNodeSpecificData> = ReactFlowNodeProps<FlowNodeData<T>>;
+// Usamos NodeProps do React Flow, especializado com nosso FlowNodeData para o `data` prop.
+// T será um dos ...NodeData (ex: TextMessageNodeData)
+export type CustomNodeProps<T extends FlowNodeSpecificData> = ReactFlowNodeProps<T>;
 
-export type TriggerNodeProps = CustomNodeProps<TriggerNodeData>;
-export type TextMessageNodeProps = CustomNodeProps<TextMessageNodeData>;
-export type QuestionNodeProps = CustomNodeProps<QuestionNodeData>;
-export type ListMessageNodeProps = CustomNodeProps<ListMessageNodeData>;
-export type ButtonsMessageNodeProps = CustomNodeProps<ButtonsMessageNodeData>;
-export type MediaMessageNodeProps = CustomNodeProps<MediaMessageNodeData>;
-export type ClonedVoiceNodeProps = CustomNodeProps<ClonedVoiceNodeData>;
-export type ConditionNodeProps = CustomNodeProps<ConditionNodeData>;
-export type DelayNodeProps = CustomNodeProps<DelayNodeData>;
-export type ActionNodeProps = CustomNodeProps<ActionNodeData>;
-export type SetVariableNodeProps = CustomNodeProps<SetVariableNodeData>;
-export type TagContactNodeProps = CustomNodeProps<TagContactNodeData>;
-export type GptQueryNodeProps = CustomNodeProps<GptQueryNodeData>;
-export type ApiCallNodeProps = CustomNodeProps<ApiCallNodeData>;
-export type AiDecisionNodeProps = CustomNodeProps<AiDecisionNodeData>;
-export type ExternalDataNodeProps = CustomNodeProps<ExternalDataNodeData>;
-export type EndNodeProps = CustomNodeProps<EndNodeData>;
 
 // -----------------------------------------------------------------------------
 // TIPOS PARA O ESTADO DO FLOW BUILDER E OPERAÇÕES
 // -----------------------------------------------------------------------------
-export interface FlowData {
+export interface FlowData { // Representa um fluxo salvo
   id: string;
   name: string;
   description?: string;
-  nodes: CustomFlowNode[];
-  edges: CustomFlowEdge[];
+  nodes: CustomFlowNode[]; // Os nós do React Flow
+  edges: CustomFlowEdge[]; // As arestas do React Flow
   variables?: Variable[];
-  trigger?: TriggerNodeData; 
+  // trigger?: TriggerNodeData; // O nó de trigger pode ser encontrado dentro de `nodes`
   createdAt?: string | Date;
   updatedAt?: string | Date;
+  status?: 'draft' | 'active' | 'inactive' | 'archived';
+  // Outros metadados do fluxo
 }
 
 export type FlowBuilderContextType = {
@@ -341,15 +346,17 @@ export type FlowBuilderContextType = {
   onConnect: OnConnect;
   addNode: (type: FlowNodeType, position: XYPosition, data?: Partial<FlowNodeData>) => void;
   updateNodeData: <T extends FlowNodeSpecificData>(nodeId: string, newData: Partial<T>) => void;
-  getNodeData: <T extends FlowNodeSpecificData>(nodeId: string) => FlowNodeData<T> | undefined;
+  getNodeData: <T extends FlowNodeSpecificData>(nodeId: string) => T | undefined;
   setNodes: React.Dispatch<React.SetStateAction<CustomFlowNode[]>>;
   setEdges: React.Dispatch<React.SetStateAction<CustomFlowEdge[]>>;
   selectedNodeId: string | null;
   setSelectedNodeId: (id: string | null) => void;
+  // Adicionar outras funções e estados conforme necessário
 };
 
 // -----------------------------------------------------------------------------
 // TIPOS RELACIONADOS AO WHATSAPP (Conexão, Mensagens, Templates)
+// (Mantidos consistentes com a versão anterior para compatibilidade com ZapConversations etc.)
 // -----------------------------------------------------------------------------
 
 export interface WhatsAppConnectionStatus {
@@ -444,9 +451,16 @@ export interface WhatsAppTemplate {
   usageCount?: number;
 }
 
+// Tipos que não existem mais ou foram substituídos
+// export type ApiError = any; // Substituído por tratamento de erro específico
+// export type FlowPerformanceData = any; // Precisa ser definido com base nos dados reais
+// export type FlowElementData = any; // Usar CustomFlowNode ou FlowNodeData
+// QuickReply e ListItem foram integrados em QuestionNodeData e ListMessageNodeData
+// export type ButtonOptionData = ButtonMessageItem; // Renomeado e integrado
+
 export interface WhatsAppSavedFlow extends FlowData {
   waFlowId?: string;
-  status: 'draft' | 'active' | 'inactive' | 'archived';
+  // status: 'draft' | 'active' | 'inactive' | 'archived'; // Já em FlowData
   version?: number;
   totalUsers?: number;
   completionRate?: number;
