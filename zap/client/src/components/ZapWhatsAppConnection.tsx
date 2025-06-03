@@ -39,6 +39,8 @@ interface ApiError {
     details?: any;
 }
 
+// Simulação de chamada de API - esta parte será modificada depois
+// para chamar o backend do "zap", que por sua vez chamará o WHATSAPP_BOT_URL
 const mockApiCall = async (action: string, payload?: any): Promise<any> => {
   console.log(`[API Mock] Action: ${action}`, payload);
   await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
@@ -73,12 +75,14 @@ interface ZapWhatsAppConnectionProps {
 export default function ZapWhatsAppConnection({ onConnectionChange }: ZapWhatsAppConnectionProps) {
   const [connectionStatus, setConnectionStatus] = useState<WhatsAppConnectionStatus>({ status: 'INITIALIZING' });
   const [isLoading, setIsLoading] = useState(false);
-  const [apiToken, setApiToken] = useState('');
+  const [apiToken, setApiToken] = useState(''); // Mantido para a UI de exemplo
 
+  // Esta função será ajustada para chamar o endpoint do backend do "zap"
   const fetchStatus = useCallback(async (showLoading = true) => {
     if(showLoading) setIsLoading(true);
     try {
-      const data: WhatsAppConnectionStatus = await mockApiCall('get-status');
+      // No futuro: const data: WhatsAppConnectionStatus = await zapApi.get('/connection/status');
+      const data: WhatsAppConnectionStatus = await mockApiCall('get-status'); // Usando mock por enquanto
       setConnectionStatus(data);
       if (onConnectionChange) onConnectionChange(data);
     } catch (error) {
@@ -89,10 +93,12 @@ export default function ZapWhatsAppConnection({ onConnectionChange }: ZapWhatsAp
     }
   }, [onConnectionChange]);
 
+  // Esta função será ajustada para chamar o endpoint do backend do "zap"
   const generateAndSetQRCode = useCallback(async () => {
     setIsLoading(true);
     try {
-      const data: WhatsAppConnectionStatus = await mockApiCall('generate-qr');
+      // No futuro: const data: WhatsAppConnectionStatus = await zapApi.post('/connection/connect');
+      const data: WhatsAppConnectionStatus = await mockApiCall('generate-qr'); // Usando mock
       setConnectionStatus(data);
     } catch (error) {
       console.error("Erro ao gerar QR Code:", error);
@@ -102,11 +108,13 @@ export default function ZapWhatsAppConnection({ onConnectionChange }: ZapWhatsAp
     }
   }, []);
 
+  // Esta função será ajustada para chamar o endpoint do backend do "zap"
   const handleDisconnect = async () => {
     if (!window.confirm("Tem certeza que deseja desconectar sua sessão do WhatsApp?")) return;
     setIsLoading(true);
     try {
-        await mockApiCall('disconnect');
+        // No futuro: await zapApi.post('/connection/disconnect');
+        await mockApiCall('disconnect'); // Usando mock
         setConnectionStatus({ status: 'DISCONNECTED', qrCode: null });
         if (onConnectionChange) onConnectionChange({ status: 'DISCONNECTED' });
     } catch (error) {
@@ -138,7 +146,7 @@ export default function ZapWhatsAppConnection({ onConnectionChange }: ZapWhatsAp
     });
   };
   
-  const webhookUrlToCopy = `${window.location.origin}/api/zap/webhooks/whatsapp`;
+  const webhookUrlToCopy = `${window.location.origin}/api/zap/webhooks/whatsapp`; // Este será o webhook do seu backend "zap"
 
 
   return (
@@ -249,14 +257,16 @@ export default function ZapWhatsAppConnection({ onConnectionChange }: ZapWhatsAp
             </Button>
         </TabsContent>
         
-        {/* Aba de Configurações - Linha 198 (Input) e 201 (Button) no contexto original do arquivo */}
         <TabsContent value="settings" className="p-6 space-y-6">
             <Card className="neu-card">
                 <CardHeader><CardTitle className="text-base">Configurações de API (Opcional)</CardTitle></CardHeader>
                 <CardContent className="space-y-3">
                     <div>
                         <Label htmlFor="apiToken" className="text-xs">Seu Token de API (se usar provedor externo)</Label>
-                        {/* Esta é a linha que o log do Render aponta como problemática (linha 198) */}
+                        {/* === LINHA PROBLEMÁTICA (antiga linha 198) === 
+                            Por favor, DELETE esta seção de Input e o Label acima e REESCREVA MANUALMENTE em seu editor.
+                            Se o erro persistir, tente a versão simplificada abaixo.
+                        */}
                         <Input 
                           id="apiToken" 
                           type="password" 
@@ -265,6 +275,7 @@ export default function ZapWhatsAppConnection({ onConnectionChange }: ZapWhatsAp
                           onChange={(e: React.ChangeEvent<HTMLInputElement>) => setApiToken(e.target.value)} 
                           className="neu-input mt-1"
                         />
+                        {/* <Input id="apiTokenTest" type="password" />  // Use esta para testar se a linha acima falhar */}
                     </div>
                     <Button className="neu-button text-xs" size="sm" type="button">
                         <Settings className="mr-1.5 h-3.5 w-3.5"/>
