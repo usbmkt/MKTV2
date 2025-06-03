@@ -1,55 +1,68 @@
-// zap/client/src/components/flow_builder_nodes/MediaMessageNode.tsx
-import React, { memo, ChangeEvent } from 'react'; // Adicionado ChangeEvent
-import { Handle, Position, NodeProps } from '@xyflow/react';
+import React, { memo, useState, ChangeEvent, useCallback } from 'react';
+import { Handle, Position, NodeProps, Node, useReactFlow } from '@xyflow/react';
 import { Card, CardContent, CardHeader, CardTitle } from '@zap_client/components/ui/card';
 import { Input } from '@zap_client/components/ui/input';
 import { Label } from '@zap_client/components/ui/label';
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@zap_client/components/ui/select';
-import { Textarea } from '@zap_client/components/ui/textarea';
-import { Image as ImageIcon, Video, FileText, Mic } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@zap_client/components/ui/select';
+import { GripVertical, Paperclip } from 'lucide-react';
 import { MediaMessageNodeData } from '@zap_client/features/types/whatsapp_flow_types';
 
-const MediaMessageNode: React.FC<NodeProps<MediaMessageNodeData>> = ({ data, id, selected }) => {
-  // Desestruture TODAS as props de MediaMessageNodeData com valores padrão
-  const {
-    label = 'Mensagem de Mídia',
-    mediaType = 'image',
-    mediaUrl = '',
-    caption = '',
-    fileName = ''
-  } = data;
+const MediaMessageNode: React.FC<NodeProps<MediaMessageNodeData>> = ({ id, data, selected }) => {
+  const { setNodes } = useReactFlow();
+  const [nodeData, setNodeData] = useState<MediaMessageNodeData>(data);
 
-  // Lógica para atualizar 'data' (ex: via onNodesChange passada como prop ou contexto)
-  // const updateData = (field: keyof MediaMessageNodeData, value: any) => {
-  //   console.log(`Node ${id} data update:`, { [field]: value });
-  // };
+  const updateNodeData = useCallback((newData: Partial<MediaMessageNodeData>) => {
+    setNodes((nds) =>
+      nds.map((node: Node) => {
+        if (node.id === id) {
+          return { ...node, data: { ...node.data, ...newData } };
+        }
+        return node;
+      })
+    );
+    setNodeData(prev => ({ ...prev, ...newData }));
+  }, [id, setNodes]);
 
-  const getIcon = () => {
-    switch (mediaType) {
-      case 'image': return <ImageIcon className="w-4 h-4 text-purple-500 mr-2" />;
-      case 'video': return <Video className="w-4 h-4 text-red-500 mr-2" />;
-      case 'audio': return <Mic className="w-4 h-4 text-blue-500 mr-2" />;
-      case 'document': return <FileText className="w-4 h-4 text-green-500 mr-2" />;
-      default: return <ImageIcon className="w-4 h-4 text-gray-500 mr-2" />;
-    }
+
+  const handleInputChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    updateNodeData({ [name]: value });
+  };
+
+  const handleSelectChange = (name: keyof MediaMessageNodeData, value: string) => {
+    updateNodeData({ [name]: value as MediaMessageNodeData['mediaType'] });
   };
 
   return (
-    <Card className={`text-xs shadow-md w-72 ${selected ? 'ring-2 ring-purple-500' : 'border-border'} bg-card`}>
-      <CardHeader className="bg-muted/50 p-2 rounded-t-lg">
-        <CardTitle className="text-xs font-semibold flex items-center">
-          {getIcon()}
-          {label || `Mídia: ${mediaType}`}
-        </CardTitle>
+    <Card className={`w-80 shadow-md ${selected ? 'ring-2 ring-blue-500' : ''}`}>
+      <CardHeader className="bg-gray-100 p-4 rounded-t-lg flex flex-row items-center justify-between">
+        <div className="flex items-center">
+          <Paperclip className="w-4 h-4 mr-2 text-gray-600" />
+          <CardTitle className="text-sm font-medium">{nodeData.label || 'Mensagem de Mídia'}</CardTitle>
+        </div>
+        <GripVertical className="w-5 h-5 text-gray-400 cursor-grab drag-handle" />
       </CardHeader>
-      <CardContent className="p-3 space-y-2">
+      <CardContent className="p-4 space-y-3">
+        <Handle type="target" position={Position.Left} className="w-3 h-3 bg-blue-500 rounded-full" />
+        <div>
+          <Label htmlFor={`label-${id}`} className="text-xs font-medium">Rótulo do Nó</Label>
+          <Input
+            id={`label-${id}`}
+            name="label"
+            value={nodeData.label || ''}
+            onChange={handleInputChange}
+            placeholder="Ex: Enviar Imagem Produto"
+            className="mt-1 w-full nodrag"
+          />
+        </div>
         <div>
           <Label htmlFor={`mediaType-${id}`} className="text-xs font-medium">Tipo de Mídia</Label>
           <Select
-            value={mediaType}
-            // onValueChange={(value) => updateData('mediaType', value as MediaMessageNodeData['mediaType'])}
+            name="mediaType"
+            value={nodeData.mediaType || ''}
+            onValueChange={(value) => handleSelectChange('mediaType', value)}
           >
-            <SelectTrigger id={`mediaType-${id}`} className="w-full h-8 text-xs">
+            <SelectTrigger id={`mediaType-${id}`} className="w-full mt-1 nodrag">
               <SelectValue placeholder="Selecione o tipo" />
             </SelectTrigger>
             <SelectContent>
@@ -61,45 +74,55 @@ const MediaMessageNode: React.FC<NodeProps<MediaMessageNodeData>> = ({ data, id,
           </Select>
         </div>
         <div>
-          <Label htmlFor={`mediaUrl-${id}`} className="text-xs font-medium">URL da Mídia*</Label>
+          <Label htmlFor={`mediaUrl-${id}`} className="text-xs font-medium">URL da Mídia</Label>
           <Input
             id={`mediaUrl-${id}`}
-            type="text"
-            placeholder="https://servidor.com/arquivo.jpg"
-            value={mediaUrl}
-            // onChange={(e: ChangeEvent<HTMLInputElement>) => updateData('mediaUrl', e.target.value)}
-            className="w-full h-8 text-xs"
+            name="mediaUrl"
+            value={nodeData.mediaUrl || ''}
+            onChange={handleInputChange}
+            placeholder="https://exemplo.com/midia.jpg"
+            className="mt-1 w-full nodrag"
           />
         </div>
-        {mediaType === 'document' && (
+        {nodeData.mediaType === 'document' && (
           <div>
-            <Label htmlFor={`fileName-${id}`} className="text-xs font-medium">Nome do Arquivo (Documento)</Label>
+            <Label htmlFor={`fileName-${id}`} className="text-xs font-medium">Nome do Arquivo (para Documento)</Label>
             <Input
               id={`fileName-${id}`}
-              type="text"
-              placeholder="Ex: proposta.pdf"
-              value={fileName}
-              // onChange={(e: ChangeEvent<HTMLInputElement>) => updateData('fileName', e.target.value)}
-              className="w-full h-8 text-xs"
+              name="fileName"
+              value={nodeData.fileName || ''}
+              onChange={handleInputChange}
+              placeholder="Ex: catalogo.pdf"
+              className="mt-1 w-full nodrag"
             />
           </div>
         )}
-        {(mediaType === 'image' || mediaType === 'video' || mediaType === 'document') && (
+        {(nodeData.mediaType === 'image' || nodeData.mediaType === 'video') && (
           <div>
-            <Label htmlFor={`caption-${id}`} className="text-xs font-medium">Legenda (Opcional)</Label>
-            <Textarea
+            <Label htmlFor={`caption-${id}`} className="text-xs font-medium">Legenda (para Imagem/Vídeo)</Label>
+            <Input
               id={`caption-${id}`}
-              placeholder="Legenda da mídia..."
-              value={caption}
-              // onChange={(e: ChangeEvent<HTMLTextAreaElement>) => updateData('caption', e.target.value)}
-              rows={2}
-              className="w-full text-xs"
+              name="caption"
+              value={nodeData.caption || ''}
+              onChange={handleInputChange}
+              placeholder="Descrição da mídia"
+              className="mt-1 w-full nodrag"
             />
           </div>
         )}
+         <div>
+          <Label htmlFor={`mimeType-${id}`} className="text-xs font-medium">MIME Type (opcional)</Label>
+          <Input
+            id={`mimeType-${id}`}
+            name="mimeType"
+            value={nodeData.mimeType || ''}
+            onChange={handleInputChange}
+            placeholder="Ex: image/png, application/pdf"
+            className="mt-1 w-full nodrag"
+          />
+        </div>
+        <Handle type="source" position={Position.Right} className="w-3 h-3 bg-green-500 rounded-full" />
       </CardContent>
-      <Handle type="target" position={Position.Left} className="!bg-muted-foreground w-2.5 h-2.5" />
-      <Handle type="source" position={Position.Right} className="!bg-primary w-2.5 h-2.5" />
     </Card>
   );
 };
