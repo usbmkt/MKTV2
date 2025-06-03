@@ -1,4 +1,5 @@
 import { Node } from '@xyflow/react';
+import { ChangeEvent } from 'react';
 
 // Definição base para todos os dados de nós customizados
 export interface BaseNodeData {
@@ -26,7 +27,6 @@ export interface ActionNodeData extends BaseNodeData {
   recipientVariable?: string; // Para sendMessage
 }
 export type ActionNodeType = Node<ActionNodeData, 'actionNode'>;
-
 
 // --- AiDecisionNode ---
 export interface AiDecisionNodeData extends BaseNodeData {
@@ -147,7 +147,6 @@ export interface MediaMessageNodeData extends BaseNodeData {
 }
 export type MediaMessageNodeType = Node<MediaMessageNodeData, 'mediaMessageNode'>;
 
-
 // --- QuestionNode ---
 export interface QuickReply {
   id: string;
@@ -203,7 +202,6 @@ export interface TriggerNodeData extends BaseNodeData {
 }
 export type TriggerNodeType = Node<TriggerNodeData, 'triggerNode'>;
 
-
 // 2. Definição para ApiError
 export interface ApiError {
   message: string;
@@ -232,6 +230,136 @@ export interface FlowPerformanceData {
   completionRate: number; // (totalCompleted / totalStarted) * 100
   averageDurationSeconds?: number;
   // Adicione mais métricas conforme necessário
+}
+
+// 5. Tipos para WhatsApp (baseados nos erros)
+export interface Conversation {
+  id: string;
+  contactName?: string;
+  contactPhone: string;
+  lastMessage?: string;
+  lastMessageTime: string;
+  unreadCount: number;
+  status: 'active' | 'archived' | 'blocked';
+  avatarUrl?: string;
+}
+
+export interface Message {
+  id: string;
+  conversationId: string;
+  content: string;
+  type: 'text' | 'image' | 'audio' | 'video' | 'document';
+  direction: 'incoming' | 'outgoing';
+  timestamp: string;
+  status: 'sent' | 'delivered' | 'read' | 'failed';
+  mediaUrl?: string;
+  fileName?: string;
+  mimeType?: string;
+}
+
+// 6. Tipos para Templates WhatsApp
+export interface TemplateParameter {
+  type: 'text' | 'currency' | 'date_time' | 'image' | 'document' | 'video';
+  text?: string;
+  currency?: {
+    fallback_value: string;
+    code: string;
+    amount_1000: number;
+  };
+  date_time?: {
+    fallback_value: string;
+  };
+  image?: {
+    link: string;
+  };
+  document?: {
+    link: string;
+    filename: string;
+  };
+  video?: {
+    link: string;
+  };
+}
+
+export interface TemplateComponent {
+  type: 'HEADER' | 'BODY' | 'FOOTER' | 'BUTTONS';
+  format?: 'TEXT' | 'IMAGE' | 'DOCUMENT' | 'VIDEO';
+  text?: string;
+  parameters?: TemplateParameter[];
+  buttons?: Array<{
+    type: 'QUICK_REPLY' | 'URL' | 'PHONE_NUMBER';
+    text: string;
+    url?: string;
+    phone_number?: string;
+  }>;
+}
+
+export interface TemplateExample {
+  header_text?: string[];
+  body_text?: string[][];
+  header_handle?: string[];
+}
+
+export interface WhatsAppTemplate {
+  id: string;
+  name: string;
+  status: 'APPROVED' | 'PENDING' | 'REJECTED' | 'DISABLED';
+  category: TemplateCategory;
+  language: TemplateLanguage;
+  components: TemplateComponent[];
+  rejected_reason?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export type TemplateCategory = 
+  | 'AUTHENTICATION'
+  | 'MARKETING'
+  | 'UTILITY'
+  | 'SERVICE';
+
+export interface TemplateLanguage {
+  code: string;
+  name: string;
+}
+
+// 7. Tipos para Flow Response
+export interface FlowResponse {
+  id: string;
+  name: string;
+  description?: string;
+  status: 'draft' | 'active' | 'inactive' | 'archived';
+  nodes: AllFlowNodes[];
+  edges: Array<{
+    id: string;
+    source: string;
+    target: string;
+    sourceHandle?: string;
+    targetHandle?: string;
+  }>;
+  createdAt: string;
+  updatedAt: string;
+  triggerType?: string;
+  totalExecutions?: number;
+  successRate?: number;
+}
+
+// 8. Componente ZapIcon (como interface para evitar erro)
+export interface ZapIconProps {
+  className?: string;
+  size?: number;
+}
+
+// 9. Tipos de Event Handler corrigidos
+export type InputChangeEvent = ChangeEvent<HTMLInputElement>;
+export type TextAreaChangeEvent = ChangeEvent<HTMLTextAreaElement>;
+export type SelectChangeEvent = ChangeEvent<HTMLSelectElement>;
+
+// 10. Props para ScrollArea corrigidas
+export interface ScrollAreaProps {
+  className?: string;
+  children: React.ReactNode;
+  // Removido viewportRef pois não existe na interface padrão
 }
 
 // União de todos os tipos de dados de nós para facilitar o uso em alguns contextos
@@ -273,3 +401,11 @@ export type AllFlowNodes =
   | TagContactNodeType
   | TextMessageNodeType
   | TriggerNodeType;
+
+// 11. Tipos para Button Variants (corrigindo erro de "xs")
+export type ButtonVariant = 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link';
+export type ButtonSize = 'default' | 'sm' | 'lg' | 'icon';
+
+// 12. Funções callback corrigidas para ZapMainPage
+export type FlowSelectionCallback = (flowId: string, flowName: string) => void;
+export type FlowEditCallback = (flow: FlowElementData, flowName: string) => void;
