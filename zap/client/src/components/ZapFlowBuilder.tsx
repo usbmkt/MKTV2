@@ -16,7 +16,8 @@ import {
   BackgroundVariant,
   Panel,
   NodeProps,
-  ReactFlowInstance // Importado para onInit
+  ReactFlowInstance,
+  NodeTypes // Importado para tipar nodeTypes
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -48,7 +49,7 @@ import {
 } from '@zap_client/features/types/whatsapp_flow_types';
 
 import { Button } from '@zap_client/components/ui/button';
-import { Input } from '@zap_client/components/ui/input';
+import { Input } from '@zap_client/components/ui/input'; // Import Adicionado
 import { PlusCircle, Save, Trash2, Zap as ZapIcon, Loader2 } from 'lucide-react';
 
 
@@ -63,9 +64,7 @@ export interface ZapFlowBuilderProps {
   onSaveSuccess?: (flowId: string, flowName: string) => void;
 }
 
-// Mapeamento dos tipos de nós para os componentes.
-// Certifique-se que cada componente de nó aceita NodeProps<SeuTipoDeDadosCorrespondente>
-const nodeTypes = {
+const nodeTypes: NodeTypes = { // Tipagem explícita
   trigger: TriggerNode as React.ComponentType<NodeProps<TriggerNodeData>>,
   textMessage: TextMessageNode as React.ComponentType<NodeProps<TextMessageNodeData>>,
   question: QuestionNode as React.ComponentType<NodeProps<QuestionNodeData>>,
@@ -97,7 +96,7 @@ const ZapFlowBuilderWrapper: React.FC<ZapFlowBuilderProps> = ({
   onCloseEditor,
   onSaveSuccess,
 }) => {
-  const [nodes, setNodes] = useState<Node<any>[]>(initialNodesProp || []); // Usar Node<any> ou um tipo união dos seus NodeData
+  const [nodes, setNodes] = useState<Node<any>[]>(initialNodesProp || []);
   const [edges, setEdges] = useState<Edge[]>(initialEdgesProp || []);
   const [flowName, setFlowName] = useState(initialFlowName || `Fluxo ${flowId}`);
   const [isLoading, setIsLoading] = useState(true);
@@ -146,14 +145,13 @@ const ZapFlowBuilderWrapper: React.FC<ZapFlowBuilderProps> = ({
     [setEdges]
   );
 
-  const addNode = (type: keyof typeof nodeTypes) => { // Tipado para chaves de nodeTypes
+  const addNode = (type: keyof typeof nodeTypes) => {
     const newNodeId = `${type}_${nodes.length + Date.now()}`;
     let initialData: any = { label: `Novo ${type}` };
 
-    // Você pode querer dados iniciais específicos por tipo de nó
     if (type === 'trigger') initialData = { label: 'Início', triggerType: 'manual' } as TriggerNodeData;
     if (type === 'textMessage') initialData = { label: 'Mensagem', message: 'Olá!' } as TextMessageNodeData;
-    // Adicione mais defaults aqui
+    // Adicione mais defaults para outros tipos de nós aqui se desejar
 
     const newNode: Node = {
       id: newNodeId,
@@ -193,7 +191,6 @@ const ZapFlowBuilderWrapper: React.FC<ZapFlowBuilderProps> = ({
     }
   };
 
-
   if (isLoading && flowId !== 'new') {
     return <div className="flex items-center justify-center h-full"><Loader2 className="w-8 h-8 animate-spin text-primary" /> Carregando fluxo...</div>;
   }
@@ -206,7 +203,7 @@ const ZapFlowBuilderWrapper: React.FC<ZapFlowBuilderProps> = ({
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
-        nodeTypes={nodeTypes} // Descomentado - requer que os tipos de nós e seus dados estejam corretos
+        nodeTypes={nodeTypes} 
         defaultViewport={defaultViewport}
         fitView
         onInit={setRfInstance}
