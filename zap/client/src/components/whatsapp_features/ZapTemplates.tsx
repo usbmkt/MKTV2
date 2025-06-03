@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback, ChangeEvent } from 'react';
 import { MoreHorizontal, PlusCircle, Search, Trash2, Edit, Eye, Loader2, Info } from 'lucide-react';
 // CORRIGIDO: Path Aliases para @zap_client
-import { Button, buttonVariants } from '@zap_client/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@zap_client/components/ui/card';
+import { Button } from '@zap_client/components/ui/button'; // MUDADO DE @/
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@zap_client/components/ui/card'; // MUDADO DE @/
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,17 +10,17 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@zap_client/components/ui/dropdown-menu';
-import { Input } from '@zap_client/components/ui/input';
-import { Badge } from '@zap_client/components/ui/badge';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@zap_client/components/ui/dialog';
-import { Label } from '@zap_client/components/ui/label';
-import { Textarea } from '@zap_client/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@zap_client/components/ui/select';
-import { WhatsAppTemplate, WhatsAppTemplateComponent, WhatsAppTemplateButton, WhatsAppTemplateCategory } from '@zap_client/features/types/whatsapp_flow_types'; // Assumindo que WhatsAppTemplateCategory está aqui
-import { useToast } from '@zap_client/hooks/use-toast';
-import { apiRequest } from '@zap_client/lib/api'; // Assumindo que apiRequest virá do lib do zap
-import { cn } from '@zap_client/lib/utils';
+} from '@zap_client/components/ui/dropdown-menu'; // MUDADO DE @/
+import { Input } from '@zap_client/components/ui/input'; // MUDADO DE @/
+import { Badge } from '@zap_client/components/ui/badge'; // MUDADO DE @/
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@zap_client/components/ui/dialog'; // MUDADO DE @/
+import { Label } from '@zap_client/components/ui/label'; // MUDADO DE @/
+import { Textarea } from '@zap_client/components/ui/textarea'; // MUDADO DE @/
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@zap_client/components/ui/select'; // MUDADO DE @/
+import { WhatsAppTemplate, WhatsAppTemplateComponent, WhatsAppTemplateButton, WhatsAppTemplateCategory } from '@zap_client/features/types/whatsapp_flow_types'; // MUDADO DE @/types/... para @zap_client/features/types/...
+import { useToast } from '@zap_client/hooks/use-toast'; // MUDADO DE @/
+import { apiRequest } from '@zap_client/lib/api'; // MUDADO DE @/
+import { cn } from '@zap_client/lib/utils'; // MUDADO DE @/
 
 // Mock data (substituir com chamadas de API reais)
 const mockTemplates: WhatsAppTemplate[] = [
@@ -63,13 +63,11 @@ const templateCategoriesList: WhatsAppTemplateCategory[] = [
     { id: 'MARKETING', name: 'MARKETING'}, 
     { id: 'AUTHENTICATION', name: 'AUTHENTICATION'}
 ];
-// Simplificado para string array se WhatsAppTemplateCategory for apenas string
-// const templateCategories = ['UTILITY', 'MARKETING', 'AUTHENTICATION'];
 
 
 const templateLanguages = [{ code: 'pt_BR', name: 'Português (Brasil)' }, { code: 'en_US', name: 'Inglês (EUA)' }, { code: 'es_ES', name: 'Espanhol (Espanha)' }];
 const componentTypes: WhatsAppTemplateComponent['type'][] = ['HEADER', 'BODY', 'FOOTER', 'BUTTONS'];
-const headerFormats: Array<WhatsAppTemplateComponent['format'] | ''> = ['', 'TEXT', 'IMAGE', 'VIDEO', 'DOCUMENT']; // '' para Nenhum
+const headerFormats: Array<WhatsAppTemplateComponent['format'] | ''> = ['', 'TEXT', 'IMAGE', 'VIDEO', 'DOCUMENT'];
 const buttonTypes: WhatsAppTemplateButton['type'][] = ['QUICK_REPLY', 'URL', 'PHONE_NUMBER', 'COPY_CODE'];
 
 
@@ -85,7 +83,6 @@ const ZapTemplates: React.FC = () => {
     setIsLoading(true);
     try {
       // const response = await apiRequest('GET', '/api/whatsapp/templates'); // Usar endpoint do zap/server
-      // setTemplates(response.data as WhatsAppTemplate[]);
       setTemplates(mockTemplates); 
     } catch (error) {
       toast({ title: 'Erro ao buscar templates', description: String(error), variant: 'destructive' });
@@ -100,57 +97,63 @@ const ZapTemplates: React.FC = () => {
 
   const handleInputChange = <K extends keyof WhatsAppTemplate>(field: K, value: WhatsAppTemplate[K]) => {
     if (editingTemplate) {
-      setEditingTemplate(prev => prev ? { ...prev, [field]: value } : null);
+      setEditingTemplate((prev: WhatsAppTemplate | null) => prev ? { ...prev, [field]: value } : null);
     }
   };
   
   const handleComponentChange = (compIndex: number, field: keyof WhatsAppTemplateComponent, value: any) => {
     if (editingTemplate) {
-      const updatedComponents = [...editingTemplate.components];
-      const targetComponent = { ...updatedComponents[compIndex] };
-  
-      if (field === 'format') {
-        if (value === '') { // Representa "Nenhum" ou remoção do formato
-          delete targetComponent.format;
-          // Se o formato for removido, e era um formato de mídia, limpar o example de mídia
-          if (targetComponent.example?.header_handle) {
-            delete targetComponent.example.header_handle;
+      setEditingTemplate((prev: WhatsAppTemplate | null) => {
+        if (!prev) return null;
+        const updatedComponents = [...prev.components];
+        const targetComponent = { ...updatedComponents[compIndex] };
+    
+        if (field === 'format') {
+          if (value === '') { 
+            delete targetComponent.format;
+            if (targetComponent.example?.header_handle) {
+              delete targetComponent.example.header_handle;
+            }
+          } else {
+            targetComponent.format = value as WhatsAppTemplateComponent['format'];
           }
         } else {
-          targetComponent.format = value as WhatsAppTemplateComponent['format'];
+          (targetComponent as any)[field] = value;
         }
-      } else {
-        (targetComponent as any)[field] = value;
-      }
-      
-      updatedComponents[compIndex] = targetComponent;
-      setEditingTemplate(prev => prev ? { ...prev, components: updatedComponents } : null);
+        
+        updatedComponents[compIndex] = targetComponent;
+        return { ...prev, components: updatedComponents };
+      });
     }
   };
   
   const handleButtonChange = (compIndex: number, btnIndex: number, field: keyof WhatsAppTemplateButton, value: any) => {
      if (editingTemplate) {
-      const updatedComponents = [...editingTemplate.components];
-      const component = { ...updatedComponents[compIndex] }; // Clonar componente
-      if (component.buttons) {
-        const updatedButtons = [...component.buttons]; // Clonar array de botões
-        updatedButtons[btnIndex] = { ...updatedButtons[btnIndex], [field]: value }; // Clonar e atualizar botão
-        component.buttons = updatedButtons;
-        updatedComponents[compIndex] = component;
-        setEditingTemplate(prev => prev ? { ...prev, components: updatedComponents } : null);
-      }
+      setEditingTemplate((prev: WhatsAppTemplate | null) => {
+        if (!prev) return null;
+        const updatedComponents = [...prev.components];
+        const component = { ...updatedComponents[compIndex] }; 
+        if (component.buttons) {
+          const updatedButtons = [...component.buttons]; 
+          updatedButtons[btnIndex] = { ...updatedButtons[btnIndex], [field]: value }; 
+          component.buttons = updatedButtons;
+          updatedComponents[compIndex] = component;
+          return { ...prev, components: updatedComponents };
+        }
+        return prev;
+      });
     }
   };
 
   const addComponent = () => {
     if (editingTemplate) {
-      setEditingTemplate(prev => prev ? { ...prev, components: [...prev.components, { type: 'BODY', text: '' }] } : null);
+      setEditingTemplate((prev: WhatsAppTemplate | null) => prev ? { ...prev, components: [...prev.components, { type: 'BODY', text: '' }] } : null);
     }
   };
 
   const removeComponent = (compIndex: number) => {
      if (editingTemplate && editingTemplate.components.length > 1) { 
-        setEditingTemplate(prev => prev ? { ...prev, components: prev.components.filter((_: WhatsAppTemplateComponent, i: number) => i !== compIndex) } : null);
+        setEditingTemplate((prev: WhatsAppTemplate | null) => prev ? { ...prev, components: prev.components.filter((_: WhatsAppTemplateComponent, i: number) => i !== compIndex) } : null);
      } else {
         toast({ title: "Atenção", description: "O template deve ter pelo menos um componente.", variant: "default"});
      }
@@ -179,7 +182,7 @@ const ZapTemplates: React.FC = () => {
             const updatedComponents = [...prev.components];
             const targetComponent = { ...updatedComponents[compIndex] };
             if (targetComponent.buttons) {
-                targetComponent.buttons = targetComponent.buttons.filter((_: WhatsAppTemplateButton, i: number) => i !== btnIndex);
+                targetComponent.buttons = targetComponent.buttons.filter((_: WhatsAppTemplateButton, i: number) => i !== btnIndex); // Adicionado tipo para _ e i
                 updatedComponents[compIndex] = targetComponent;
                 return { ...prev, components: updatedComponents };
             }
@@ -197,13 +200,13 @@ const ZapTemplates: React.FC = () => {
 
     try {
       setIsLoading(true);
-      if (editingTemplate.id && templates.find(t => t.id === editingTemplate.id)) { // Update
-        // await apiRequest('PUT', `/api/whatsapp/templates/${editingTemplate.id}`, editingTemplate); // Usar endpoint do zap/server
+      if (editingTemplate.id && templates.some(t => t.id === editingTemplate.id)) { 
+        // await apiRequest('PUT', `/api/whatsapp/templates/${editingTemplate.id}`, editingTemplate); 
         setTemplates(prev => prev.map(t => t.id === editingTemplate!.id ? editingTemplate! : t));
         toast({ title: "Template atualizado!", description: `O template "${editingTemplate.name}" foi salvo.` });
       } else { 
         const payload = { ...editingTemplate, id: `template-${Date.now()}`}; 
-        // const response = await apiRequest('POST', '/api/whatsapp/templates', payload); // Usar endpoint do zap/server
+        // const response = await apiRequest('POST', '/api/whatsapp/templates', payload); 
         // setTemplates(prev => [...prev, response.data as WhatsAppTemplate]);
         setTemplates(prev => [...prev, payload as WhatsAppTemplate]);
         toast({ title: "Template criado!", description: `O template "${payload.name}" foi criado.` });
@@ -221,7 +224,7 @@ const ZapTemplates: React.FC = () => {
     if (!window.confirm("Tem certeza que deseja excluir este template?")) return;
     try {
       setIsLoading(true);
-      // await apiRequest('DELETE', `/api/whatsapp/templates/${templateId}`); // Usar endpoint do zap/server
+      // await apiRequest('DELETE', `/api/whatsapp/templates/${templateId}`); 
       setTemplates(prev => prev.filter(t => t.id !== templateId));
       toast({ title: "Template excluído!", variant: "default" });
     } catch (error) {
@@ -298,7 +301,7 @@ const ZapTemplates: React.FC = () => {
               </CardHeader>
               <CardContent className="flex-grow text-xs text-muted-foreground space-y-1">
                 <p className="line-clamp-3">
-                 {template.components.find(c => c.type === 'BODY')?.text || 'Corpo não definido.'}
+                 {template.components.find((c: WhatsAppTemplateComponent) => c.type === 'BODY')?.text || 'Corpo não definido.'}
                 </p>
                  <div className="text-right mt-2">
                      <DropdownMenu>
@@ -383,7 +386,7 @@ const ZapTemplates: React.FC = () => {
                     {component.type === 'HEADER' && (
                       <div>
                         <Label>Formato do Cabeçalho</Label>
-                        <Select value={component.format || ''} onValueChange={(value: string) => handleComponentChange(compIndex, 'format', value as WhatsAppTemplateComponent['format'] || undefined)}>
+                        <Select value={component.format || ''} onValueChange={(value: string) => handleComponentChange(compIndex, 'format', value as WhatsAppTemplateComponent['format'] | undefined)}>
                            <SelectTrigger className="neu-input"><SelectValue placeholder="Nenhum / Texto" /></SelectTrigger>
                            <SelectContent>{headerFormats.map(hf => <SelectItem key={hf || 'none'} value={hf || ''}>{hf || 'Nenhum / Texto Simples'}</SelectItem>)}</SelectContent>
                         </Select>
