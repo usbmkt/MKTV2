@@ -1,76 +1,85 @@
 import { Node } from '@xyflow/react';
-import { ChangeEvent } from 'react';
 
 // Definição base para todos os dados de nós customizados
 export interface BaseNodeData {
-  label?: string; // Usado por muitos nós para o título/rótulo
-  [key: string]: any; // Permite outras propriedades específicas do nó
+  label?: string;
+  [key: string]: any;
 }
 
-// 1. Tipos para os Nós do Flow Builder
+// ===========================================
+// TIPOS CORRIGIDOS PARA OS NÓS
+// ===========================================
 
 // --- ActionNode ---
 export interface ActionNodeData extends BaseNodeData {
-  actionType?: string; // Ex: 'webhook', 'database', 'sendMessage'
-  url?: string; // Para webhook
-  method?: 'GET' | 'POST' | 'PUT' | 'DELETE'; // Para webhook
-  headers?: Array<{ key: string; value: string }>; // Para webhook
-  body?: string; // Para webhook (JSON string)
-  databaseOperation?: 'insert' | 'update' | 'select' | 'delete'; // Para database
-  tableName?: string; // Para database
-  dataToInsert?: string; // Para database (JSON string)
-  updateCriteria?: string; // Para database (JSON string)
-  dataToUpdate?: string; // Para database (JSON string)
-  selectQuery?: string; // Para database
-  deleteCriteria?: string; // Para database
-  messageContent?: string; // Para sendMessage
-  recipientVariable?: string; // Para sendMessage
+  actionType?: string;
+  url?: string;
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  headers?: Array<{ key: string; value: string }>;
+  body?: string;
+  databaseOperation?: 'insert' | 'update' | 'select' | 'delete';
+  tableName?: string;
+  dataToInsert?: string;
+  updateCriteria?: string;
+  dataToUpdate?: string;
+  selectQuery?: string;
+  deleteCriteria?: string;
+  messageContent?: string;
+  recipientVariable?: string;
 }
-export type ActionNodeType = Node<ActionNodeData, 'actionNode'>;
+export type ActionNodeType = Node<ActionNodeData> & { type: 'actionNode' };
 
 // --- AiDecisionNode ---
 export interface AiDecisionNodeData extends BaseNodeData {
   prompt?: string;
   variableToStoreDecision?: string;
   possibleOutcomes?: Array<{ outcome: string; description: string }>;
-  apiKeyVariable?: string; // Nome da variável que armazena a API Key (e.g., Gemini)
+  apiKeyVariable?: string;
 }
-export type AiDecisionNodeType = Node<AiDecisionNodeData, 'aiDecisionNode'>;
+export type AiDecisionNodeType = Node<AiDecisionNodeData> & { type: 'aiDecisionNode' };
 
 // --- ApiCallNode ---
 export interface ApiCallNodeData extends BaseNodeData {
   url?: string;
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
   headers?: Array<{ key: string; value: string }>;
-  body?: string; // JSON string
-  responseVariable?: string; // Variável para salvar a resposta da API
-  timeout?: number; // em milissegundos
+  body?: string;
+  responseVariable?: string;
+  timeout?: number;
 }
-export type ApiCallNodeType = Node<ApiCallNodeData, 'apiCallNode'>;
+export type ApiCallNodeType = Node<ApiCallNodeData> & { type: 'apiCallNode' };
 
 // --- ButtonsMessageNode ---
 export interface ButtonItem {
   id: string;
   text: string;
-  payload?: string; // Opcional, para identificar o botão clicado
+  payload?: string;
 }
+
+// ADICIONADO: ButtonOptionData que estava faltando
+export interface ButtonOptionData {
+  id: string;
+  text: string;
+  payload?: string;
+}
+
 export interface ButtonsMessageNodeData extends BaseNodeData {
   messageText?: string;
   buttons?: ButtonItem[];
-  footerText?: string; // Adicionado com base nos erros
+  footerText?: string;
 }
-export type ButtonsMessageNodeType = Node<ButtonsMessageNodeData, 'buttonsMessageNode'>;
+export type ButtonsMessageNodeType = Node<ButtonsMessageNodeData> & { type: 'buttonsMessageNode' };
 
 // --- ClonedVoiceNode ---
 export interface ClonedVoiceNodeData extends BaseNodeData {
   textToSpeak?: string;
-  voiceId?: string; // ID da voz clonada (ex: ElevenLabs)
-  apiKeyVariable?: string; // Nome da variável que armazena a API Key (e.g., ElevenLabs)
+  voiceId?: string;
+  apiKeyVariable?: string;
   language?: string;
   outputFormat?: 'mp3' | 'wav';
-  variableToStoreUrl?: string; // Variável para salvar a URL do áudio gerado
+  variableToStoreUrl?: string;
 }
-export type ClonedVoiceNodeType = Node<ClonedVoiceNodeData, 'clonedVoiceNode'>;
+export type ClonedVoiceNodeType = Node<ClonedVoiceNodeData> & { type: 'clonedVoiceNode' };
 
 // --- ConditionNode ---
 export interface Condition {
@@ -80,44 +89,49 @@ export interface Condition {
 }
 export interface ConditionNodeData extends BaseNodeData {
   conditions?: Condition[];
-  logicalOperator?: 'AND' | 'OR'; // Como múltiplas condições são combinadas
+  logicalOperator?: 'AND' | 'OR';
 }
-export type ConditionNodeType = Node<ConditionNodeData, 'conditionNode'>;
+export type ConditionNodeType = Node<ConditionNodeData> & { type: 'conditionNode' };
 
 // --- DelayNode ---
 export interface DelayNodeData extends BaseNodeData {
   delayValue?: number;
   delayUnit?: 'seconds' | 'minutes' | 'hours';
 }
-export type DelayNodeType = Node<DelayNodeData, 'delayNode'>;
+export type DelayNodeType = Node<DelayNodeData> & { type: 'delayNode' };
 
 // --- EndNode ---
 export interface EndNodeData extends BaseNodeData {
-  endMessage?: string; // Mensagem opcional ao finalizar o fluxo
+  endMessage?: string;
   status?: 'completed' | 'failed' | 'terminated';
 }
-export type EndNodeType = Node<EndNodeData, 'endNode'>;
+export type EndNodeType = Node<EndNodeData> & { type: 'endNode' };
 
 // --- ExternalDataNode ---
 export interface ExternalDataNodeData extends BaseNodeData {
-  dataSourceUrl?: string; // URL para buscar dados externos
+  dataSourceUrl?: string;
   requestType?: 'GET' | 'POST';
-  requestBody?: string; // JSON string, se POST
+  requestBody?: string;
   headers?: Array<{ key: string; value: string }>;
-  variableToStoreData?: string; // Variável para salvar os dados recebidos
+  variableToStoreData?: string;
 }
-export type ExternalDataNodeType = Node<ExternalDataNodeData, 'externalDataNode'>;
+export type ExternalDataNodeType = Node<ExternalDataNodeData> & { type: 'externalDataNode' };
+
+// ADICIONADO: ExternalDataFetchNodeDataFE que estava faltando
+export interface ExternalDataFetchNodeDataFE extends ExternalDataNodeData {
+  // Propriedades específicas do frontend, se necessário
+}
 
 // --- GptQueryNode ---
 export interface GptQueryNodeData extends BaseNodeData {
   prompt?: string;
-  model?: string; // Ex: 'gpt-3.5-turbo', 'gpt-4'
+  model?: string;
   temperature?: number;
   maxTokens?: number;
   variableToStoreResponse?: string;
-  apiKeyVariable?: string; // Nome da variável que armazena a API Key (e.g., OpenAI/Gemini)
+  apiKeyVariable?: string;
 }
-export type GptQueryNodeType = Node<GptQueryNodeData, 'gptQueryNode'>;
+export type GptQueryNodeType = Node<GptQueryNodeData> & { type: 'gptQueryNode' };
 
 // --- ListMessageNode ---
 export interface ListItem {
@@ -130,22 +144,22 @@ export interface ListSection {
   rows: ListItem[];
 }
 export interface ListMessageNodeData extends BaseNodeData {
-  messageText?: string; // Texto principal da mensagem de lista
-  buttonText?: string; // Texto do botão que abre a lista
-  footerText?: string; // Texto do rodapé da lista
+  messageText?: string;
+  buttonText?: string;
+  footerText?: string;
   sections?: ListSection[];
 }
-export type ListMessageNodeType = Node<ListMessageNodeData, 'listMessageNode'>;
+export type ListMessageNodeType = Node<ListMessageNodeData> & { type: 'listMessageNode' };
 
 // --- MediaMessageNode ---
 export interface MediaMessageNodeData extends BaseNodeData {
   mediaType?: 'image' | 'video' | 'audio' | 'document';
-  mediaUrl?: string; // URL do arquivo de mídia
-  caption?: string; // Legenda para imagem/vídeo
-  fileName?: string; // Nome do arquivo para documentos/áudios
-  mimeType?: string; // e.g. 'image/jpeg', 'application/pdf'
+  mediaUrl?: string;
+  caption?: string;
+  fileName?: string;
+  mimeType?: string;
 }
-export type MediaMessageNodeType = Node<MediaMessageNodeData, 'mediaMessageNode'>;
+export type MediaMessageNodeType = Node<MediaMessageNodeData> & { type: 'mediaMessageNode' };
 
 // --- QuestionNode ---
 export interface QuickReply {
@@ -157,212 +171,164 @@ export interface QuestionNodeData extends BaseNodeData {
   questionText?: string;
   expectedResponseType?: 'text' | 'number' | 'email' | 'quick_reply' | 'list_reply';
   variableToSaveAnswer?: string;
-  quickReplies?: QuickReply[]; // Para expectedResponseType 'quick_reply'
-  listOptions?: ListItem[]; // Para expectedResponseType 'list_reply' (usando a mesma estrutura de ListItemNode)
-  validationRegex?: string; // Para validação de texto, número, email
-  errorMessage?: string; // Mensagem de erro se a validação falhar
+  quickReplies?: QuickReply[];
+  listOptions?: ListItem[];
+  validationRegex?: string;
+  errorMessage?: string;
 }
-export type QuestionNodeType = Node<QuestionNodeData, 'questionNode'>;
+export type QuestionNodeType = Node<QuestionNodeData> & { type: 'questionNode' };
 
 // --- SetVariableNode ---
 export interface VariableAssignment {
   variableName?: string;
-  value?: string | number | boolean | null; // O valor a ser atribuído
-  source?: 'static' | 'expression' | 'contact_data'; // De onde vem o valor
-  expression?: string; // Se source for 'expression'
-  contactField?: string; // Se source for 'contact_data'
+  value?: string | number | boolean | null;
+  source?: 'static' | 'expression' | 'contact_data';
+  expression?: string;
+  contactField?: string;
 }
 export interface SetVariableNodeData extends BaseNodeData {
   assignments?: VariableAssignment[];
 }
-export type SetVariableNodeType = Node<SetVariableNodeData, 'setVariableNode'>;
+export type SetVariableNodeType = Node<SetVariableNodeData> & { type: 'setVariableNode' };
 
 // --- TagContactNode ---
 export interface TagContactNodeData extends BaseNodeData {
   tagOperation?: 'add' | 'remove';
   tagName?: string;
 }
-export type TagContactNodeType = Node<TagContactNodeData, 'tagContactNode'>;
+export type TagContactNodeType = Node<TagContactNodeData> & { type: 'tagContactNode' };
 
 // --- TextMessageNode ---
 export interface TextMessageNodeData extends BaseNodeData {
   message?: string;
-  useVariables?: boolean; // Se a mensagem pode conter variáveis como {{nome}}
+  useVariables?: boolean;
 }
-export type TextMessageNodeType = Node<TextMessageNodeData, 'textMessageNode'>;
+export type TextMessageNodeType = Node<TextMessageNodeData> & { type: 'textMessageNode' };
 
 // --- TriggerNode ---
 export interface TriggerNodeData extends BaseNodeData {
   triggerType?: 'keyword' | 'form_submission' | 'webhook' | 'manual' | 'scheduled';
-  keywords?: string[]; // Para triggerType 'keyword'
-  formId?: string; // Para triggerType 'form_submission'
-  webhookUrl?: string; // Para triggerType 'webhook' (URL que o sistema *expõe*)
-  scheduleDateTime?: string; // Para triggerType 'scheduled' (ISO 8601)
-  exactMatch?: boolean; // Para triggerType 'keyword'
+  keywords?: string[];
+  formId?: string;
+  webhookUrl?: string;
+  scheduleDateTime?: string;
+  exactMatch?: boolean;
 }
-export type TriggerNodeType = Node<TriggerNodeData, 'triggerNode'>;
+export type TriggerNodeType = Node<TriggerNodeData> & { type: 'triggerNode' };
 
-// 2. Definição para ApiError
+// ===========================================
+// TIPOS PARA API E DADOS
+// ===========================================
+
 export interface ApiError {
   message: string;
   statusCode?: number;
   details?: any;
 }
 
-// 3. Definição para FlowElementData (para lista de fluxos)
 export interface FlowElementData {
-  id: string; // ou number, dependendo do seu backend
+  id: string;
   name: string;
   description?: string;
-  createdAt: string; // ou Date
-  updatedAt: string; // ou Date
+  createdAt: string;
+  updatedAt: string;
   status: 'draft' | 'active' | 'inactive' | 'archived';
-  triggerType?: string; // Ex: 'keyword', 'webhook'
-  // Adicione mais campos conforme necessário para a listagem
+  triggerType?: string;
 }
 
-// 4. Definição para FlowPerformanceData (para analytics)
+// CORRIGIDO: Adicionado avgTimeToComplete que estava faltando
 export interface FlowPerformanceData {
   flowId: string;
   flowName: string;
   totalStarted: number;
   totalCompleted: number;
-  completionRate: number; // (totalCompleted / totalStarted) * 100
+  completionRate: number;
+  avgTimeToComplete?: number; // PROPRIEDADE FALTANTE ADICIONADA
   averageDurationSeconds?: number;
-  // Adicione mais métricas conforme necessário
 }
 
-// 5. Tipos para WhatsApp (baseados nos erros)
-export interface Conversation {
-  id: string;
-  contactName?: string;
-  contactPhone: string;
-  lastMessage?: string;
-  lastMessageTime: string;
-  unreadCount: number;
-  status: 'active' | 'archived' | 'blocked';
-  avatarUrl?: string;
-}
+// ===========================================
+// TIPOS PARA WHATSAPP TEMPLATES
+// ===========================================
 
-export interface Message {
-  id: string;
-  conversationId: string;
-  content: string;
-  type: 'text' | 'image' | 'audio' | 'video' | 'document';
-  direction: 'incoming' | 'outgoing';
-  timestamp: string;
-  status: 'sent' | 'delivered' | 'read' | 'failed';
-  mediaUrl?: string;
-  fileName?: string;
-  mimeType?: string;
-}
-
-// 6. Tipos para Templates WhatsApp
 export interface TemplateParameter {
-  type: 'text' | 'currency' | 'date_time' | 'image' | 'document' | 'video';
+  type: string;
   text?: string;
-  currency?: {
-    fallback_value: string;
-    code: string;
-    amount_1000: number;
-  };
-  date_time?: {
-    fallback_value: string;
-  };
-  image?: {
-    link: string;
-  };
-  document?: {
-    link: string;
-    filename: string;
-  };
-  video?: {
-    link: string;
-  };
 }
 
 export interface TemplateComponent {
-  type: 'HEADER' | 'BODY' | 'FOOTER' | 'BUTTONS';
-  format?: 'TEXT' | 'IMAGE' | 'DOCUMENT' | 'VIDEO';
-  text?: string;
+  type: string;
   parameters?: TemplateParameter[];
-  buttons?: Array<{
-    type: 'QUICK_REPLY' | 'URL' | 'PHONE_NUMBER';
-    text: string;
-    url?: string;
-    phone_number?: string;
-  }>;
 }
 
 export interface TemplateExample {
   header_text?: string[];
   body_text?: string[][];
-  header_handle?: string[];
 }
 
-export interface WhatsAppTemplate {
+export interface TemplateCategory {
   id: string;
   name: string;
-  status: 'APPROVED' | 'PENDING' | 'REJECTED' | 'DISABLED';
-  category: TemplateCategory;
-  language: TemplateLanguage;
-  components: TemplateComponent[];
-  rejected_reason?: string;
-  created_at: string;
-  updated_at: string;
 }
-
-export type TemplateCategory = 
-  | 'AUTHENTICATION'
-  | 'MARKETING'
-  | 'UTILITY'
-  | 'SERVICE';
 
 export interface TemplateLanguage {
   code: string;
   name: string;
 }
 
-// 7. Tipos para Flow Response
+export interface WhatsAppTemplate {
+  id: string;
+  name: string;
+  category: string;
+  language: string;
+  status: string;
+  components: TemplateComponent[];
+}
+
+// ===========================================
+// TIPOS PARA CONVERSAS
+// ===========================================
+
+export interface Message {
+  id: string;
+  conversationId: string;
+  content: string;
+  sender: 'user' | 'bot';
+  timestamp: string;
+  messageType?: 'text' | 'image' | 'audio' | 'document';
+  mediaUrl?: string;
+}
+
+export interface Conversation {
+  id: string;
+  contactId: string;
+  contactName?: string;
+  contactPhone: string;
+  status: 'active' | 'resolved' | 'pending';
+  lastMessage?: string;
+  lastMessageTime?: string;
+  unreadCount?: number;
+}
+
+// ===========================================
+// FLOW RESPONSE TYPE
+// ===========================================
+
 export interface FlowResponse {
   id: string;
   name: string;
   description?: string;
-  status: 'draft' | 'active' | 'inactive' | 'archived';
-  nodes: AllFlowNodes[];
-  edges: Array<{
-    id: string;
-    source: string;
-    target: string;
-    sourceHandle?: string;
-    targetHandle?: string;
-  }>;
+  status: string;
   createdAt: string;
   updatedAt: string;
-  triggerType?: string;
-  totalExecutions?: number;
-  successRate?: number;
+  nodes: any[];
+  edges: any[];
 }
 
-// 8. Componente ZapIcon (como interface para evitar erro)
-export interface ZapIconProps {
-  className?: string;
-  size?: number;
-}
+// ===========================================
+// UNIÕES DE TIPOS
+// ===========================================
 
-// 9. Tipos de Event Handler corrigidos
-export type InputChangeEvent = ChangeEvent<HTMLInputElement>;
-export type TextAreaChangeEvent = ChangeEvent<HTMLTextAreaElement>;
-export type SelectChangeEvent = ChangeEvent<HTMLSelectElement>;
-
-// 10. Props para ScrollArea corrigidas
-export interface ScrollAreaProps {
-  className?: string;
-  children: React.ReactNode;
-  // Removido viewportRef pois não existe na interface padrão
-}
-
-// União de todos os tipos de dados de nós para facilitar o uso em alguns contextos
 export type AnyNodeData =
   | ActionNodeData
   | AiDecisionNodeData
@@ -382,7 +348,6 @@ export type AnyNodeData =
   | TextMessageNodeData
   | TriggerNodeData;
 
-// União de todos os tipos de nós
 export type AllFlowNodes =
   | ActionNodeType
   | AiDecisionNodeType
@@ -401,11 +366,3 @@ export type AllFlowNodes =
   | TagContactNodeType
   | TextMessageNodeType
   | TriggerNodeType;
-
-// 11. Tipos para Button Variants (corrigindo erro de "xs")
-export type ButtonVariant = 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link';
-export type ButtonSize = 'default' | 'sm' | 'lg' | 'icon';
-
-// 12. Funções callback corrigidas para ZapMainPage
-export type FlowSelectionCallback = (flowId: string, flowName: string) => void;
-export type FlowEditCallback = (flow: FlowElementData, flowName: string) => void;
