@@ -75,14 +75,12 @@ interface ZapWhatsAppConnectionProps {
 export default function ZapWhatsAppConnection({ onConnectionChange }: ZapWhatsAppConnectionProps) {
   const [connectionStatus, setConnectionStatus] = useState<WhatsAppConnectionStatus>({ status: 'INITIALIZING' });
   const [isLoading, setIsLoading] = useState(false);
-  const [apiToken, setApiToken] = useState(''); // Mantido para a UI de exemplo
+  const [apiToken, setApiToken] = useState('');
 
-  // Esta função será ajustada para chamar o endpoint do backend do "zap"
   const fetchStatus = useCallback(async (showLoading = true) => {
     if(showLoading) setIsLoading(true);
     try {
-      // No futuro: const data: WhatsAppConnectionStatus = await zapApi.get('/connection/status');
-      const data: WhatsAppConnectionStatus = await mockApiCall('get-status'); // Usando mock por enquanto
+      const data: WhatsAppConnectionStatus = await mockApiCall('get-status');
       setConnectionStatus(data);
       if (onConnectionChange) onConnectionChange(data);
     } catch (error) {
@@ -93,12 +91,10 @@ export default function ZapWhatsAppConnection({ onConnectionChange }: ZapWhatsAp
     }
   }, [onConnectionChange]);
 
-  // Esta função será ajustada para chamar o endpoint do backend do "zap"
   const generateAndSetQRCode = useCallback(async () => {
     setIsLoading(true);
     try {
-      // No futuro: const data: WhatsAppConnectionStatus = await zapApi.post('/connection/connect');
-      const data: WhatsAppConnectionStatus = await mockApiCall('generate-qr'); // Usando mock
+      const data: WhatsAppConnectionStatus = await mockApiCall('generate-qr');
       setConnectionStatus(data);
     } catch (error) {
       console.error("Erro ao gerar QR Code:", error);
@@ -108,13 +104,11 @@ export default function ZapWhatsAppConnection({ onConnectionChange }: ZapWhatsAp
     }
   }, []);
 
-  // Esta função será ajustada para chamar o endpoint do backend do "zap"
   const handleDisconnect = async () => {
     if (!window.confirm("Tem certeza que deseja desconectar sua sessão do WhatsApp?")) return;
     setIsLoading(true);
     try {
-        // No futuro: await zapApi.post('/connection/disconnect');
-        await mockApiCall('disconnect'); // Usando mock
+        await mockApiCall('disconnect');
         setConnectionStatus({ status: 'DISCONNECTED', qrCode: null });
         if (onConnectionChange) onConnectionChange({ status: 'DISCONNECTED' });
     } catch (error) {
@@ -146,7 +140,7 @@ export default function ZapWhatsAppConnection({ onConnectionChange }: ZapWhatsAp
     });
   };
   
-  const webhookUrlToCopy = `${window.location.origin}/api/zap/webhooks/whatsapp`; // Este será o webhook do seu backend "zap"
+  const webhookUrlToCopy = `${window.location.origin}/api/zap/webhooks/whatsapp`;
 
 
   return (
@@ -213,8 +207,8 @@ export default function ZapWhatsAppConnection({ onConnectionChange }: ZapWhatsAp
                 <CheckCircle className="mx-auto h-16 w-16 text-green-500" />
                 <h3 className="text-xl font-semibold">Conectado com Sucesso!</h3>
                 <p className="text-muted-foreground">
-                  Número: <span className="font-medium text-foreground">{connectionStatus.connectedPhoneNumber}</span><br/>
-                  Dispositivo: <span className="font-medium text-foreground">{connectionStatus.deviceName}</span>
+                  Número: <span className="font-medium text-foreground">{connectionStatus.connectedPhoneNumber || '-'}</span><br/>
+                  Dispositivo: <span className="font-medium text-foreground">{connectionStatus.deviceName || '-'}</span>
                 </p>
                 <Button onClick={handleDisconnect} variant="destructive" className="neu-button" disabled={isLoading}>
                     {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Unlink className="mr-2 h-4 w-4"/>}
@@ -227,7 +221,7 @@ export default function ZapWhatsAppConnection({ onConnectionChange }: ZapWhatsAp
                 {isLoading && connectionStatus.status === 'INITIALIZING' &&  <Loader2 className="mx-auto h-12 w-12 animate-spin text-primary mb-3" />}
                 {connectionStatus.status === 'ERROR' &&  <AlertCircle className="mx-auto h-12 w-12 text-destructive mb-3" />}
                 <p className="text-muted-foreground">
-                  {connectionStatus.status === 'ERROR' ? `Erro: ${connectionStatus.lastError}` : 'Clique para gerar o QR Code e iniciar a conexão.'}
+                  {connectionStatus.status === 'ERROR' ? `Erro: ${connectionStatus.lastError || 'Desconhecido'}` : 'Clique para gerar o QR Code e iniciar a conexão.'}
                 </p>
                 <Button onClick={generateAndSetQRCode} disabled={isLoading} className="neu-button-primary">
                   <QrCode className="mr-2 h-4 w-4" /> Gerar QR Code
@@ -263,31 +257,42 @@ export default function ZapWhatsAppConnection({ onConnectionChange }: ZapWhatsAp
                 <CardContent className="space-y-3">
                     <div>
                         <Label htmlFor="apiToken" className="text-xs">Seu Token de API (se usar provedor externo)</Label>
+                        {/* LINHA 206 (antiga 198) - Verifique esta linha CUIDADOSAMENTE em seu editor. Reescreva manualmente. */}
+                        <Input 
+                          id="apiToken" 
+                          type="password" 
+                          placeholder="Cole seu token aqui se necessário" 
+                          value={apiToken} 
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setApiToken(e.target.value)} 
+                          className="neu-input mt-1"
+                        />
+                    </div>
                     <Button className="neu-button text-xs" size="sm" type="button">
                         <Settings className="mr-1.5 h-3.5 w-3.5"/>
                         <span>Salvar Token</span>
                     </Button>
                 </CardContent>
             </Card>
-             <Card className="neu-card">
+            {/* A partir daqui, verifique cuidadosamente o fechamento de todas as tags. O erro TS17008 aponta para a linha 264. */}
+            <Card className="neu-card"> {/* Exemplo de início da segunda Card na aba settings */}
                 <CardHeader><CardTitle className="text-base">Webhook para Mensagens Recebidas</CardTitle></CardHeader>
                 <CardContent className="space-y-3">
                     <p className="text-xs text-muted-foreground">Configure esta URL no seu provedor WhatsApp para receber mensagens e eventos.</p>
                     <div className="flex items-center space-x-2">
                         <Input value={webhookUrlToCopy} readOnly className="neu-input text-xs"/>
                         <Button variant="outline" size="icon" onClick={() => copyToClipboard(webhookUrlToCopy)} className="neu-button h-9 w-9"><Copy className="h-4 w-4"/></Button>
-                    </div>
+                    </div> {/* Esta div está fechada */}
                      <Alert className="neu-card-inset">
                         <Shield className="h-4 w-4" />
                         <UIAlertDescription className="text-xs">
                             Este endpoint é seguro e espera dados específicos da API do WhatsApp.
                         </UIAlertDescription>
-                    </Alert>
-                </CardContent>
-            </Card>
-        </TabsContent>
-      </Tabs>
-    </Card>
+                    </Alert> {/* Alert está fechado */}
+                </CardContent> {/* CardContent está fechado */}
+            </Card> {/* Card está fechado */}
+        </TabsContent> {/* TabsContent "settings" está fechado */}
+      </Tabs> {/* Tabs está fechado */}
+    </Card> /* Card principal está fechado */
   );
 }
 
