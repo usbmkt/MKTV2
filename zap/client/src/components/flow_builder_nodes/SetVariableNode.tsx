@@ -1,12 +1,12 @@
 // zap/client/src/components/flow_builder_nodes/SetVariableNode.tsx
-import React, { memo } from 'react';
+import React, { memo, ChangeEvent } from 'react'; // Adicionado ChangeEvent
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import { Card, CardContent, CardHeader, CardTitle } from '@zap_client/components/ui/card';
 import { Input } from '@zap_client/components/ui/input';
 import { Label } from '@zap_client/components/ui/label';
 import { Button } from '@zap_client/components/ui/button';
 import { Variable, PlusCircle, Trash2 } from 'lucide-react';
-import { SetVariableNodeData } from '@zap_client/features/types/whatsapp_flow_types';
+import { SetVariableNodeData, SetVariableNodeDataAssignment } from '@zap_client/features/types/whatsapp_flow_types'; // Assumindo que SetVariableNodeDataAssignment é exportado ou defina-o aqui
 
 const SetVariableNode: React.FC<NodeProps<SetVariableNodeData>> = ({ data, id, selected }) => {
   const { 
@@ -15,10 +15,25 @@ const SetVariableNode: React.FC<NodeProps<SetVariableNodeData>> = ({ data, id, s
   } = data;
 
   // Lógica para atualizar 'data'
-  // const updateData = (field: keyof SetVariableNodeData, value: any) => { /* ... */ };
-  // const handleAssignmentChange = (index: number, field: 'variableName' | 'value', val: string) => { /* ... */ };
-  // const addAssignment = () => { /* ... */ };
-  // const removeAssignment = (index: number) => { /* ... */ };
+  // const updateData = (newAssignments: SetVariableNodeData['assignments']) => {
+  //   // onNodesChange([{ id, type: 'dataUpdate', data: { ...data, assignments: newAssignments } }]);
+  // };
+
+  // const handleAssignmentChange = (index: number, field: keyof SetVariableNodeDataAssignment, val: string) => {
+  //   const newAssignments = [...(assignments || [])];
+  //   if(newAssignments[index]) {
+  //     (newAssignments[index] as any)[field] = val; // Use um cast mais seguro se possível
+  //     updateData(newAssignments);
+  //   }
+  // };
+
+  // const addAssignment = () => {
+  //   updateData([...(assignments || []), { variableName: '', value: '' }]);
+  // };
+
+  // const removeAssignment = (index: number) => {
+  //   updateData((assignments || []).filter((_, i) => i !== index));
+  // };
 
   return (
     <Card className={`text-xs shadow-md w-72 ${selected ? 'ring-2 ring-lime-500' : 'border-border'} bg-card`}>
@@ -29,11 +44,11 @@ const SetVariableNode: React.FC<NodeProps<SetVariableNodeData>> = ({ data, id, s
         </CardTitle>
       </CardHeader>
       <CardContent className="p-3 space-y-2">
-        {(assignments || []).map((assignment, index) => (
+        {(assignments || []).map((assignment: SetVariableNodeDataAssignment, index: number) => ( // Tipagem adicionada
           <div key={index} className="space-y-1 p-2 border rounded border-dashed">
             <div className="flex items-center justify-between">
                 <Label htmlFor={`varName-${id}-${index}`} className="text-xs font-medium">Nome da Variável</Label>
-                {/* {assignments.length > 1 && (
+                {/* { (assignments || []).length > 1 && (
                      <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => removeAssignment(index)}>
                         <Trash2 className="h-3 w-3 text-destructive"/>
                     </Button>
@@ -44,7 +59,7 @@ const SetVariableNode: React.FC<NodeProps<SetVariableNodeData>> = ({ data, id, s
               type="text"
               placeholder="Ex: nome_cliente"
               value={assignment.variableName || ''}
-              // onChange={(e) => handleAssignmentChange(index, 'variableName', e.target.value)}
+              // onChange={(e: ChangeEvent<HTMLInputElement>) => handleAssignmentChange(index, 'variableName', e.target.value)}
               className="w-full h-7 text-xs"
             />
             <div>
@@ -54,7 +69,7 @@ const SetVariableNode: React.FC<NodeProps<SetVariableNodeData>> = ({ data, id, s
                 type="text"
                 placeholder="Ex: João ou {{outra_variavel}}"
                 value={String(assignment.value ?? '')}
-                // onChange={(e) => handleAssignmentChange(index, 'value', e.target.value)}
+                // onChange={(e: ChangeEvent<HTMLInputElement>) => handleAssignmentChange(index, 'value', e.target.value)}
                 className="w-full h-7 text-xs"
               />
             </div>
