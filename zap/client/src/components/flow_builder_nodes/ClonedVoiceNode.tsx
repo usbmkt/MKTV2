@@ -1,37 +1,62 @@
 // zap/client/src/components/flow_builder_nodes/ClonedVoiceNode.tsx
-import React from 'react';
+import React, { memo } from 'react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
-import { Voicemail } from 'lucide-react'; // Usar Voicemail ou MicVocal
-import { cn } from '@zap_client/lib/utils';
+import { Card, CardContent, CardHeader, CardTitle } from '@zap_client/components/ui/card';
+import { Textarea } from '@zap_client/components/ui/textarea';
+import { Label } from '@zap_client/components/ui/label';
+import { Input } from '@zap_client/components/ui/input';
+import { MicVocal } from 'lucide-react'; // Ícone alterado para algo mais genérico de voz
+import { ClonedVoiceNodeData } from '@zap_client/features/types/whatsapp_flow_types';
 
-export interface ClonedVoiceNodeData {
-  label?: string;
-  textToSpeak?: string;
-  voiceId?: string; // ID da voz clonada a ser usada
-}
+const ClonedVoiceNode: React.FC<NodeProps<ClonedVoiceNodeData>> = ({ data, id, selected }) => {
+  const { 
+    label = 'Voz Clonada', 
+    textToSpeak = '', 
+    voiceId = '' 
+  } = data;
 
-const ClonedVoiceNode: React.FC<NodeProps<ClonedVoiceNodeData>> = ({ data, selected, id }) => {
+  // Lógica para atualizar 'data'
+  // const updateData = (field: keyof ClonedVoiceNodeData, value: any) => { ... };
+
   return (
-    <div
-      className={cn(
-        "p-3 rounded-md shadow-md bg-card border border-rose-500/70 w-72", // Cor rosa para voz
-        selected && "ring-2 ring-rose-600 ring-offset-2 ring-offset-background"
-      )}
-    >
-      <Handle type="target" position={Position.Left} id={`${id}-target`} className="!bg-slate-400 w-2.5 h-2.5" />
-      <div className="flex items-center mb-2">
-        <Voicemail className="w-4 h-4 mr-2 text-rose-600" />
-        <div className="text-sm font-semibold text-foreground">{data.label || 'Mensagem de Voz (IA)'}</div>
-      </div>
-      <p className="text-xs text-muted-foreground line-clamp-2 break-words mb-1" title={data.textToSpeak}>
-        Texto: {data.textToSpeak ? `"${data.textToSpeak.substring(0,40)}${data.textToSpeak.length > 40 ? '...' : ''}"` : 'Configure o texto...'}
-      </p>
-      <p className="text-xxs text-rose-700 dark:text-rose-400">
-        Voz ID: <span className="font-mono bg-rose-100 dark:bg-rose-900 px-1 py-0.5 rounded">{data.voiceId || 'Padrão'}</span>
-      </p>
-      <Handle type="source" position={Position.Right} id={`${id}-source`} className="!bg-slate-400 w-2.5 h-2.5" />
-    </div>
+    <Card className={`text-xs shadow-md w-72 ${selected ? 'ring-2 ring-pink-500' : 'border-border'} bg-card`}>
+      <CardHeader className="bg-muted/50 p-2 rounded-t-lg">
+        <CardTitle className="text-xs font-semibold flex items-center">
+          <MicVocal className="w-4 h-4 text-pink-500 mr-2" />
+          {label || 'Áudio com Voz Clonada'}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-3 space-y-2">
+        <div>
+          <Label htmlFor={`textToSpeak-${id}`} className="text-xs font-medium">Texto para Falar</Label>
+          <Textarea
+            id={`textToSpeak-${id}`}
+            placeholder="Digite o texto que a voz clonada deve falar..."
+            value={textToSpeak}
+            // onChange={(e) => updateData('textToSpeak', e.target.value)}
+            rows={4}
+            className="w-full text-xs"
+          />
+        </div>
+        <div>
+          <Label htmlFor={`voiceId-${id}`} className="text-xs font-medium">ID da Voz (Ex: ElevenLabs)</Label>
+          <Input
+            id={`voiceId-${id}`}
+            type="text"
+            placeholder="ID da voz clonada"
+            value={voiceId}
+            // onChange={(e) => updateData('voiceId', e.target.value)}
+            className="w-full h-8 text-xs"
+          />
+        </div>
+        <p className="text-gray-500 dark:text-gray-400 text-[10px] truncate">
+          Serviço de TTS: {voiceId ? 'ElevenLabs (Configurado)' : 'Não configurado'}
+        </p>
+      </CardContent>
+      <Handle type="target" position={Position.Left} className="!bg-muted-foreground w-2.5 h-2.5" />
+      <Handle type="source" position={Position.Right} className="!bg-primary w-2.5 h-2.5" />
+    </Card>
   );
 };
 
-export default ClonedVoiceNode; 
+export default memo(ClonedVoiceNode);
