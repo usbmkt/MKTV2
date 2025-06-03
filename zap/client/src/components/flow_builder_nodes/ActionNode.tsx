@@ -1,64 +1,116 @@
 // zap/client/src/components/flow_builder_nodes/ActionNode.tsx
-import React from 'react';
+import React, { memo } from 'react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
-import { Zap, Settings, AlertCircle } from 'lucide-react'; // Zap para ação geral
-import { cn } from '@zap_client/lib/utils';
-
-export type ActionType = 
-    | 'ADD_TAG' 
-    | 'REMOVE_TAG' 
-    | 'SEND_EMAIL_ADMIN' 
-    | 'UPDATE_CRM_FIELD' 
-    | 'START_ANOTHER_FLOW'
-    | 'ASSIGN_TO_AGENT'
-    | 'CUSTOM_WEBHOOK';
-
-export interface ActionNodeData {
-  label?: string;
-  actionType?: ActionType;
-  actionParams?: Record<string, any>; // Parâmetros específicos para cada tipo de ação
-}
+import { Card, CardContent, CardHeader, CardTitle } from '@zap_client/components/ui/card';
+import { Button } from '@zap_client/components/ui/button'; // Exemplo se usar botão
+import { Input } from '@zap_client/components/ui/input';   // Exemplo se usar input
+import { Label } from '@zap_client/components/ui/label';   // Exemplo se usar label
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@zap_client/components/ui/select'; // Exemplo
+import { Bot, Tag, User, GitBranch, Mail, Edit3 } from 'lucide-react'; // Ícones importados
+import { ActionNodeData } from '@zap_client/features/types/whatsapp_flow_types'; // Importe seu tipo de dados
 
 const ActionNode: React.FC<NodeProps<ActionNodeData>> = ({ data, selected, id }) => {
-  const actionDisplay = data.actionType ? data.actionType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'Não Definida';
-  let Icon = Settings;
-  let color = "border-purple-500/70";
-  let textColor = "text-purple-600";
+  const { label = 'Ação', actionType = 'add_tag', tagName, agentId, emailTemplateId, contactPropertyName, contactPropertyValue } = data;
 
-  if (data.actionType?.includes('TAG')) { Icon = Tag; color = "border-fuchsia-500/70"; textColor = "text-fuchsia-600";}
-  else if (data.actionType?.includes('EMAIL')) { Icon = AlertCircle; color = "border-blue-500/70"; textColor = "text-blue-600";}
-  else if (data.actionType?.includes('CRM')) { Icon = User; color = "border-orange-500/70"; textColor = "text-orange-600";}
-  else if (data.actionType?.includes('FLOW')) { Icon = GitBranch; color = "border-teal-500/70"; textColor = "text-teal-600";}
+  // Função para atualizar os dados do nó (exemplo, você precisará de um onNodesChange)
+  // const updateNodeData = (newData: Partial<ActionNodeData>) => {
+  //   // Chamar uma função passada por props ou usar um estado global para atualizar o nó
+  //   console.log('Updating node data:', id, newData);
+  // };
 
+  const getIcon = () => {
+    switch (actionType) {
+      case 'add_tag':
+      case 'remove_tag':
+        return <Tag className="w-4 h-4 text-blue-500" />;
+      case 'assign_agent':
+        return <User className="w-4 h-4 text-green-500" />;
+      case 'send_email':
+        return <Mail className="w-4 h-4 text-purple-500" />;
+      case 'update_contact_prop':
+        return <Edit3 className="w-4 h-4 text-orange-500" />;
+      default:
+        return <Bot className="w-4 h-4 text-gray-500" />;
+    }
+  };
 
   return (
-    <div
-      className={cn(
-        "p-3 rounded-md shadow-md bg-card w-72",
-        color,
-        selected && `ring-2 ${color.replace('border-','ring-').replace('/70','')} ring-offset-2 ring-offset-background`
-      )}
-    >
-      <Handle type="target" position={Position.Left} id={`${id}-target`} className="!bg-slate-400 w-2.5 h-2.5" />
-      <div className="flex items-center mb-2">
-        <Icon className={cn("w-4 h-4 mr-2 flex-shrink-0", textColor)} />
-        <div className="text-sm font-semibold text-foreground truncate" title={data.label || 'Executar Ação'}>{data.label || 'Executar Ação'}</div>
-      </div>
-      <div className="text-xs text-muted-foreground space-y-0.5">
-        <p className="truncate" title={`Ação: ${actionDisplay}`}>
-            <span className="font-medium">Ação:</span> {actionDisplay}
-        </p>
-        {data.actionType === 'ADD_TAG' || data.actionType === 'REMOVE_TAG' ? (
-            <p className="truncate" title={`Tag: ${data.actionParams?.tagName || 'N/D'}`}>Tag: <span className="font-mono text-xxs bg-muted px-1 rounded">{data.actionParams?.tagName || 'N/D'}</span></p>
-        ) : data.actionType === 'START_ANOTHER_FLOW' ? (
-             <p className="truncate" title={`Fluxo ID: ${data.actionParams?.flowId || 'N/D'}`}>Fluxo ID: <span className="font-mono text-xxs bg-muted px-1 rounded">{data.actionParams?.flowId || 'N/D'}</span></p>
-        ) : (
-            <p className="truncate text-xxs italic">Parâmetros: {data.actionParams ? `${JSON.stringify(data.actionParams).substring(0,30)}...` : 'Configure...'}</p>
+    <Card className={`text-xs shadow-md w-64 ${selected ? 'ring-2 ring-blue-500' : 'border-gray-300'} bg-card`}>
+      <CardHeader className="bg-gray-100 dark:bg-gray-800 p-2 rounded-t-lg">
+        <CardTitle className="text-xs font-semibold flex items-center">
+          {getIcon()}
+          <span className="ml-2">{label || `Ação: ${actionType}`}</span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-3 space-y-2">
+        <div>
+          <Label htmlFor={`actionType-${id}`} className="text-xs">Tipo de Ação</Label>
+          <Select 
+            value={actionType} 
+            // onValueChange={(value) => updateNodeData({ actionType: value as ActionNodeData['actionType'] })}
+          >
+            <SelectTrigger id={`actionType-${id}`} className="w-full h-8 text-xs">
+              <SelectValue placeholder="Selecione o tipo" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="add_tag">Adicionar Tag</SelectItem>
+              <SelectItem value="remove_tag">Remover Tag</SelectItem>
+              <SelectItem value="assign_agent">Atribuir Agente</SelectItem>
+              <SelectItem value="send_email">Enviar Email</SelectItem>
+              <SelectItem value="update_contact_prop">Atualizar Propriedade</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {(actionType === 'add_tag' || actionType === 'remove_tag') && (
+          <div>
+            <Label htmlFor={`tagName-${id}`} className="text-xs">Nome da Tag</Label>
+            <Input 
+              id={`tagName-${id}`} 
+              type="text" 
+              value={tagName || ''} 
+              // onChange={(e) => updateNodeData({ tagName: e.target.value })} 
+              className="w-full h-8 text-xs"
+            />
+          </div>
         )}
-      </div>
-      <Handle type="source" position={Position.Right} id={`${id}-source`} className="!bg-slate-400 w-2.5 h-2.5" />
-    </div>
+         {/* Adicionar mais campos conforme o actionType */}
+        {actionType === 'assign_agent' && (
+             <div>
+                <Label htmlFor={`agentId-${id}`} className="text-xs">ID do Agente</Label>
+                <Input id={`agentId-${id}`} value={agentId || ''} /*onChange={...}*/ className="w-full h-8 text-xs" />
+            </div>
+        )}
+        {actionType === 'send_email' && (
+             <div>
+                <Label htmlFor={`emailTemplateId-${id}`} className="text-xs">ID do Template de Email</Label>
+                <Input id={`emailTemplateId-${id}`} value={emailTemplateId || ''} /*onChange={...}*/ className="w-full h-8 text-xs" />
+            </div>
+        )}
+        {actionType === 'update_contact_prop' && (
+            <>
+                 <div>
+                    <Label htmlFor={`propName-${id}`} className="text-xs">Nome da Propriedade</Label>
+                    <Input id={`propName-${id}`} value={contactPropertyName || ''} /*onChange={...}*/ className="w-full h-8 text-xs" />
+                </div>
+                 <div>
+                    <Label htmlFor={`propValue-${id}`} className="text-xs">Valor da Propriedade</Label>
+                    <Input id={`propValue-${id}`} value={contactPropertyValue || ''} /*onChange={...}*/ className="w-full h-8 text-xs" />
+                </div>
+            </>
+        )}
+
+
+        <p className="text-gray-500 dark:text-gray-400 text-[10px] truncate">
+          {actionType === 'add_tag' && `Adiciona tag: ${tagName || '...'}`}
+          {actionType === 'remove_tag' && `Remove tag: ${tagName || '...'}`}
+          {/* ... outras descrições ... */}
+        </p>
+      </CardContent>
+      <Handle type="target" position={Position.Left} className="!bg-gray-400 w-2.5 h-2.5" />
+      <Handle type="source" position={Position.Right} className="!bg-green-500 w-2.5 h-2.5" />
+    </Card>
   );
 };
 
-export default ActionNode; 
+export default memo(ActionNode);
