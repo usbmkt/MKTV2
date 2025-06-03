@@ -1,161 +1,174 @@
-import React, { memo, useState, ChangeEvent, useCallback } from 'react';
-import { Handle, Position, NodeProps, Node, useReactFlow } from '@xyflow/react';
+import React, { memo, useState, useEffect, useCallback, ChangeEvent, KeyboardEvent } from 'react';
+import { Handle, Position, useReactFlow, NodeToolbar, NodeProps as ReactFlowNodeProps } from '@xyflow/react';
+// CORRIGIDO: Path Aliases
+import { SetVariableNodeData, FlowNodeType, HandleData, VariableAssignment, VariableType } from '@zap_client/features/types/whatsapp_flow_types';
 import { Card, CardContent, CardHeader, CardTitle } from '@zap_client/components/ui/card';
 import { Input } from '@zap_client/components/ui/input';
 import { Label } from '@zap_client/components/ui/label';
 import { Button } from '@zap_client/components/ui/button';
-import { GripVertical, PlusCircle, Trash2, Settings2 } from 'lucide-react';
-import { SetVariableNodeData, VariableAssignment } from '@zap_client/features/types/whatsapp_flow_types'; // Ajustado o import
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@zap_client/components/ui/select';
+import { VariableIcon as VarIcon, Trash2, Edit3, PlusCircle, XCircle } from 'lucide-react'; // Renomeado Variable para VarIcon
+import { cn } from '@zap_client/lib/utils';
+import { Badge } from '@zap_client/components/ui/badge';
+import { ScrollArea } from '@zap_client/components/ui/scroll-area';
 
 
-const SetVariableNode: React.FC<NodeProps<SetVariableNodeData>> = ({ id, data, selected }) => {
+const defaultHandles: HandleData[] = [
+  { id: 'input', type: 'target', position: Position.Left, label: 'Entrada', style: {top: '50%'} },
+  { id: 'output', type: 'source', position: Position.Right, label: 'Saída', style: {top: '50%'} },
+];
+
+const valueSourceTypes: VariableAssignment['sourceType'][] = ['static', 'variable', 'expression', 'api_response'];
+
+// CORRIGIDO: Tipagem explícita das props
+const SetVariableNodeComponent: React.FC<ReactFlowNodeProps<SetVariableNodeData>> = ({ id, data, selected }) => {
   const { setNodes } = useReactFlow();
-  const [nodeData, setNodeData] = useState<SetVariableNodeData>(data);
 
-  const updateNodeData = useCallback((newData: Partial<SetVariableNodeData>) => {
-    setNodes((nds) =>
-      nds.map((node: Node) => {
-        if (node.id === id) {
-          return { ...node, data: { ...node.data, ...newData } };
-        }
-        return node;
-      })
-    );
-    setNodeData(prev => ({ ...prev, ...newData }));
-  }, [id, setNodes]);
+  // Estados locais baseados em `data`
+  const [label, setLabel] = useState<string>(data.label || 'Definir Variável');
+  const [isEditingLabel, setIsEditingLabel] = useState<boolean>(false);
+  const [assignments, setAssignments] = useState<VariableAssignment[]>(
+    data.assignments || [{ id: `asg-${Date.now()}`, variableName: 'novaVariavel', value: '', sourceType: 'static' }]
+  );
 
-  const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
-     const { name, value } = e.target;
-     updateNodeData({ [name]: value });
+
+  useEffect(() => {
+    setLabel(data.label || 'Definir Variável');
+    setAssignments(data.assignments || [{ id: `asg-${Date.now()}`, variableName: 'novaVariavel', value: '', sourceType: 'static' }]);
+  }, [data]);
+
+  const updateNodePartialData = useCallback(
+    (newData: Partial<SetVariableNodeData>) => {
+      setNodes((nds) =>
+        nds.map((node) => {
+          if (node.id === id) {
+            const currentData = node.data as SetVariableNodeData;
+            return { ...node, data: { ...currentData, ...newData } };
+          }
+          return node;
+        })
+      );
+    },
+    [id, setNodes]
+  );
+  
+  const handleLabelChange = (e: ChangeEvent<HTMLInputElement>) => setLabel(e.target.value);
+  const handleLabelSave = () => {
+    updateNodePartialData({ label });
+    setIsEditingLabel(false);
   };
-
-  const handleAssignmentChange = (index: number, field: keyof VariableAssignment, value: string | VariableAssignment['source']) => {
-    const newAssignments = [...(nodeData.assignments || [])];
-    if (newAssignments[index]) {
-      (newAssignments[index] as any)[field] = value;
-      updateNodeData({ assignments: newAssignments });
-    }
+  
+  const handleAssignmentChange = (index: number, field: keyof VariableAssignment, value: string | VariableAssignment['sourceType']) => {
+    const newAssignments = [...assignments];
+    (newAssignments[index] as any)[field] = value; // Tipagem any para simplificar, mas poderia ser mais estrito
+    setAssignments(newAssignments);
+    updateNodePartialData({ assignments: newAssignments });
   };
 
   const addAssignment = () => {
-    const newAssignment: VariableAssignment = { variableName: '', value: '', source: 'static' };
-    updateNodeData({ assignments: [...(nodeData.assignments || []), newAssignment] });
+    const newAssignment: VariableAssignment = { 
+        id: `asg-${Date.now()}`, 
+        variableName: `var${assignments.length + 1}`, 
+        value: '', 
+        sourceType: 'static' 
+    };
+    const newAssignments = [...assignments, newAssignment];
+    setAssignments(newAssignments);
+    updateNodePartialData({ assignments: newAssignments });
   };
 
-  const removeAssignment = (index: number) => {
-    const newAssignments = (nodeData.assignments || []).filter((_, i) => i !== index);
-    updateNodeData({ assignments: newAssignments });
+  const removeAssignment = (indexToRemove: number) => {
+    const newAssignments = assignments.filter((_: VariableAssignment, index: number) => index !== indexToRemove);
+    setAssignments(newAssignments);
+    updateNodePartialData({ assignments: newAssignments });
   };
+
+  const handleDeleteNode = () => {
+    setNodes((nds) => nds.filter(node => node.id !== id));
+  };
+
+  const handlesToRender = data.handles || defaultHandles;
 
   return (
-    <Card className={`w-96 shadow-md ${selected ? 'ring-2 ring-blue-500' : ''}`}>
-      <CardHeader className="bg-gray-100 p-4 rounded-t-lg flex flex-row items-center justify-between">
-        <div className="flex items-center">
-          <Settings2 className="w-4 h-4 mr-2 text-gray-600" />
-          <CardTitle className="text-sm font-medium">{nodeData.label || 'Definir Variável'}</CardTitle>
-        </div>
-        <GripVertical className="w-5 h-5 text-gray-400 cursor-grab drag-handle" />
+    <Card className={cn("w-96 shadow-md neu-card", selected && "ring-2 ring-lime-500 ring-offset-2")}>
+      <NodeToolbar isVisible={selected} position={Position.Top} className="flex gap-2">
+        <Button variant="outline" size="sm" onClick={() => setIsEditingLabel(true)} title="Editar Nome"><Edit3 className="h-4 w-4" /></Button>
+        <Button variant="destructive" size="sm" onClick={handleDeleteNode} title="Remover Nó"><Trash2 className="h-4 w-4" /></Button>
+      </NodeToolbar>
+
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 pt-3 px-4 bg-lime-500/10 dark:bg-lime-700/20 rounded-t-lg">
+         {isEditingLabel ? (
+            <div className="flex items-center gap-2">
+                <Input value={label} onChange={handleLabelChange} className="text-sm h-7" autoFocus onBlur={handleLabelSave} onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => e.key === 'Enter' && handleLabelSave()} />
+                <Button size="sm" onClick={handleLabelSave} className="h-7">Salvar</Button>
+            </div>
+        ) : (
+            <CardTitle className="text-sm font-semibold flex items-center cursor-pointer" onClick={() => setIsEditingLabel(true)}>
+                <VarIcon className="h-4 w-4 mr-2 text-lime-600 dark:text-lime-400" />
+                {data.label || 'Definir Variável'}
+            </CardTitle>
+        )}
+        <Badge variant="default" className="bg-lime-500 text-black capitalize">{data.nodeType.replace('Node', '')}</Badge>
       </CardHeader>
-      <CardContent className="p-4 space-y-3">
-        <Handle type="target" position={Position.Left} className="w-3 h-3 bg-blue-500 rounded-full" />
-        <div>
-          <Label htmlFor={`label-${id}`} className="text-xs font-medium">Rótulo do Nó</Label>
-          <Input
-            id={`label-${id}`}
-            name="label"
-            value={nodeData.label || ''}
-            onChange={handleInputChange}
-            placeholder="Ex: Salvar Email do Usuário"
-            className="mt-1 w-full nodrag"
-          />
-        </div>
-
-        <div className="space-y-2">
-            <div className="flex justify-between items-center">
-                <h4 className="text-xs font-semibold text-gray-800">Atribuições de Variáveis</h4>
-                <Button variant="outline" size="sm" onClick={addAssignment} className="nodrag">
-                    <PlusCircle className="w-3 h-3 mr-1" /> Add Atribuição
-                </Button>
-            </div>
-          {(nodeData.assignments || []).map((assignment: VariableAssignment, index: number) => (
-            <div key={index} className="p-3 border rounded bg-gray-50 space-y-2">
-              <div className="flex items-end space-x-2">
-                <div className="flex-grow">
-                  <Label htmlFor={`variableName-${id}-${index}`} className="text-xs">Nome da Variável</Label>
-                  <Input
-                    id={`variableName-${id}-${index}`}
-                    placeholder="Ex: userEmail"
-                    value={assignment.variableName || ''}
-                    onChange={(e: ChangeEvent<HTMLInputElement>) => handleAssignmentChange(index, 'variableName', e.target.value)}
-                    className="mt-1 w-full nodrag"
-                  />
-                </div>
-                <Button variant="ghost" size="icon" onClick={() => removeAssignment(index)} className="nodrag mb-1">
-                  <Trash2 className="w-4 h-4 text-red-500" />
-                </Button>
-              </div>
-              <div>
-                <Label htmlFor={`source-${id}-${index}`} className="text-xs">Fonte do Valor</Label>
-                <Select
-                    value={assignment.source || 'static'}
-                    onValueChange={(value) => handleAssignmentChange(index, 'source', value as VariableAssignment['source'])}
-                >
-                    <SelectTrigger id={`source-${id}-${index}`} className="w-full mt-1 nodrag">
-                        <SelectValue placeholder="Selecione a fonte" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="static">Valor Estático</SelectItem>
-                        <SelectItem value="expression">Expressão</SelectItem>
-                        <SelectItem value="contact_data">Dado do Contato</SelectItem>
-                        {/* Adicionar mais fontes se necessário */}
-                    </SelectContent>
-                </Select>
-              </div>
-
-              {assignment.source === 'static' && (
-                <div>
-                  <Label htmlFor={`value-${id}-${index}`} className="text-xs">Valor</Label>
-                  <Input
-                    id={`value-${id}-${index}`}
-                    placeholder="Valor estático"
-                    value={String(assignment.value || '')}
-                    onChange={(e: ChangeEvent<HTMLInputElement>) => handleAssignmentChange(index, 'value', e.target.value)}
-                    className="mt-1 w-full nodrag"
-                  />
-                </div>
-              )}
-              {assignment.source === 'expression' && (
-                <div>
-                  <Label htmlFor={`expression-${id}-${index}`} className="text-xs">Expressão</Label>
-                  <Input
-                    id={`expression-${id}-${index}`}
-                    placeholder="Ex: {{variavel1}} + {{variavel2}}"
-                    value={assignment.expression || ''}
-                    onChange={(e: ChangeEvent<HTMLInputElement>) => handleAssignmentChange(index, 'expression', e.target.value)}
-                    className="mt-1 w-full nodrag"
-                  />
-                </div>
-              )}
-              {assignment.source === 'contact_data' && (
-                <div>
-                  <Label htmlFor={`contactField-${id}-${index}`} className="text-xs">Campo do Contato</Label>
-                  <Input
-                    id={`contactField-${id}-${index}`}
-                    placeholder="Ex: email, phone_number, name"
-                    value={assignment.contactField || ''}
-                    onChange={(e: ChangeEvent<HTMLInputElement>) => handleAssignmentChange(index, 'contactField', e.target.value)}
-                    className="mt-1 w-full nodrag"
-                  />
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-        <Handle type="source" position={Position.Right} className="w-3 h-3 bg-green-500 rounded-full" />
+      <CardContent className="p-3 space-y-3 max-h-80">
+        <ScrollArea className="h-72 pr-3">
+            {assignments.map((assignment: VariableAssignment, index: number) => (
+                <Card key={assignment.id || index} className="p-2 mb-2 neu-card-inset space-y-1">
+                    <div className="flex items-center justify-end">
+                        {assignments.length > 1 && 
+                            <Button variant="ghost" size="icon" onClick={() => removeAssignment(index)} className="h-6 w-6 text-destructive"><XCircle className="h-3.5 w-3.5"/></Button>
+                        }
+                    </div>
+                    <div className="grid grid-cols-1 gap-2">
+                        <div>
+                            <Label htmlFor={`var-name-${id}-${index}`} className="text-xs">Nome da Variável *</Label>
+                            <Input id={`var-name-${id}-${index}`} value={assignment.variableName} onChange={(e: ChangeEvent<HTMLInputElement>) => handleAssignmentChange(index, 'variableName', e.target.value)} placeholder="Ex: nome_usuario" className="neu-input text-xs h-8"/>
+                        </div>
+                        <div>
+                            <Label htmlFor={`var-source-${id}-${index}`} className="text-xs">Fonte do Valor</Label>
+                            <Select value={assignment.sourceType} onValueChange={(value: string) => handleAssignmentChange(index, 'sourceType', value as VariableAssignment['sourceType'])}>
+                                <SelectTrigger id={`var-source-${id}-${index}`} className="neu-input text-xs h-8"><SelectValue/></SelectTrigger>
+                                <SelectContent>
+                                    {valueSourceTypes.map(vst => <SelectItem key={vst} value={vst}>{vst.replace('_', ' ').toLocaleUpperCase()}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div>
+                            <Label htmlFor={`var-value-${id}-${index}`} className="text-xs">Valor</Label>
+                            <Input id={`var-value-${id}-${index}`} value={assignment.value} onChange={(e: ChangeEvent<HTMLInputElement>) => handleAssignmentChange(index, 'value', e.target.value)} placeholder="Valor ou {{outra_var}}" className="neu-input text-xs h-8"/>
+                        </div>
+                        {assignment.sourceType === 'expression' && (
+                             <div>
+                                <Label htmlFor={`var-expr-${id}-${index}`} className="text-xs">Expressão</Label>
+                                <Input id={`var-expr-${id}-${index}`} value={assignment.expression || ''} onChange={(e: ChangeEvent<HTMLInputElement>) => handleAssignmentChange(index, 'expression', e.target.value)} placeholder="Ex: {{var1}} + {{var2}}" className="neu-input text-xs h-8"/>
+                            </div>
+                        )}
+                        {assignment.sourceType === 'api_response' && (
+                             <div>
+                                <Label htmlFor={`var-path-${id}-${index}`} className="text-xs">Caminho na Resposta API (JSONPath)</Label>
+                                <Input id={`var-path-${id}-${index}`} value={assignment.apiResponsePath || ''} onChange={(e: ChangeEvent<HTMLInputElement>) => handleAssignmentChange(index, 'apiResponsePath', e.target.value)} placeholder="Ex: $.data.items[0].name" className="neu-input text-xs h-8"/>
+                            </div>
+                        )}
+                    </div>
+                </Card>
+            ))}
+            <Button variant="outline" size="sm" onClick={addAssignment} className="mt-2 text-xs w-full"><PlusCircle className="h-4 w-4 mr-1"/> Adicionar Atribuição</Button>
+        </ScrollArea>
       </CardContent>
+
+      {handlesToRender.map((handleItem: HandleData) => (
+        <Handle
+          key={handleItem.id}
+          id={handleItem.id}
+          type={handleItem.type}
+          position={handleItem.position}
+          isConnectable={true}
+          style={{ ...handleItem.style, background: '#84cc16', width: '10px', height: '10px' }} // Cor Lime
+          aria-label={handleItem.label}
+        />
+      ))}
     </Card>
   );
 };
 
-export default memo(SetVariableNode);
+export default memo(SetVariableNodeComponent);
