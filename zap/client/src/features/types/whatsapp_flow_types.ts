@@ -1,9 +1,9 @@
-import { Node } from '@xyflow/react';
+import type { Node } from '@xyflow/react'; // Ensure this import is correct based on your project setup
 
 // Definição base para todos os dados de nós customizados
 export interface BaseNodeData {
   label?: string;
-  [key: string]: any;
+  [key: string]: any; // Consider making this more specific if possible
 }
 
 // ===========================================
@@ -27,7 +27,7 @@ export interface ActionNodeData extends BaseNodeData {
   messageContent?: string;
   recipientVariable?: string;
 }
-export type ActionNodeType = Node<ActionNodeData> & { type: 'actionNode' };
+export type ActionNodeType = Node<ActionNodeData, 'actionNode'>;
 
 // --- AiDecisionNode ---
 export interface AiDecisionNodeData extends BaseNodeData {
@@ -36,7 +36,7 @@ export interface AiDecisionNodeData extends BaseNodeData {
   possibleOutcomes?: Array<{ outcome: string; description: string }>;
   apiKeyVariable?: string;
 }
-export type AiDecisionNodeType = Node<AiDecisionNodeData> & { type: 'aiDecisionNode' };
+export type AiDecisionNodeType = Node<AiDecisionNodeData, 'aiDecisionNode'>;
 
 // --- ApiCallNode ---
 export interface ApiCallNodeData extends BaseNodeData {
@@ -47,7 +47,7 @@ export interface ApiCallNodeData extends BaseNodeData {
   responseVariable?: string;
   timeout?: number;
 }
-export type ApiCallNodeType = Node<ApiCallNodeData> & { type: 'apiCallNode' };
+export type ApiCallNodeType = Node<ApiCallNodeData, 'apiCallNode'>;
 
 // --- ButtonsMessageNode ---
 export interface ButtonItem {
@@ -68,7 +68,7 @@ export interface ButtonsMessageNodeData extends BaseNodeData {
   buttons?: ButtonItem[];
   footerText?: string;
 }
-export type ButtonsMessageNodeType = Node<ButtonsMessageNodeData> & { type: 'buttonsMessageNode' };
+export type ButtonsMessageNodeType = Node<ButtonsMessageNodeData, 'buttonsMessageNode'>;
 
 // --- ClonedVoiceNode ---
 export interface ClonedVoiceNodeData extends BaseNodeData {
@@ -79,7 +79,7 @@ export interface ClonedVoiceNodeData extends BaseNodeData {
   outputFormat?: 'mp3' | 'wav';
   variableToStoreUrl?: string;
 }
-export type ClonedVoiceNodeType = Node<ClonedVoiceNodeData> & { type: 'clonedVoiceNode' };
+export type ClonedVoiceNodeType = Node<ClonedVoiceNodeData, 'clonedVoiceNode'>;
 
 // --- ConditionNode ---
 export interface Condition {
@@ -91,21 +91,21 @@ export interface ConditionNodeData extends BaseNodeData {
   conditions?: Condition[];
   logicalOperator?: 'AND' | 'OR';
 }
-export type ConditionNodeType = Node<ConditionNodeData> & { type: 'conditionNode' };
+export type ConditionNodeType = Node<ConditionNodeData, 'conditionNode'>;
 
 // --- DelayNode ---
 export interface DelayNodeData extends BaseNodeData {
   delayValue?: number;
   delayUnit?: 'seconds' | 'minutes' | 'hours';
 }
-export type DelayNodeType = Node<DelayNodeData> & { type: 'delayNode' };
+export type DelayNodeType = Node<DelayNodeData, 'delayNode'>;
 
 // --- EndNode ---
 export interface EndNodeData extends BaseNodeData {
   endMessage?: string;
   status?: 'completed' | 'failed' | 'terminated';
 }
-export type EndNodeType = Node<EndNodeData> & { type: 'endNode' };
+export type EndNodeType = Node<EndNodeData, 'endNode'>;
 
 // --- ExternalDataNode ---
 export interface ExternalDataNodeData extends BaseNodeData {
@@ -115,7 +115,7 @@ export interface ExternalDataNodeData extends BaseNodeData {
   headers?: Array<{ key: string; value: string }>;
   variableToStoreData?: string;
 }
-export type ExternalDataNodeType = Node<ExternalDataNodeData> & { type: 'externalDataNode' };
+export type ExternalDataNodeType = Node<ExternalDataNodeData, 'externalDataNode'>;
 
 // ADICIONADO: ExternalDataFetchNodeDataFE que estava faltando
 export interface ExternalDataFetchNodeDataFE extends ExternalDataNodeData {
@@ -131,7 +131,7 @@ export interface GptQueryNodeData extends BaseNodeData {
   variableToStoreResponse?: string;
   apiKeyVariable?: string;
 }
-export type GptQueryNodeType = Node<GptQueryNodeData> & { type: 'gptQueryNode' };
+export type GptQueryNodeType = Node<GptQueryNodeData, 'gptQueryNode'>;
 
 // --- ListMessageNode ---
 export interface ListItem {
@@ -149,7 +149,13 @@ export interface ListMessageNodeData extends BaseNodeData {
   footerText?: string;
   sections?: ListSection[];
 }
-export type ListMessageNodeType = Node<ListMessageNodeData> & { type: 'listMessageNode' };
+export type ListMessageNodeType = Node<ListMessageNodeData, 'listMessageNode'>;
+
+// Added based on error TS2724, assuming it's a frontend-specific variant
+export interface ListMessageNodeDataFE extends ListMessageNodeData {
+    // Frontend-specific properties for ListMessageNodeData, if any
+}
+
 
 // --- MediaMessageNode ---
 export interface MediaMessageNodeData extends BaseNodeData {
@@ -159,7 +165,7 @@ export interface MediaMessageNodeData extends BaseNodeData {
   fileName?: string;
   mimeType?: string;
 }
-export type MediaMessageNodeType = Node<MediaMessageNodeData> & { type: 'mediaMessageNode' };
+export type MediaMessageNodeType = Node<MediaMessageNodeData, 'mediaMessageNode'>;
 
 // --- QuestionNode ---
 export interface QuickReply {
@@ -172,11 +178,11 @@ export interface QuestionNodeData extends BaseNodeData {
   expectedResponseType?: 'text' | 'number' | 'email' | 'quick_reply' | 'list_reply';
   variableToSaveAnswer?: string;
   quickReplies?: QuickReply[];
-  listOptions?: ListItem[];
+  listOptions?: ListItem[]; // Assuming ListItem defined for ListMessageNode can be reused
   validationRegex?: string;
   errorMessage?: string;
 }
-export type QuestionNodeType = Node<QuestionNodeData> & { type: 'questionNode' };
+export type QuestionNodeType = Node<QuestionNodeData, 'questionNode'>;
 
 // --- SetVariableNode ---
 export interface VariableAssignment {
@@ -189,21 +195,21 @@ export interface VariableAssignment {
 export interface SetVariableNodeData extends BaseNodeData {
   assignments?: VariableAssignment[];
 }
-export type SetVariableNodeType = Node<SetVariableNodeData> & { type: 'setVariableNode' };
+export type SetVariableNodeType = Node<SetVariableNodeData, 'setVariableNode'>;
 
 // --- TagContactNode ---
 export interface TagContactNodeData extends BaseNodeData {
   tagOperation?: 'add' | 'remove';
   tagName?: string;
 }
-export type TagContactNodeType = Node<TagContactNodeData> & { type: 'tagContactNode' };
+export type TagContactNodeType = Node<TagContactNodeData, 'tagContactNode'>;
 
 // --- TextMessageNode ---
 export interface TextMessageNodeData extends BaseNodeData {
   message?: string;
   useVariables?: boolean;
 }
-export type TextMessageNodeType = Node<TextMessageNodeData> & { type: 'textMessageNode' };
+export type TextMessageNodeType = Node<TextMessageNodeData, 'textMessageNode'>;
 
 // --- TriggerNode ---
 export interface TriggerNodeData extends BaseNodeData {
@@ -211,10 +217,10 @@ export interface TriggerNodeData extends BaseNodeData {
   keywords?: string[];
   formId?: string;
   webhookUrl?: string;
-  scheduleDateTime?: string;
+  scheduleDateTime?: string; // Ensure this is a string representation, e.g., ISO 8601
   exactMatch?: boolean;
 }
-export type TriggerNodeType = Node<TriggerNodeData> & { type: 'triggerNode' };
+export type TriggerNodeType = Node<TriggerNodeData, 'triggerNode'>;
 
 // ===========================================
 // TIPOS PARA API E DADOS
@@ -230,21 +236,21 @@ export interface FlowElementData {
   id: string;
   name: string;
   description?: string;
-  createdAt: string;
-  updatedAt: string;
+  createdAt: string; // Consider using Date type if objects are instantiated, string for JSON
+  updatedAt: string; // Consider using Date type
   status: 'draft' | 'active' | 'inactive' | 'archived';
-  triggerType?: string;
+  triggerType?: string; // Or a more specific union of trigger types
 }
 
-// CORRIGIDO: Adicionado avgTimeToComplete que estava faltando
 export interface FlowPerformanceData {
   flowId: string;
   flowName: string;
   totalStarted: number;
   totalCompleted: number;
   completionRate: number;
-  avgTimeToComplete?: number; // PROPRIEDADE FALTANTE ADICIONADA
-  averageDurationSeconds?: number;
+  // CORRIGIDO: Adicionado avgTimeToComplete que estava faltando
+  avgTimeToComplete?: number; // PROPRIEDADE FALTANTE ADICIONADA (in seconds or a specific unit)
+  averageDurationSeconds?: number; // This seems redundant if avgTimeToComplete is present and defined
 }
 
 // ===========================================
@@ -252,36 +258,67 @@ export interface FlowPerformanceData {
 // ===========================================
 
 export interface TemplateParameter {
-  type: string;
+  type: string; // e.g., 'text', 'currency', 'date_time', 'document', 'image', 'video'
   text?: string;
+  // Add other parameter types as needed, e.g., for media:
+  // document?: { link: string; filename: string; };
+  // image?: { link: string; };
+  // video?: { link: string; };
 }
+
+export interface TemplateButtonParameter {
+  type: 'text'; // Typically, button parameters are text
+  text: string;
+}
+export interface TemplateButton {
+    type: 'QUICK_REPLY' | 'URL' | 'PHONE_NUMBER' | 'COPY_CODE' | 'FLOW'; // Add other WhatsApp button types as needed
+    text: string;
+    url?: string; // For URL buttons
+    phone_number?: string; // For PHONE_NUMBER buttons
+    example?: string[]; // For variable URL buttons
+    flow_id?: string; // For FLOW buttons
+    flow_action?: string; // For FLOW buttons
+    // copy_code_text?: string; // For COPY_CODE if it's different from button text
+}
+
 
 export interface TemplateComponent {
-  type: string;
-  parameters?: TemplateParameter[];
+  type: 'HEADER' | 'BODY' | 'FOOTER' | 'BUTTONS';
+  format?: 'TEXT' | 'IMAGE' | 'VIDEO' | 'DOCUMENT' | 'LOCATION'; // For HEADER
+  text?: string; // For HEADER (format TEXT), BODY, FOOTER
+  example?: TemplateExample; // For components with variables
+  buttons?: TemplateButton[]; // For BUTTONS component
+  parameters?: TemplateParameter[]; // Generally used for sending, not defining structure usually.
+                                   // The 'example' field handles placeholders during template creation.
 }
 
-export interface TemplateExample {
-  header_text?: string[];
-  body_text?: string[][];
+export interface TemplateExample { // More specific example structure
+  header_handle?: string[]; // For media template header variables
+  header_text?: string[];   // For text template header variables
+  body_text?: string[][];   // For body variables
+  // Buttons examples are usually part of the button definition itself if they contain variables
 }
 
-export interface TemplateCategory {
+
+export interface TemplateCategory { // This is usually a string, not an object with id/name
+  // WhatsApp typically uses predefined strings like 'MARKETING', 'UTILITY', 'AUTHENTICATION'
+  // If you define your own categories, this structure is fine.
   id: string;
   name: string;
 }
 
-export interface TemplateLanguage {
+export interface TemplateLanguage { // This is usually a string code, e.g., 'en_US', 'pt_BR'
+  // If you define your own language objects, this structure is fine.
   code: string;
   name: string;
 }
 
 export interface WhatsAppTemplate {
-  id: string;
-  name: string;
-  category: string;
-  language: string;
-  status: string;
+  id: string; // ID from WhatsApp/Meta after submission
+  name: string; // Template name
+  category: string; // e.g., 'MARKETING', 'UTILITY' (WhatsApp predefined categories)
+  language: string; // e.g., 'en_US', 'pt_BR' (WhatsApp language code)
+  status: string; // e.g., 'PENDING', 'APPROVED', 'REJECTED', 'PAUSED', 'DISABLED'
   components: TemplateComponent[];
 }
 
@@ -292,43 +329,49 @@ export interface WhatsAppTemplate {
 export interface Message {
   id: string;
   conversationId: string;
-  content: string;
-  sender: 'user' | 'bot';
-  timestamp: string;
-  messageType?: 'text' | 'image' | 'audio' | 'document';
+  content: string; // Or a more complex object if messages can have rich content beyond text
+  sender: 'user' | 'bot' | 'agent'; // Added 'agent' if applicable
+  timestamp: string; // Consider Date type
+  messageType?: 'text' | 'image' | 'audio' | 'video' | 'document' | 'sticker' | 'location' | 'contacts' | 'interactive' | 'template';
   mediaUrl?: string;
+  fileName?: string; // For documents
+  mimeType?: string; // For media/documents
+  // Add other message-specific fields, e.g., for interactive messages, location, etc.
 }
 
 export interface Conversation {
   id: string;
-  contactId: string;
+  contactId: string; // ID of the contact/user
   contactName?: string;
-  contactPhone: string;
-  status: 'active' | 'resolved' | 'pending';
-  lastMessage?: string;
-  lastMessageTime?: string;
+  contactPhone: string; // E.164 format
+  status: 'active' | 'resolved' | 'pending' | 'archived' | 'spam';
+  lastMessage?: string; // Snippet of the last message
+  lastMessageTime?: string; // Consider Date type
   unreadCount?: number;
+  // Add other relevant conversation metadata, e.g., assignedAgentId, tags, etc.
 }
 
 // ===========================================
 // FLOW RESPONSE TYPE
 // ===========================================
 
-export interface FlowResponse {
+export interface FlowResponse { // This is likely the response when fetching a specific flow definition
   id: string;
   name: string;
   description?: string;
-  status: string;
-  createdAt: string;
-  updatedAt: string;
-  nodes: any[];
-  edges: any[];
+  status: string; // e.g., 'draft', 'published' - same as FlowElementData.status?
+  createdAt: string; // Consider Date
+  updatedAt: string; // Consider Date
+  nodes: AllFlowNodes[]; // Array of actual node objects
+  edges: any[]; // Define Edge type from React Flow if needed: Edge[]
+  // Add other flow-specific metadata
 }
 
 // ===========================================
 // UNIÕES DE TIPOS
 // ===========================================
 
+// Union of all possible node data types
 export type AnyNodeData =
   | ActionNodeData
   | AiDecisionNodeData
@@ -339,8 +382,10 @@ export type AnyNodeData =
   | DelayNodeData
   | EndNodeData
   | ExternalDataNodeData
+  | ExternalDataFetchNodeDataFE // Added
   | GptQueryNodeData
   | ListMessageNodeData
+  | ListMessageNodeDataFE // Added
   | MediaMessageNodeData
   | QuestionNodeData
   | SetVariableNodeData
@@ -348,6 +393,7 @@ export type AnyNodeData =
   | TextMessageNodeData
   | TriggerNodeData;
 
+// Union of all possible fully-typed flow node types
 export type AllFlowNodes =
   | ActionNodeType
   | AiDecisionNodeType
@@ -358,8 +404,12 @@ export type AllFlowNodes =
   | DelayNodeType
   | EndNodeType
   | ExternalDataNodeType
+  // If ExternalDataFetchNodeDataFE corresponds to a distinct node type:
+  // | Node<ExternalDataFetchNodeDataFE, 'externalDataFetchFENode'> 
   | GptQueryNodeType
   | ListMessageNodeType
+  // If ListMessageNodeDataFE corresponds to a distinct node type:
+  // | Node<ListMessageNodeDataFE, 'listMessageFENode'>
   | MediaMessageNodeType
   | QuestionNodeType
   | SetVariableNodeType
