@@ -17,7 +17,7 @@ import {
   Panel,
   NodeProps,
   ReactFlowInstance,
-  NodeTypes
+  NodeTypes // Importado para tipar nodeTypes
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -52,7 +52,7 @@ import { PlusCircle, Save, Trash2, Zap as ZapIcon, Loader2 } from 'lucide-react'
 
 export interface ZapFlowBuilderProps {
   flowId: string;
-  initialNodes?: Node<any>[]; // Usar Node<any> ou um tipo união mais específico se souber todos os tipos de dados
+  initialNodes?: Node<any>[];
   initialEdges?: Edge[];
   initialFlowName?: string | null;
   onSaveFlow?: (flowId: string, nodes: Node<any>[], edges: Edge[], name?: string) => Promise<void>;
@@ -61,24 +61,25 @@ export interface ZapFlowBuilderProps {
   onSaveSuccess?: (flowId: string, flowName: string) => void;
 }
 
+// Tipagem explícita para NodeTypes
 const nodeTypes: NodeTypes = {
-  trigger: TriggerNode as React.ComponentType<NodeProps<TriggerNodeData>>,
-  textMessage: TextMessageNode as React.ComponentType<NodeProps<TextMessageNodeData>>,
-  question: QuestionNode as React.ComponentType<NodeProps<QuestionNodeData>>,
-  listMessage: ListMessageNode as React.ComponentType<NodeProps<ListMessageNodeDataFE>>,
-  buttonsMessage: ButtonsMessageNode as React.ComponentType<NodeProps<ButtonsMessageNodeData>>,
-  mediaMessage: MediaMessageNode as React.ComponentType<NodeProps<MediaMessageNodeData>>,
-  condition: ConditionNode as React.ComponentType<NodeProps<ConditionNodeData>>,
-  delay: DelayNode as React.ComponentType<NodeProps<DelayNodeData>>,
-  action: ActionNode as React.ComponentType<NodeProps<ActionNodeData>>,
-  gptQuery: GptQueryNode as React.ComponentType<NodeProps<GptQueryNodeData>>,
-  aiDecision: AiDecisionNode as React.ComponentType<NodeProps<AiDecisionNodeData>>,
-  clonedVoice: ClonedVoiceNode as React.ComponentType<NodeProps<ClonedVoiceNodeData>>,
-  tagContact: TagContactNode as React.ComponentType<NodeProps<TagContactNodeData>>,
-  setVariable: SetVariableNode as React.ComponentType<NodeProps<SetVariableNodeData>>,
-  externalData: ExternalDataNode as React.ComponentType<NodeProps<ExternalDataFetchNodeDataFE>>,
-  apiCall: ApiCallNode as React.ComponentType<NodeProps<ApiCallNodeData>>,
-  end: EndNode as React.ComponentType<NodeProps<EndNodeData>>,
+  trigger: TriggerNode as React.FC<NodeProps<TriggerNodeData>>,
+  textMessage: TextMessageNode as React.FC<NodeProps<TextMessageNodeData>>,
+  question: QuestionNode as React.FC<NodeProps<QuestionNodeData>>,
+  listMessage: ListMessageNode as React.FC<NodeProps<ListMessageNodeDataFE>>,
+  buttonsMessage: ButtonsMessageNode as React.FC<NodeProps<ButtonsMessageNodeData>>,
+  mediaMessage: MediaMessageNode as React.FC<NodeProps<MediaMessageNodeData>>,
+  condition: ConditionNode as React.FC<NodeProps<ConditionNodeData>>,
+  delay: DelayNode as React.FC<NodeProps<DelayNodeData>>,
+  action: ActionNode as React.FC<NodeProps<ActionNodeData>>,
+  gptQuery: GptQueryNode as React.FC<NodeProps<GptQueryNodeData>>,
+  aiDecision: AiDecisionNode as React.FC<NodeProps<AiDecisionNodeData>>,
+  clonedVoice: ClonedVoiceNode as React.FC<NodeProps<ClonedVoiceNodeData>>,
+  tagContact: TagContactNode as React.FC<NodeProps<TagContactNodeData>>,
+  setVariable: SetVariableNode as React.FC<NodeProps<SetVariableNodeData>>,
+  externalData: ExternalDataNode as React.FC<NodeProps<ExternalDataFetchNodeDataFE>>,
+  apiCall: ApiCallNode as React.FC<NodeProps<ApiCallNodeData>>,
+  end: EndNode as React.FC<NodeProps<EndNodeData>>,
 };
 
 const defaultViewport = { x: 0, y: 0, zoom: 1 };
@@ -103,7 +104,7 @@ const ZapFlowBuilderWrapper: React.FC<ZapFlowBuilderProps> = ({
   useEffect(() => {
     const load = async () => {
       setIsLoading(true);
-      let defaultInitialNodes: Node<any>[] = [{ id: 'trigger_0', type: 'trigger', position: { x: 250, y: 5 }, data: { label: 'Início do Fluxo' } as TriggerNodeData }];
+      let defaultInitialNodes: Node<TriggerNodeData>[] = [{ id: 'trigger_0', type: 'trigger', position: { x: 250, y: 5 }, data: { label: 'Início do Fluxo' } }];
       
       if (onLoadFlow && flowId && flowId !== 'new') {
         try {
@@ -120,7 +121,7 @@ const ZapFlowBuilderWrapper: React.FC<ZapFlowBuilderProps> = ({
           }
         } catch (error) {
           console.error("Erro ao carregar fluxo:", error);
-           setNodes(defaultInitialNodes); // Fallback para nó de trigger
+           setNodes(defaultInitialNodes);
            setEdges([]);
            setFlowName(initialFlowName || `Fluxo (Erro ao Carregar)`);
         }
@@ -131,7 +132,7 @@ const ZapFlowBuilderWrapper: React.FC<ZapFlowBuilderProps> = ({
       }
       setIsLoading(false);
     };
-    if(flowId) load(); else setIsLoading(false); // Apenas carrega se flowId existir
+    if(flowId) load(); else setIsLoading(false);
   }, [flowId, onLoadFlow, initialFlowName]);
 
   const onNodesChange = useCallback(
@@ -150,9 +151,7 @@ const ZapFlowBuilderWrapper: React.FC<ZapFlowBuilderProps> = ({
   const addNode = (type: keyof typeof nodeTypes) => {
     const newNodeId = `${type}_${nodes.length + Date.now()}`;
     let initialData: any = { label: `Novo ${type}` };
-    // Você pode adicionar dados iniciais mais específicos por tipo de nó aqui
-    // Exemplo: if (type === 'textMessage') initialData = { label: 'Mensagem', message: 'Texto padrão' };
-
+    // Defina dados iniciais mais específicos se necessário
     const newNode: Node = {
       id: newNodeId,
       type,
@@ -231,11 +230,10 @@ const ZapFlowBuilderWrapper: React.FC<ZapFlowBuilderProps> = ({
            <Button onClick={() => addNode('condition')} size="sm" variant="outline" className="neu-button text-xs">
              <PlusCircle className="mr-1 h-3 w-3" /> Condição
           </Button>
-          {/* Adicione botões para mais tipos de nós aqui */}
           <Button onClick={handleSave} size="sm" variant="default" className="neu-button-primary text-xs" disabled={isLoading}>
             {isLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />} Salvar
           </Button>
-          {flowId && flowId !== 'new' && ( // Verifique se flowId existe
+          {flowId && flowId !== 'new' && (
             <Button onClick={handleDeleteFlow} size="sm" variant="destructive" className="text-xs">
               <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Excluir
             </Button>
