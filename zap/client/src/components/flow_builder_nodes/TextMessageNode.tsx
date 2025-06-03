@@ -1,34 +1,51 @@
 // zap/client/src/components/flow_builder_nodes/TextMessageNode.tsx
-import React from 'react';
+import React, { memo } from 'react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
-import { MessageSquareText } from 'lucide-react';
-import { cn } from '@zap_client/lib/utils';
+import { Card, CardContent, CardHeader, CardTitle } from '@zap_client/components/ui/card';
+import { Textarea } from '@zap_client/components/ui/textarea';
+import { Label } from '@zap_client/components/ui/label';
+import { MessageSquareText } from 'lucide-react'; // Ícone para mensagem de texto
+import { TextMessageNodeData } from '@zap_client/features/types/whatsapp_flow_types';
 
-export interface TextMessageNodeData {
-  label?: string; // Título do nó
-  messageText?: string;
-  // Outras propriedades específicas...
-}
+const TextMessageNode: React.FC<NodeProps<TextMessageNodeData>> = ({ data, id, selected }) => {
+  const { 
+    label = 'Mensagem de Texto', 
+    message = '' 
+  } = data;
 
-const TextMessageNode: React.FC<NodeProps<TextMessageNodeData>> = ({ data, selected, type }) => {
+  // Lógica para atualizar 'data' (ex: via onNodesChange passada como prop ou contexto)
+  // const updateMessage = (newMessage: string) => {
+  //   // onNodesChange([{ id, type: 'data', data: { ...data, message: newMessage } }]);
+  // };
+
   return (
-    <div
-      className={cn(
-        "p-3 rounded-md shadow-md bg-card border border-blue-500/70 w-64",
-        selected && "ring-2 ring-blue-600 ring-offset-2 ring-offset-background"
-      )}
-    >
-      <Handle type="target" position={Position.Left} className="!bg-slate-400 w-2.5 h-2.5" />
-      <div className="flex items-center mb-2">
-        <MessageSquareText className="w-4 h-4 mr-2 text-blue-600" />
-        <div className="text-sm font-semibold text-foreground">{data.label || 'Enviar Mensagem de Texto'}</div>
-      </div>
-      <p className="text-xs text-muted-foreground line-clamp-3 break-words">
-        {data.messageText || 'Clique para configurar o texto...'}
-      </p>
-      <Handle type="source" position={Position.Right} className="!bg-slate-400 w-2.5 h-2.5" />
-    </div>
+    <Card className={`text-xs shadow-md w-64 ${selected ? 'ring-2 ring-blue-500' : 'border-border'} bg-card`}>
+      <CardHeader className="bg-muted/50 p-2 rounded-t-lg">
+        <CardTitle className="text-xs font-semibold flex items-center">
+          <MessageSquareText className="w-4 h-4 text-blue-500 mr-2" />
+          {label || 'Enviar Mensagem'}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-3">
+        <div>
+          <Label htmlFor={`message-${id}`} className="text-xs font-medium">Conteúdo da Mensagem</Label>
+          <Textarea
+            id={`message-${id}`}
+            value={message}
+            // onChange={(e) => updateMessage(e.target.value)}
+            placeholder="Digite sua mensagem aqui... Use {{variavel}} para variáveis."
+            rows={4}
+            className="w-full text-xs mt-1"
+          />
+        </div>
+        <p className="text-muted-foreground text-[10px] mt-1 truncate" title={message}>
+          {message || "Nenhuma mensagem definida."}
+        </p>
+      </CardContent>
+      <Handle type="target" position={Position.Left} id="a" className="!bg-muted-foreground w-2.5 h-2.5" />
+      <Handle type="source" position={Position.Right} id="b" className="!bg-primary w-2.5 h-2.5" />
+    </Card>
   );
 };
 
-export default TextMessageNode;
+export default memo(TextMessageNode);
