@@ -15,11 +15,12 @@ import {
   MiniMap,
   BackgroundVariant,
   Panel,
-  NodeProps // Importado para tipar os nós customizados
+  NodeProps,
+  ReactFlowInstance // Importado para onInit
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-// Ajuste os imports dos nós para @zap_client se eles estiverem dentro de zap/client/src
+// Importe os componentes de nó
 import TextMessageNode from '@zap_client/components/flow_builder_nodes/TextMessageNode';
 import QuestionNode from '@zap_client/components/flow_builder_nodes/QuestionNode';
 import ConditionNode from '@zap_client/components/flow_builder_nodes/ConditionNode';
@@ -38,21 +39,19 @@ import SetVariableNode from '@zap_client/components/flow_builder_nodes/SetVariab
 import ExternalDataNode from '@zap_client/components/flow_builder_nodes/ExternalDataNode';
 import ApiCallNode from '@zap_client/components/flow_builder_nodes/ApiCallNode';
 
+// Importe os tipos de dados dos nós
+import {
+  TriggerNodeData, TextMessageNodeData, QuestionNodeData, ConditionNodeData,
+  ActionNodeData, DelayNodeData, EndNodeData, ListMessageNodeDataFE,
+  ButtonsMessageNodeData, MediaMessageNodeData, GptQueryNodeData, AiDecisionNodeData,
+  ClonedVoiceNodeData, TagContactNodeData, SetVariableNodeData, ExternalDataFetchNodeDataFE, ApiCallNodeData
+} from '@zap_client/features/types/whatsapp_flow_types';
+
 import { Button } from '@zap_client/components/ui/button';
-import { Input } from '@zap_client/components/ui/input'; // Import Adicionado
-import { PlusCircle, Save, Trash2, Zap as ZapIcon, Loader2 } from 'lucide-react'; // Loader2 importado
-
-// Tipos de Dados dos Nós (EXEMPLO - DEVEM SER DEFINIDOS E EXPORTADOS EM whatsapp_flow_types.ts)
-// E depois importados aqui.
-// import {
-//   TriggerNodeData, TextMessageNodeData, QuestionNodeData, ConditionNodeData,
-//   ActionNodeData, DelayNodeData, EndNodeData, ListMessageNodeDataFE,
-//   ButtonsMessageNodeData, MediaMessageNodeData, GptQueryNodeData, AiDecisionNodeData,
-//   ClonedVoiceNodeData, TagContactNodeData, SetVariableNodeData, ExternalDataFetchNodeDataFE, ApiCallNodeData
-// } from '@zap_client/features/types/whatsapp_flow_types';
+import { Input } from '@zap_client/components/ui/input';
+import { PlusCircle, Save, Trash2, Zap as ZapIcon, Loader2 } from 'lucide-react';
 
 
-// Definição de Props
 export interface ZapFlowBuilderProps {
   flowId: string;
   initialNodes?: Node[];
@@ -64,26 +63,26 @@ export interface ZapFlowBuilderProps {
   onSaveSuccess?: (flowId: string, flowName: string) => void;
 }
 
-// Tipo para nodeTypes (usando any temporariamente até que os tipos dos nós estejam corretos)
-// Idealmente, cada nó teria seu tipo de dados corretamente definido e importado.
-const nodeTypes: Record<string, React.ComponentType<NodeProps<any>>> = {
-  trigger: TriggerNode as React.ComponentType<NodeProps<any>>, // Cast para any temporariamente
-  textMessage: TextMessageNode as React.ComponentType<NodeProps<any>>,
-  question: QuestionNode as React.ComponentType<NodeProps<any>>,
-  listMessage: ListMessageNode as React.ComponentType<NodeProps<any>>,
-  buttonsMessage: ButtonsMessageNode as React.ComponentType<NodeProps<any>>,
-  mediaMessage: MediaMessageNode as React.ComponentType<NodeProps<any>>,
-  condition: ConditionNode as React.ComponentType<NodeProps<any>>,
-  delay: DelayNode as React.ComponentType<NodeProps<any>>,
-  action: ActionNode as React.ComponentType<NodeProps<any>>,
-  gptQuery: GptQueryNode as React.ComponentType<NodeProps<any>>,
-  aiDecision: AiDecisionNode as React.ComponentType<NodeProps<any>>,
-  clonedVoice: ClonedVoiceNode as React.ComponentType<NodeProps<any>>,
-  tagContact: TagContactNode as React.ComponentType<NodeProps<any>>,
-  setVariable: SetVariableNode as React.ComponentType<NodeProps<any>>,
-  externalData: ExternalDataNode as React.ComponentType<NodeProps<any>>,
-  apiCall: ApiCallNode as React.ComponentType<NodeProps<any>>,
-  end: EndNode as React.ComponentType<NodeProps<any>>,
+// Mapeamento dos tipos de nós para os componentes.
+// Certifique-se que cada componente de nó aceita NodeProps<SeuTipoDeDadosCorrespondente>
+const nodeTypes = {
+  trigger: TriggerNode as React.ComponentType<NodeProps<TriggerNodeData>>,
+  textMessage: TextMessageNode as React.ComponentType<NodeProps<TextMessageNodeData>>,
+  question: QuestionNode as React.ComponentType<NodeProps<QuestionNodeData>>,
+  listMessage: ListMessageNode as React.ComponentType<NodeProps<ListMessageNodeDataFE>>,
+  buttonsMessage: ButtonsMessageNode as React.ComponentType<NodeProps<ButtonsMessageNodeData>>,
+  mediaMessage: MediaMessageNode as React.ComponentType<NodeProps<MediaMessageNodeData>>,
+  condition: ConditionNode as React.ComponentType<NodeProps<ConditionNodeData>>,
+  delay: DelayNode as React.ComponentType<NodeProps<DelayNodeData>>,
+  action: ActionNode as React.ComponentType<NodeProps<ActionNodeData>>,
+  gptQuery: GptQueryNode as React.ComponentType<NodeProps<GptQueryNodeData>>,
+  aiDecision: AiDecisionNode as React.ComponentType<NodeProps<AiDecisionNodeData>>,
+  clonedVoice: ClonedVoiceNode as React.ComponentType<NodeProps<ClonedVoiceNodeData>>,
+  tagContact: TagContactNode as React.ComponentType<NodeProps<TagContactNodeData>>,
+  setVariable: SetVariableNode as React.ComponentType<NodeProps<SetVariableNodeData>>,
+  externalData: ExternalDataNode as React.ComponentType<NodeProps<ExternalDataFetchNodeDataFE>>,
+  apiCall: ApiCallNode as React.ComponentType<NodeProps<ApiCallNodeData>>,
+  end: EndNode as React.ComponentType<NodeProps<EndNodeData>>,
 };
 
 const defaultViewport = { x: 0, y: 0, zoom: 1 };
@@ -98,13 +97,12 @@ const ZapFlowBuilderWrapper: React.FC<ZapFlowBuilderProps> = ({
   onCloseEditor,
   onSaveSuccess,
 }) => {
-  const [nodes, setNodes] = useState<Node[]>(initialNodesProp || []);
+  const [nodes, setNodes] = useState<Node<any>[]>(initialNodesProp || []); // Usar Node<any> ou um tipo união dos seus NodeData
   const [edges, setEdges] = useState<Edge[]>(initialEdgesProp || []);
   const [flowName, setFlowName] = useState(initialFlowName || `Fluxo ${flowId}`);
   const [isLoading, setIsLoading] = useState(true);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [rfInstance, setRfInstance] = useState<any>(null); // Para ReactFlowInstance
+  const [rfInstance, setRfInstance] = useState<ReactFlowInstance | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -117,16 +115,16 @@ const ZapFlowBuilderWrapper: React.FC<ZapFlowBuilderProps> = ({
             setEdges(loadedData.edges || []);
             if(loadedData.name) setFlowName(loadedData.name);
           } else {
-            setNodes([{ id: 'trigger_0', type: 'trigger', position: { x: 250, y: 5 }, data: { label: 'Início do Fluxo' } }]);
+            setNodes([{ id: 'trigger_0', type: 'trigger', position: { x: 250, y: 5 }, data: { label: 'Início do Fluxo' } as TriggerNodeData }]);
             setEdges([]);
             setFlowName(`Novo Fluxo ${new Date().toLocaleTimeString()}`);
           }
         } catch (error) {
           console.error("Erro ao carregar fluxo:", error);
-           setNodes([{ id: 'trigger_0', type: 'trigger', position: { x: 250, y: 5 }, data: { label: 'Início do Fluxo (Erro ao Carregar)' } }]);
+           setNodes([{ id: 'trigger_0', type: 'trigger', position: { x: 250, y: 5 }, data: { label: 'Início do Fluxo (Erro ao Carregar)' } as TriggerNodeData }]);
         }
       } else {
-         setNodes([{ id: 'trigger_0', type: 'trigger', position: { x: 250, y: 5 }, data: { label: 'Novo Fluxo' } }]);
+         setNodes([{ id: 'trigger_0', type: 'trigger', position: { x: 250, y: 5 }, data: { label: 'Novo Fluxo' } as TriggerNodeData }]);
          setEdges([]);
          setFlowName(initialFlowName || `Novo Fluxo`);
       }
@@ -148,8 +146,15 @@ const ZapFlowBuilderWrapper: React.FC<ZapFlowBuilderProps> = ({
     [setEdges]
   );
 
-  const addNode = (type: string) => {
-    const newNodeId = `${type}_${nodes.length + Date.now()}`; // Adicionado Date.now() para maior unicidade
+  const addNode = (type: keyof typeof nodeTypes) => { // Tipado para chaves de nodeTypes
+    const newNodeId = `${type}_${nodes.length + Date.now()}`;
+    let initialData: any = { label: `Novo ${type}` };
+
+    // Você pode querer dados iniciais específicos por tipo de nó
+    if (type === 'trigger') initialData = { label: 'Início', triggerType: 'manual' } as TriggerNodeData;
+    if (type === 'textMessage') initialData = { label: 'Mensagem', message: 'Olá!' } as TextMessageNodeData;
+    // Adicione mais defaults aqui
+
     const newNode: Node = {
       id: newNodeId,
       type,
@@ -157,7 +162,7 @@ const ZapFlowBuilderWrapper: React.FC<ZapFlowBuilderProps> = ({
         x: Math.random() * (reactFlowWrapper.current?.clientWidth || 800) * 0.7,
         y: Math.random() * (reactFlowWrapper.current?.clientHeight || 600) * 0.7,
       },
-      data: { label: `Novo ${type}` }, // Dados iniciais podem precisar ser mais específicos por tipo
+      data: initialData,
     };
     setNodes((nds) => nds.concat(newNode));
   };
@@ -166,8 +171,6 @@ const ZapFlowBuilderWrapper: React.FC<ZapFlowBuilderProps> = ({
     if (onSaveFlow) {
       setIsLoading(true);
       try {
-        // const currentFlowName = prompt("Nome do Fluxo:", flowName); // prompt pode ser problemático
-        // Usar o estado flowName diretamente ou um modal para editar
         if (flowName) {
             await onSaveFlow(flowId, nodes, edges, flowName);
             if (onSaveSuccess) onSaveSuccess(flowId, flowName);
@@ -203,10 +206,10 @@ const ZapFlowBuilderWrapper: React.FC<ZapFlowBuilderProps> = ({
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
-        nodeTypes={nodeTypes} // Deixe comentado se ainda estiver causando erros TS2322
+        nodeTypes={nodeTypes} // Descomentado - requer que os tipos de nós e seus dados estejam corretos
         defaultViewport={defaultViewport}
         fitView
-        onInit={setRfInstance} // Adicionado para ReactFlowInstance, se necessário
+        onInit={setRfInstance}
         attributionPosition="bottom-left"
         proOptions={{ hideAttribution: true }}
       >
@@ -218,7 +221,7 @@ const ZapFlowBuilderWrapper: React.FC<ZapFlowBuilderProps> = ({
                 value={flowName} 
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFlowName(e.target.value)} 
                 placeholder="Nome do Fluxo"
-                className="border-border w-auto text-xs h-8 neu-input" // Adicionado neu-input
+                className="border-border w-auto text-xs h-8 neu-input"
             />
         </Panel>
         <Panel position="top-right" className="p-2 space-x-1 flex bg-background/80 rounded-md shadow">
@@ -231,7 +234,6 @@ const ZapFlowBuilderWrapper: React.FC<ZapFlowBuilderProps> = ({
            <Button onClick={() => addNode('condition')} size="sm" variant="outline" className="neu-button text-xs">
              <PlusCircle className="mr-1 h-3 w-3" /> Condição
           </Button>
-          {/* Adicionar mais botões para outros tipos de nós aqui */}
           <Button onClick={handleSave} size="sm" variant="default" className="neu-button-primary text-xs" disabled={isLoading}>
             {isLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />} Salvar
           </Button>
