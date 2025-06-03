@@ -1,4 +1,4 @@
-import React, { memo, useState, useEffect, useCallback, ChangeEvent, KeyboardEvent } from 'react'; // Adicionado KeyboardEvent
+import React, { memo, useState, useEffect, useCallback, ChangeEvent, KeyboardEvent } from 'react';
 import { Handle, Position, useReactFlow, NodeToolbar, NodeProps as ReactFlowNodeProps } from '@xyflow/react';
 import { TriggerNodeData, FlowNodeType, HandleData } from '@zap_client/features/types/whatsapp_flow_types';
 import { Card, CardContent, CardHeader, CardTitle } from '@zap_client/components/ui/card';
@@ -15,9 +15,11 @@ const defaultHandles: HandleData[] = [
   { id: 'output', type: 'source', position: Position.Right, label: 'Início do Fluxo', style: { top: '50%' } },
 ];
 
+// CORRIGIDO: Tipagem explícita das props usando ReactFlowNodeProps<TriggerNodeData>
 const TriggerNodeComponent: React.FC<ReactFlowNodeProps<TriggerNodeData>> = ({ id, data, selected }) => {
   const { setNodes } = useReactFlow();
   
+  // Agora 'data' é corretamente tipado como TriggerNodeData
   const [triggerType, setTriggerType] = useState<TriggerNodeData['triggerType']>(data.triggerType || 'keyword');
   const [keywords, setKeywords] = useState<string>(data.keywords?.join(', ') || '');
   const [pattern, setPattern] = useState<string>(data.pattern || '');
@@ -25,20 +27,20 @@ const TriggerNodeComponent: React.FC<ReactFlowNodeProps<TriggerNodeData>> = ({ i
   const [isEditingLabel, setIsEditingLabel] = useState<boolean>(false);
 
   useEffect(() => {
-    // Sincronizar estado interno se `data` prop mudar externamente
     setTriggerType(data.triggerType || 'keyword');
     setKeywords(data.keywords?.join(', ') || '');
     setPattern(data.pattern || '');
     setLabel(data.label || 'Gatilho');
   }, [data]);
 
-  const updateNodeDataCallback = useCallback( // Renomeado para evitar conflito de nome se houver outro updateNodeData no escopo
+  const updateNodeDataCallback = useCallback(
     (newData: Partial<TriggerNodeData>) => {
       setNodes((nds) =>
         nds.map((node) => {
           if (node.id === id) {
-            // Assegura que o data seja do tipo correto antes de espalhar
-            const currentData = node.data as TriggerNodeData;
+            // 'node.data' aqui é FlowNodeData (a união). Cast para TriggerNodeData é seguro
+            // se o tipo do nó for realmente triggerNode.
+            const currentData = node.data as TriggerNodeData; 
             return { ...node, data: { ...currentData, ...newData } };
           }
           return node;
