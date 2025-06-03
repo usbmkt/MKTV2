@@ -1,127 +1,65 @@
-import React, { memo, useState, useEffect, useCallback } from 'react';
-import { Handle, Position, NodeToolbar, NodeProps as ReactFlowNodeProps } from '@xyflow/react'; // Usar NodeProps diretamente
-import { ActionNodeData, FlowNodeType, HandleData, ActionType } from '@zap_client/features/types/whatsapp_flow_types'; // Corrigido path
-import { Card, CardContent, CardHeader, CardTitle } from '@zap_client/components/ui/card'; // Corrigido path
-import { Button } from '@zap_client/components/ui/button'; // Corrigido path
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@zap_client/components/ui/select'; // Corrigido path
-import { Input } from '@zap_client/components/ui/input'; // Corrigido path
-import { Label } from '@zap_client/components/ui/label'; // Corrigido path
-import { Bot, Trash2, Edit3, Settings, Mail, Tag, UserPlus, Webhook } from 'lucide-react';
-import { cn } from '@zap_client/lib/utils'; // Corrigido path
-import { useReactFlow } from '@xyflow/react';
+import React, { memo, useState, useEffect, useCallback, ChangeEvent } from 'react'; // Adicionado ChangeEvent
+import { Handle, Position, NodeToolbar, NodeProps as ReactFlowNodeProps, useReactFlow } from '@xyflow/react';
+import { ActionNodeData, FlowNodeType, HandleData, ActionType } from '@zap_client/features/types/whatsapp_flow_types';
+import { Card, CardContent, CardHeader, CardTitle } from '@zap_client/components/ui/card';
+import { Button } from '@zap_client/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@zap_client/components/ui/select';
+import { Input } from '@zap_client/components/ui/input';
+import { Label } from '@zap_client/components/ui/label';
+import { Settings, Trash2, Edit3 } from 'lucide-react'; // Removidos Mail, Tag, UserPlus, Webhook não usados diretamente aqui
+import { cn } from '@zap_client/lib/utils';
+
 
 const defaultHandles: HandleData[] = [
   { id: 'input', type: 'target', position: Position.Left, label: 'Entrada', style: { top: '50%' } },
   { id: 'output', type: 'source', position: Position.Right, label: 'Saída', style: { top: '50%' } },
 ];
 
-// Usando ReactFlowNodeProps<ActionNodeData> para tipar as props
-const ActionNode: React.FC<ReactFlowNodeProps<ActionNodeData>> = ({ id, data, selected }) => {
+const ActionNodeComponent: React.FC<ReactFlowNodeProps<ActionNodeData>> = ({ id, data, selected }) => {
   const { setNodes } = useReactFlow();
 
-  // Estados locais para os campos do nó
   const [label, setLabel] = useState(data.label || 'Nova Ação');
   const [actionType, setActionType] = useState<ActionType>(data.actionType || ActionType.ADD_TAG);
-  
-  // Estados para parâmetros específicos da ação
-  const [tagName, setTagName] = useState(data.actionParams?.tagName || '');
-  const [agentId, setAgentId] = useState(data.actionParams?.agentId || '');
-  const [emailTemplateId, setEmailTemplateId] = useState(data.actionParams?.emailTemplateId || '');
-  const [contactPropertyName, setContactPropertyName] = useState(data.actionParams?.contactPropertyName || '');
-  const [contactPropertyValue, setContactPropertyValue] = useState(data.actionParams?.contactPropertyValue || '');
-  const [webhookUrl, setWebhookUrl] = useState(data.actionParams?.apiUrl || ''); // Assumindo apiUrl para webhook
-
+  const [actionParams, setActionParams] = useState(data.actionParams || {});
   const [isEditingLabel, setIsEditingLabel] = useState(false);
 
-
   useEffect(() => {
-    // Atualizar estados locais se `data` prop mudar externamente
     setLabel(data.label || 'Nova Ação');
     setActionType(data.actionType || ActionType.ADD_TAG);
-    setTagName(data.actionParams?.tagName || '');
-    setAgentId(data.actionParams?.agentId || '');
-    setEmailTemplateId(data.actionParams?.emailTemplateId || '');
-    setContactPropertyName(data.actionParams?.contactPropertyName || '');
-    setContactPropertyValue(data.actionParams?.contactPropertyValue || '');
-    setWebhookUrl(data.actionParams?.apiUrl || '');
+    setActionParams(data.actionParams || {});
   }, [data]);
 
-  const updateNodeActionParams = (paramName: string, value: any) => {
+  const updateNodeFullData = useCallback((newFullData: ActionNodeData) => {
     setNodes((nds) =>
-      nds.map((node) => {
-        if (node.id === id) {
-          const currentData = node.data as ActionNodeData;
-          return {
-            ...node,
-            data: {
-              ...currentData,
-              actionParams: {
-                ...currentData.actionParams,
-                [paramName]: value,
-              },
-            },
-          };
-        }
-        return node;
-      })
-    );
-  };
-  
-  const updateNodeField = useCallback((field: keyof ActionNodeData, value: any) => {
-    setNodes((nds) =>
-      nds.map((node) => {
-        if (node.id === id) {
-          return { ...node, data: { ...node.data, [field]: value } };
-        }
-        return node;
-      })
+      nds.map((node) => (node.id === id ? { ...node, data: newFullData } : node))
     );
   }, [id, setNodes]);
-
-
+  
   const handleLabelChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setLabel(e.target.value);
   };
+
   const handleLabelSave = () => {
-    updateNodeField('label', label);
+    const newLabel = label.trim() || `Ação ${data.actionType}`;
+    setLabel(newLabel);
+    updateNodeFullData({ ...data, label: newLabel });
     setIsEditingLabel(false);
   };
+  
   const handleActionTypeChange = (value: string) => {
     const newActionType = value as ActionType;
     setActionType(newActionType);
-    updateNodeField('actionType', newActionType);
-    // Resetar actionParams relevantes ao mudar o tipo
-    updateNodeField('actionParams', {}); 
-    setTagName(''); setAgentId(''); setEmailTemplateId(''); 
-    setContactPropertyName(''); setContactPropertyValue(''); setWebhookUrl('');
+    // Resetar actionParams ao mudar o tipo, pois os parâmetros podem ser diferentes
+    const newParams = {};
+    setActionParams(newParams);
+    updateNodeFullData({ ...data, label: data.label, actionType: newActionType, actionParams: newParams });
   };
 
-  // Handlers para mudanças nos parâmetros específicos
-  const handleTagNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setTagName(e.target.value);
-    updateNodeActionParams('tagName', e.target.value);
+  const handleParamChange = (paramName: string, value: string) => {
+    const newParams = { ...actionParams, [paramName]: value };
+    setActionParams(newParams);
+    updateNodeFullData({ ...data, label: data.label, actionType: actionType, actionParams: newParams });
   };
-  const handleAgentIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setAgentId(e.target.value);
-    updateNodeActionParams('agentId', e.target.value);
-  };
-  const handleEmailTemplateIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setEmailTemplateId(e.target.value);
-    updateNodeActionParams('emailTemplateId', e.target.value);
-  };
-    const handleContactPropertyNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setContactPropertyName(e.target.value);
-    updateNodeActionParams('contactPropertyName', e.target.value);
-  };
-  const handleContactPropertyValueChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setContactPropertyValue(e.target.value);
-    updateNodeActionParams('contactPropertyValue', e.target.value);
-  };
-  const handleWebhookUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setWebhookUrl(e.target.value);
-    updateNodeActionParams('apiUrl', e.target.value); // Assumindo que apiUrl é usado para webhook
-  };
-
 
   const handleDeleteNode = () => {
     setNodes((nds) => nds.filter(node => node.id !== id));
@@ -129,59 +67,94 @@ const ActionNode: React.FC<ReactFlowNodeProps<ActionNodeData>> = ({ id, data, se
 
   const handlesToRender = data.handles || defaultHandles;
 
-  const renderActionParams = () => {
+  const renderActionParamsInputs = () => {
     switch (actionType) {
       case ActionType.ADD_TAG:
       case ActionType.REMOVE_TAG:
         return (
           <div>
-            <Label htmlFor={`tag-name-${id}`} className="text-xs">Nome da Tag</Label>
-            <Input id={`tag-name-${id}`} value={tagName} onChange={handleTagNameChange} placeholder="Ex: cliente_vip" className="mt-1 neu-input" />
+            <Label htmlFor={`param-tagName-${id}`} className="text-xs">Nome da Tag</Label>
+            <Input 
+              id={`param-tagName-${id}`} 
+              value={actionParams.tagName || ''} 
+              onChange={(e: ChangeEvent<HTMLInputElement>) => handleParamChange('tagName', e.target.value)} 
+              placeholder="Ex: cliente_vip" 
+              className="mt-1 neu-input" 
+            />
           </div>
         );
       case ActionType.ASSIGN_TO_AGENT:
         return (
           <div>
-            <Label htmlFor={`agent-id-${id}`} className="text-xs">ID do Agente</Label>
-            <Input id={`agent-id-${id}`} value={agentId} onChange={handleAgentIdChange} placeholder="Ex: agente_007" className="mt-1 neu-input" />
+            <Label htmlFor={`param-agentId-${id}`} className="text-xs">ID do Agente/Usuário</Label>
+            <Input 
+              id={`param-agentId-${id}`} 
+              value={actionParams.agentId || ''} 
+              onChange={(e: ChangeEvent<HTMLInputElement>) => handleParamChange('agentId', e.target.value)} 
+              placeholder="Ex: user_123 ou email@example.com" 
+              className="mt-1 neu-input" 
+            />
           </div>
         );
       case ActionType.SEND_EMAIL:
-         return (
-            <div>
-                <Label htmlFor={`email-template-id-${id}`} className="text-xs">ID do Template de Email</Label>
-                <Input id={`email-template-id-${id}`} value={emailTemplateId} onChange={handleEmailTemplateIdChange} placeholder="Ex: template_boas_vindas" className="mt-1 neu-input" />
-            </div>
+        return (
+            <>
+                <div>
+                    <Label htmlFor={`param-to-${id}`} className="text-xs">Para (Email)</Label>
+                    <Input id={`param-to-${id}`} value={actionParams.to || ''} onChange={(e) => handleParamChange('to', e.target.value)} placeholder="{{contact.email}} ou email@destino.com" className="mt-1 neu-input" />
+                </div>
+                <div>
+                    <Label htmlFor={`param-subject-${id}`} className="text-xs">Assunto</Label>
+                    <Input id={`param-subject-${id}`} value={actionParams.subject || ''} onChange={(e) => handleParamChange('subject', e.target.value)} placeholder="Assunto do seu email" className="mt-1 neu-input" />
+                </div>
+                <div>
+                    <Label htmlFor={`param-emailTemplateId-${id}`} className="text-xs">ID do Template de Email (Opcional)</Label>
+                    <Input id={`param-emailTemplateId-${id}`} value={actionParams.emailTemplateId || ''} onChange={(e) => handleParamChange('emailTemplateId', e.target.value)} placeholder="Ex: template_bem_vindo_email" className="mt-1 neu-input" />
+                    <p className="text-xs text-muted-foreground mt-1">Se usar template, o corpo abaixo pode ser ignorado ou usado como fallback.</p>
+                </div>
+                <div>
+                    <Label htmlFor={`param-body-${id}`} className="text-xs">Corpo do Email (HTML ou Texto)</Label>
+                    <Textarea id={`param-body-${id}`} value={actionParams.body || ''} onChange={(e) => handleParamChange('body', e.target.value)} placeholder="Conteúdo do seu email..." className="mt-1 neu-input" rows={3}/>
+                </div>
+            </>
         );
       case ActionType.SET_CONTACT_FIELD:
         return (
-            <div className="space-y-2">
-                <div>
-                    <Label htmlFor={`contact-prop-name-${id}`} className="text-xs">Nome da Propriedade do Contato</Label>
-                    <Input id={`contact-prop-name-${id}`} value={contactPropertyName} onChange={handleContactPropertyNameChange} placeholder="Ex: cidade" className="mt-1 neu-input" />
-                </div>
-                <div>
-                    <Label htmlFor={`contact-prop-value-${id}`} className="text-xs">Valor da Propriedade</Label>
-                    <Input id={`contact-prop-value-${id}`} value={contactPropertyValue} onChange={handleContactPropertyValueChange} placeholder="Ex: São Paulo" className="mt-1 neu-input" />
-                </div>
+          <>
+            <div>
+              <Label htmlFor={`param-fieldName-${id}`} className="text-xs">Nome do Campo do Contato</Label>
+              <Input 
+                id={`param-fieldName-${id}`} 
+                value={actionParams.fieldName || ''} 
+                onChange={(e: ChangeEvent<HTMLInputElement>) => handleParamChange('fieldName', e.target.value)} 
+                placeholder="Ex: cidade, custom_field_123" 
+                className="mt-1 neu-input" 
+              />
             </div>
+            <div>
+              <Label htmlFor={`param-fieldValue-${id}`} className="text-xs">Valor para o Campo</Label>
+              <Input 
+                id={`param-fieldValue-${id}`} 
+                value={actionParams.fieldValue || ''} 
+                onChange={(e: ChangeEvent<HTMLInputElement>) => handleParamChange('fieldValue', e.target.value)} 
+                placeholder="Use {{variavel}} para valores dinâmicos" 
+                className="mt-1 neu-input" 
+              />
+            </div>
+          </>
         );
-        // Adicionar casos para SUBSCRIBE_SEQUENCE, UNSUBSCRIBE_SEQUENCE, START_FLOW (chamada API) etc.
-        // Exemplo START_FLOW (se for uma chamada API para iniciar outro fluxo):
-      /*
+      // Adicionar mais cases para START_FLOW, SUBSCRIBE_SEQUENCE, UNSUBSCRIBE_SEQUENCE, WAIT
       case ActionType.START_FLOW:
         return (
-          <div>
-            <Label htmlFor={`webhook-url-${id}`} className="text-xs">URL do Webhook/API para Iniciar Fluxo</Label>
-            <Input id={`webhook-url-${id}`} value={webhookUrl} onChange={handleWebhookUrlChange} placeholder="https://api.exemplo.com/start-flow" className="mt-1 neu-input" />
-          </div>
+            <div>
+                <Label htmlFor={`param-targetFlowId-${id}`} className="text-xs">ID do Fluxo de Destino</Label>
+                <Input id={`param-targetFlowId-${id}`} value={actionParams.targetFlowId || ''} onChange={(e) => handleParamChange('targetFlowId', e.target.value)} placeholder="ID do fluxo a ser iniciado" className="mt-1 neu-input" />
+            </div>
         );
-      */
       default:
-        return <p className="text-xs text-muted-foreground">Configure os parâmetros desta ação.</p>;
+        return <p className="text-xs text-muted-foreground">Selecione um tipo de ação para ver os parâmetros.</p>;
     }
   };
-
 
   return (
     <Card className={cn("w-72 shadow-md neu-card", selected && "ring-2 ring-indigo-500 ring-offset-2")}>
@@ -205,6 +178,7 @@ const ActionNode: React.FC<ReactFlowNodeProps<ActionNodeData>> = ({ id, data, se
             {data.label || 'Ação'}
           </CardTitle>
         )}
+        <Badge variant="default" className="bg-indigo-500 text-white capitalize">{data.nodeType.replace('Node', '')}</Badge>
       </CardHeader>
       <CardContent className="p-3 space-y-3">
         <div>
@@ -221,23 +195,23 @@ const ActionNode: React.FC<ReactFlowNodeProps<ActionNodeData>> = ({ id, data, se
           </Select>
         </div>
         <div className="mt-2 p-2 border-t border-dashed">
-            {renderActionParams()}
+            {renderActionParamsInputs()}
         </div>
       </CardContent>
 
-      {handlesToRender.map(handle => (
+      {handlesToRender.map((handleItem: HandleData) => ( // Adicionado tipo HandleData
         <Handle
-          key={handle.id}
-          id={handle.id}
-          type={handle.type}
-          position={handle.position}
-          isConnectable={handle.isConnectable !== undefined ? handle.isConnectable : true}
-          style={{ ...handle.style, background: '#5c6bc0', width: '10px', height: '10px' }} // Cor índigo
-          aria-label={handle.label}
+          key={handleItem.id}
+          id={handleItem.id}
+          type={handleItem.type}
+          position={handleItem.position}
+          isConnectable={handleItem.isConnectable !== undefined ? handleItem.isConnectable : true}
+          style={{ ...handleItem.style, background: '#4f46e5', width: '10px', height: '10px' }} // Cor índigo para consistência
+          aria-label={handleItem.label}
         />
       ))}
     </Card>
   );
 };
 
-export default memo(ActionNode);
+export default memo(ActionNodeComponent);
