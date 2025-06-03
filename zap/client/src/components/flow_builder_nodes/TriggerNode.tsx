@@ -1,4 +1,4 @@
-import React, { memo, useState, useEffect, useCallback } from 'react';
+import React, { memo, useState, useEffect, useCallback, ChangeEvent } from 'react';
 import { Handle, Position, useReactFlow, NodeToolbar, NodeProps as ReactFlowNodeProps } from '@xyflow/react';
 import { TriggerNodeData, FlowNodeType, HandleData } from '@zap_client/features/types/whatsapp_flow_types';
 import { Card, CardContent, CardHeader, CardTitle } from '@zap_client/components/ui/card';
@@ -18,11 +18,11 @@ const defaultHandles: HandleData[] = [
 const TriggerNodeComponent: React.FC<ReactFlowNodeProps<TriggerNodeData>> = ({ id, data, selected }) => {
   const { setNodes } = useReactFlow();
   
-  const [triggerType, setTriggerType] = useState(data.triggerType || 'keyword');
-  const [keywords, setKeywords] = useState(data.keywords?.join(', ') || '');
-  const [pattern, setPattern] = useState(data.pattern || '');
-  const [label, setLabel] = useState(data.label || 'Gatilho');
-  const [isEditingLabel, setIsEditingLabel] = useState(false);
+  const [triggerType, setTriggerType] = useState<TriggerNodeData['triggerType']>(data.triggerType || 'keyword');
+  const [keywords, setKeywords] = useState<string>(data.keywords?.join(', ') || '');
+  const [pattern, setPattern] = useState<string>(data.pattern || '');
+  const [label, setLabel] = useState<string>(data.label || 'Gatilho');
+  const [isEditingLabel, setIsEditingLabel] = useState<boolean>(false);
 
   useEffect(() => {
     setTriggerType(data.triggerType || 'keyword');
@@ -36,13 +36,14 @@ const TriggerNodeComponent: React.FC<ReactFlowNodeProps<TriggerNodeData>> = ({ i
       setNodes((nds) =>
         nds.map((node) => {
           if (node.id === id) {
-            return { ...node, data: { ...(node.data as TriggerNodeData), ...newData } };
+            const currentData = node.data as TriggerNodeData; // Cast para o tipo específico
+            return { ...node, data: { ...currentData, ...newData } };
           }
           return node;
         })
       );
     },
-    [id, setNodes] // Adicionado setNodes às dependências
+    [id, setNodes] 
   );
 
   const handleLabelChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -57,8 +58,7 @@ const TriggerNodeComponent: React.FC<ReactFlowNodeProps<TriggerNodeData>> = ({ i
   const handleTriggerTypeChange = (value: string) => {
     const newType = value as TriggerNodeData['triggerType'];
     setTriggerType(newType);
-    // Ao mudar o tipo, preservamos os valores relevantes se possível
-    const currentKeywordsArray = keywords.split(',').map(k => k.trim()).filter(k => k);
+    const currentKeywordsArray = keywords.split(',').map((k: string) => k.trim()).filter((k: string) => k);
     const currentPattern = pattern;
     updateNodeData({ 
         triggerType: newType, 
@@ -70,7 +70,7 @@ const TriggerNodeComponent: React.FC<ReactFlowNodeProps<TriggerNodeData>> = ({ i
   const handleKeywordsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newKeywords = e.target.value;
     setKeywords(newKeywords);
-    updateNodeData({ keywords: newKeywords.split(',').map(k => k.trim()).filter(k => k) });
+    updateNodeData({ keywords: newKeywords.split(',').map((k: string) => k.trim()).filter((k: string) => k) });
   };
 
   const handlePatternChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -99,7 +99,7 @@ const TriggerNodeComponent: React.FC<ReactFlowNodeProps<TriggerNodeData>> = ({ i
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 pt-3 px-4 bg-green-500/10 dark:bg-green-700/20 rounded-t-lg">
         {isEditingLabel ? (
           <div className="flex items-center gap-2">
-            <Input value={label} onChange={handleLabelChange} className="text-sm h-7" autoFocus onBlur={handleLabelSave} onKeyDown={(e) => e.key === 'Enter' && handleLabelSave()}/>
+            <Input value={label} onChange={handleLabelChange} className="text-sm h-7" autoFocus onBlur={handleLabelSave} onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => e.key === 'Enter' && handleLabelSave()}/>
             <Button size="sm" onClick={handleLabelSave} className="h-7">Salvar</Button>
           </div>
         ) : (
