@@ -1,33 +1,63 @@
 // zap/client/src/components/flow_builder_nodes/TagContactNode.tsx
-import React from 'react';
+import React, { memo } from 'react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
-import { Tag } from 'lucide-react';
-import { cn } from '@zap_client/lib/utils';
-import { type TagContactNodeData } from '@zap_client/features/types/whatsapp_flow_types'; // Supondo que o tipo foi movido
+import { Card, CardContent, CardHeader, CardTitle } from '@zap_client/components/ui/card';
+import { Input } from '@zap_client/components/ui/input';
+import { Label } from '@zap_client/components/ui/label';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@zap_client/components/ui/select';
+import { Tag as TagIcon } from 'lucide-react'; // Renomeado para TagIcon
+import { TagContactNodeData } from '@zap_client/features/types/whatsapp_flow_types';
 
-const TagContactNode: React.FC<NodeProps<TagContactNodeData>> = ({ data, selected, id }) => {
+const TagContactNode: React.FC<NodeProps<TagContactNodeData>> = ({ data, id, selected }) => {
+  const { 
+    label = 'Marcar Contato', 
+    tagOperation = 'add', 
+    tagName = '' 
+  } = data;
+
+  // Lógica para atualizar 'data'
+  // const updateData = (field: keyof TagContactNodeData, value: any) => { /* ... */ };
+
   return (
-    <div
-      className={cn(
-        "p-3 rounded-md shadow-md bg-card border border-fuchsia-500/70 w-64 hover:shadow-lg transition-shadow",
-        selected && "ring-2 ring-fuchsia-600 ring-offset-1"
-      )}
-    >
-      <Handle type="target" position={Position.Left} id={`${id}-target`} className="!bg-slate-400 w-2.5 h-2.5" />
-      <div className="flex items-center mb-2">
-        <Tag className="w-4 h-4 mr-2 text-fuchsia-600 flex-shrink-0" />
-        <div className="text-sm font-semibold text-foreground truncate" title={data.label || 'Etiquetar Contato'}>{data.label || 'Etiquetar Contato'}</div>
-      </div>
-      <div className="text-xs text-muted-foreground space-y-0.5">
-        <p className="truncate">
-            <span className="font-medium">Ação:</span> {data.action === 'remove' ? 'Remover' : 'Adicionar'} Tag
-        </p>
-        <p className="truncate" title={data.tagName}>
-            <span className="font-medium">Tag:</span> {data.tagName || 'N/D'}
-        </p>
-      </div>
-      <Handle type="source" position={Position.Right} id={`${id}-source`} className="!bg-slate-400 w-2.5 h-2.5" />
-    </div>
+    <Card className={`text-xs shadow-md w-64 ${selected ? 'ring-2 ring-sky-500' : 'border-border'} bg-card`}>
+      <CardHeader className="bg-muted/50 p-2 rounded-t-lg">
+        <CardTitle className="text-xs font-semibold flex items-center">
+          <TagIcon className="w-4 h-4 text-sky-500 mr-2" />
+          {label || 'Adicionar/Remover Tag'}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-3 space-y-2">
+        <div>
+          <Label htmlFor={`operation-${id}`} className="text-xs font-medium">Operação</Label>
+          <Select
+            value={tagOperation}
+            // onValueChange={(value) => updateData('tagOperation', value as TagContactNodeData['tagOperation'])}
+          >
+            <SelectTrigger id={`operation-${id}`} className="w-full h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="add">Adicionar Tag</SelectItem>
+              <SelectItem value="remove">Remover Tag</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label htmlFor={`tagName-${id}`} className="text-xs font-medium">Nome da Tag</Label>
+          <Input
+            id={`tagName-${id}`}
+            type="text"
+            placeholder="Ex: cliente_vip"
+            value={tagName}
+            // onChange={(e) => updateData('tagName', e.target.value)}
+            className="w-full h-8 text-xs"
+          />
+        </div>
+      </CardContent>
+      <Handle type="target" position={Position.Left} className="!bg-muted-foreground w-2.5 h-2.5" />
+      <Handle type="source" position={Position.Right} className="!bg-primary w-2.5 h-2.5" />
+    </Card>
   );
 };
-export default TagContactNode;
+
+export default memo(TagContactNode);
