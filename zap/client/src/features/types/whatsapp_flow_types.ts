@@ -36,8 +36,6 @@ export enum ActionType {
   WAIT = 'WAIT',
 }
 
-// ConditionType não é usado diretamente nos dados do nó Condição,
-// mas pode ser útil para selectores de UI. As regras estão em branchConfigs.
 export enum ConditionOperator {
   EQUALS = 'equals',
   NOT_EQUALS = 'not_equals',
@@ -109,7 +107,7 @@ export interface QuestionNodeData extends BaseNodeData {
   questionText: string;
   expectedResponseType: 'text' | 'number' | 'email' | 'phone' | 'date' | 'options';
   variableToStoreAnswer: string;
-  options?: Array<{ id: string; label: string; value: string; nextNodeId?: string }>; // Adicionado ID para options
+  options?: Array<{ id: string; label: string; value: string; nextNodeId?: string }>; 
   validationRegex?: string;
   errorMessage?: string;
   enableAiSuggestions?: boolean;
@@ -121,7 +119,7 @@ export interface ListMessageItem {
   description?: string;
 }
 export interface ListMessageSection {
-  id: string; // Adicionado ID para sections
+  id: string; 
   title: string;
   rows: ListMessageItem[];
 }
@@ -179,8 +177,8 @@ export interface ConditionRule {
   valueType?: VariableType;
 }
 
-export interface ConditionBranchConfig { // Renomeado para evitar conflito com ConditionBranch (não definido)
-  id: string; // Para key no map
+export interface ConditionBranchConfig { 
+  id: string; 
   handleId: string; 
   label: string; 
   rules: ConditionRule[];
@@ -204,7 +202,7 @@ export interface ActionNodeData extends BaseNodeData {
 }
 
 export interface VariableAssignment { 
-    id: string; // Adicionado ID para key no map
+    id: string; 
     variableName: string;
     value: any; 
     sourceType: 'static' | 'variable' | 'expression' | 'api_response'; 
@@ -231,23 +229,23 @@ export interface GptQueryNodeData extends BaseNodeData {
   variableToStoreResponse: string; 
 }
 
-export interface ApiHeader { id: string; key: string; value: string; } // Para headers de API
-export interface ApiQueryParam { id: string; key: string; value: string; } // Para query params
-export interface ApiResponseMapping { id: string; sourcePath: string; targetVariable: string; } // Para response mapping
+export interface ApiHeader { id: string; key: string; value: string; } 
+export interface ApiQueryParam { id: string; key: string; value: string; } 
+export interface ApiResponseMapping { id: string; sourcePath: string; targetVariable: string; } 
 export interface ApiCallNodeData extends BaseNodeData {
   nodeType: FlowNodeType.API_CALL;
   apiUrl: string; 
   method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
   headers?: ApiHeader[]; 
-  body?: string; // JSON string
+  body?: string; 
   queryParams?: ApiQueryParam[];
   variableToStoreResponse?: string;
-  responsePath?: string; // JSONPath para extrair uma parte específica da resposta
-  responseMappings?: ApiResponseMapping[]; // Mapeamento mais granular de partes da resposta
+  responsePath?: string; 
+  responseMappings?: ApiResponseMapping[]; 
 }
 
-export interface AiDecisionOutcome { // Renomeado de AiDecisionPossibleOutcome
-    id: string; // Para key
+export interface AiDecisionOutcome { 
+    id: string; 
     label: string; 
     value: string; 
     handleId: string;
@@ -263,8 +261,8 @@ export interface ExternalDataNodeData extends BaseNodeData {
   nodeType: FlowNodeType.EXTERNAL_DATA;
   dataSourceUrl: string;
   requestType: 'GET' | 'POST';
-  requestPayload?: any; // JSON string ou objeto
-  responseMapping: ApiResponseMapping[]; // Reutilizado ApiResponseMapping
+  requestPayload?: any; 
+  responseMapping: ApiResponseMapping[]; 
 }
 
 export interface EndNodeData extends BaseNodeData {
@@ -273,7 +271,7 @@ export interface EndNodeData extends BaseNodeData {
   finalMessage?: string; 
 }
 
-export type FlowNodeData = // Renomeado de FlowNodeSpecificData para simplicidade
+export type FlowNodeData =
   | TriggerNodeData
   | TextMessageNodeData
   | QuestionNodeData
@@ -293,23 +291,26 @@ export type FlowNodeData = // Renomeado de FlowNodeSpecificData para simplicidad
   | EndNodeData;
 
 // Tipos para Node e Edge do React Flow
+// TData é o tipo do campo `data` do nó.
+// TType é o tipo do campo `type` do nó (string).
 export type CustomFlowNodeType = Extract<FlowNodeType | string, string>; 
-export type CustomFlowNode<T extends FlowNodeData = FlowNodeData> = Node<T, CustomFlowNodeType>;    
+export type CustomFlowNode<TData extends FlowNodeData = FlowNodeData> = Node<TData, CustomFlowNodeType>;    
 
 export interface FlowEdgeData { 
   conditionLabel?: string;
 }
-export type CustomFlowEdge<T extends FlowEdgeData | undefined = FlowEdgeData> = Edge<T>; 
+// TData é o tipo do campo `data` da aresta (opcional).
+export type CustomFlowEdge<TData extends Record<string, any> | undefined = FlowEdgeData> = Edge<TData>; 
 
 // Props para os componentes de nó customizados.
-export type CustomNodeProps<TData extends FlowNodeData> = ReactFlowNodeProps<TData>;
+export type CustomNodeProps<TData extends FlowNodeData = FlowNodeData> = ReactFlowNodeProps<TData>;
 
 
 export interface FlowData { 
   id: string;
   name: string;
   description?: string;
-  nodes: CustomFlowNode<FlowNodeData>[]; // Usar FlowNodeData como tipo de dados padrão
+  nodes: CustomFlowNode<FlowNodeData>[]; 
   edges: CustomFlowEdge<FlowEdgeData | undefined>[]; 
   variables?: Variable[];
   createdAt?: string | Date;
