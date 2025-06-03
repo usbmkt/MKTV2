@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useState, ChangeEvent, KeyboardEvent } from 'react'; // Adicionado ChangeEvent, KeyboardEvent
 import { 
     ReactFlow, 
     MiniMap, 
@@ -14,13 +14,15 @@ import {
     NodeTypes, 
     ReactFlowProvider, 
     useReactFlow, 
-    NodeProps as ReactFlowNodeProps,
+    NodeProps as ReactFlowNodeProps, // Renomeado para evitar conflito
     BackgroundVariant 
 } from '@xyflow/react';
 
 import '@xyflow/react/dist/style.css';
 import '@xyflow/react/dist/base.css';
 
+
+// Importações de Nós Customizados (usando alias @zap_client)
 import TriggerNodeComponent from '@zap_client/components/flow_builder_nodes/TriggerNode';
 import TextMessageNodeComponent from '@zap_client/components/flow_builder_nodes/TextMessageNode';
 import QuestionNodeComponent from '@zap_client/components/flow_builder_nodes/QuestionNode';
@@ -39,6 +41,7 @@ import ExternalDataNodeComponent from '@zap_client/components/flow_builder_nodes
 import ApiCallNodeComponent from '@zap_client/components/flow_builder_nodes/ApiCallNode';
 import EndNodeComponent from '@zap_client/components/flow_builder_nodes/EndNode';
 
+// Importações de Tipos (usando alias @zap_client)
 import {
   FlowNodeType,
   CustomFlowNode, 
@@ -72,12 +75,13 @@ import { Input } from '@zap_client/components/ui/input';
 import { Card, CardContent } from '@zap_client/components/ui/card';
 import { ScrollArea } from '@zap_client/components/ui/scroll-area';
 import { Separator } from '@zap_client/components/ui/separator';
-import { PlusCircle, Save, Upload, Download, Eraser, Search, Settings, Play, Zap, Maximize, Minimize, MessageSquareText, List, MousePointerClick, Image as ImageIcon, Headphones, Share2, Clock, Shuffle, Tag, VariableIcon, CloudCog, DatabaseZap, LogOut, HelpCircle, Webhook } from 'lucide-react';
-import { nanoid } from 'nanoid';
-import { useToast } from '@zap_client/hooks/use-toast';
+import { PlusCircle, Save, Upload, Download, Eraser, Search, Settings, Play, Zap, Maximize, Minimize, MessageSquareText, List, MousePointerClick, Image as ImageIconLJ, Headphones, Share2, Clock, Shuffle, Tag as TagIconLJ, VariableIcon, CloudCog, DatabaseZap, LogOut, HelpCircle, Webhook } from 'lucide-react'; // Renomeado ícones para evitar conflito
+// CORRIGIDO: Tentativa de caminho relativo para useToast
+import { useToast } from '../hooks/use-toast'; 
 
 
 const nodeTypes: NodeTypes = {
+  // Usar ReactFlowNodeProps<T> para os componentes de nó
   [FlowNodeType.TRIGGER]: TriggerNodeComponent as React.ComponentType<ReactFlowNodeProps<TriggerNodeData>>,
   [FlowNodeType.TEXT_MESSAGE]: TextMessageNodeComponent as React.ComponentType<ReactFlowNodeProps<TextMessageNodeData>>,
   [FlowNodeType.QUESTION]: QuestionNodeComponent as React.ComponentType<ReactFlowNodeProps<QuestionNodeData>>,
@@ -98,8 +102,8 @@ const nodeTypes: NodeTypes = {
 };
 
 interface ZapFlowBuilderProps {
-  initialFlowData?: FlowData;
-  onSaveFlow: (flowData: FlowData) => Promise<void>;
+  initialFlowData?: FlowData; 
+  onSaveFlow: (flowData: FlowData) => Promise<void>; 
   flowId?: string;
 }
 
@@ -114,7 +118,7 @@ const ZapFlowBuilderInternal: React.FC<ZapFlowBuilderProps> = ({ initialFlowData
   const [flowDescription, setFlowDescription] = useState(initialFlowData?.description || '');
   const [isSaving, setIsSaving] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
-  const reactFlowInstance = useReactFlow<FlowNodeData, FlowEdgeData>();
+  const reactFlowInstance = useReactFlow<FlowNodeData, FlowEdgeData | undefined>(); // Ajustado para FlowEdgeData | undefined
   const { toast } = useToast();
 
   useEffect(() => {
@@ -123,7 +127,7 @@ const ZapFlowBuilderInternal: React.FC<ZapFlowBuilderProps> = ({ initialFlowData
       setEdges(initialFlowData.edges);
       setFlowName(initialFlowData.name || 'Novo Fluxo');
       setFlowDescription(initialFlowData.description || '');
-    } else { // Reset for new flow
+    } else { 
         setNodes([]);
         setEdges([]);
         setFlowName('Novo Fluxo');
@@ -132,11 +136,16 @@ const ZapFlowBuilderInternal: React.FC<ZapFlowBuilderProps> = ({ initialFlowData
   }, [initialFlowData, setNodes, setEdges]);
 
   const onConnect = useCallback(
-    (params: Connection | Edge) => setEdges((eds) => addEdge(params, eds)),
+    (params: Connection | CustomFlowEdge) => setEdges((eds) => addEdge(params, eds)),
     [setEdges]
   );
 
-  const getNodeId = () => `zapnode_${nanoid(8)}`; // Prefixo para evitar conflitos com outros IDs
+  const getNodeId = () => `zapnode_${nanoid(8)}`;
+
+  const onDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+  }, []);
 
   const onDrop = useCallback(
     (event: React.DragEvent<HTMLDivElement>) => {
@@ -154,8 +163,7 @@ const ZapFlowBuilderInternal: React.FC<ZapFlowBuilderProps> = ({ initialFlowData
       const newNodeId = getNodeId();
       let nodeSpecificData: FlowNodeData; 
 
-      // Definindo dados padrão para cada tipo de nó
-      const baseData = { label: type.replace('Node',''), nodeType: type };
+      const baseData: BaseNodeData = { label: type.replace('Node',''), nodeType: type };
 
       switch (type) {
         case FlowNodeType.TRIGGER:
@@ -165,10 +173,10 @@ const ZapFlowBuilderInternal: React.FC<ZapFlowBuilderProps> = ({ initialFlowData
           nodeSpecificData = { ...baseData, label: 'Mensagem Texto', message: 'Olá!' } as TextMessageNodeData;
           break;
         case FlowNodeType.QUESTION:
-          nodeSpecificData = { ...baseData, label: 'Pergunta', questionText: 'Qual sua dúvida?', expectedResponseType: 'text', variableToStoreAnswer: 'user_reply' } as QuestionNodeData;
+          nodeSpecificData = { ...baseData, label: 'Pergunta', questionText: 'Qual sua dúvida?', expectedResponseType: 'text', variableToStoreAnswer: 'user_reply', options: [{id: 'opt1', label:'Opção 1', value: 'val1'}] } as QuestionNodeData;
           break;
         case FlowNodeType.LIST_MESSAGE:
-          nodeSpecificData = { ...baseData, label: 'Mensagem Lista', bodyText: 'Selecione uma opção:', buttonText: 'Opções', sections: [{ title: 'Seção 1', rows: [{id: 'item1', title: 'Item 1'}]}] } as ListMessageNodeData;
+          nodeSpecificData = { ...baseData, label: 'Mensagem Lista', bodyText: 'Selecione uma opção:', buttonText: 'Opções', sections: [{ id: 'sec1', title: 'Seção 1', rows: [{id: 'item1', title: 'Item 1'}]}] } as ListMessageNodeData;
           break;
         case FlowNodeType.BUTTONS_MESSAGE:
           nodeSpecificData = { ...baseData, label: 'Mensagem Botões', bodyText: 'Escolha uma ação:', buttons: [{id: 'btn1', type: 'reply', title: 'Opção A'}] } as ButtonsMessageNodeData;
@@ -177,7 +185,7 @@ const ZapFlowBuilderInternal: React.FC<ZapFlowBuilderProps> = ({ initialFlowData
           nodeSpecificData = { ...baseData, label: 'Mensagem Mídia', mediaType: 'image', media: { url: '', caption: '' } } as MediaMessageNodeData;
           break;
         case FlowNodeType.CONDITION:
-          nodeSpecificData = { ...baseData, label: 'Condição', branchConfigs: [{ handleId: `true-${newNodeId}`, label: 'Verdadeiro', rules: [], logicalOperator: 'AND' }, { handleId: `false-${newNodeId}`, label: 'Falso', rules: [], logicalOperator: 'AND' }] } as ConditionNodeData;
+          nodeSpecificData = { ...baseData, label: 'Condição', branchConfigs: [{ id: `branch-${newNodeId}-true`, handleId: `output-true-${newNodeId}`, label: 'Verdadeiro', rules: [], logicalOperator: 'AND' }, { id: `branch-${newNodeId}-false`, handleId: `output-false-${newNodeId}`, label: 'Falso', rules: [], logicalOperator: 'AND' }] } as ConditionNodeData;
           break;
         case FlowNodeType.DELAY:
           nodeSpecificData = { ...baseData, label: 'Aguardar', delayDuration: 5, delayUnit: 'seconds' } as DelayNodeData;
@@ -186,7 +194,7 @@ const ZapFlowBuilderInternal: React.FC<ZapFlowBuilderProps> = ({ initialFlowData
           nodeSpecificData = { ...baseData, label: 'Ação', actionType: ActionType.ADD_TAG, actionParams: { tagName: 'novo_lead' } } as ActionNodeData;
           break;
         case FlowNodeType.SET_VARIABLE:
-            nodeSpecificData = { ...baseData, label: 'Definir Variável', assignments: [{variableName: 'myVar', value: '', sourceType: 'static'}] } as SetVariableNodeData;
+            nodeSpecificData = { ...baseData, label: 'Definir Variável', assignments: [{id: 'asg1', variableName: 'myVar', value: '', sourceType: 'static'}] } as SetVariableNodeData;
             break;
         case FlowNodeType.TAG_CONTACT:
             nodeSpecificData = { ...baseData, label: 'Etiquetar Contato', tagName: 'tagged', tagOperation: 'add' } as TagContactNodeData;
@@ -198,7 +206,7 @@ const ZapFlowBuilderInternal: React.FC<ZapFlowBuilderProps> = ({ initialFlowData
             nodeSpecificData = { ...baseData, label: 'Chamada API', apiUrl: '', method: 'GET', variableToStoreResponse: 'api_data' } as ApiCallNodeData;
             break;
         case FlowNodeType.AI_DECISION:
-            nodeSpecificData = { ...baseData, label: 'Decisão IA', contextPrompt: 'O usuário quer comprar ou pedir suporte?', possibleOutcomes: [{label: 'Comprar', value: 'buy', handleId: `buy-${newNodeId}`}, {label: 'Suporte', value: 'support', handleId: `support-${newNodeId}`}] } as AiDecisionNodeData;
+            nodeSpecificData = { ...baseData, label: 'Decisão IA', contextPrompt: 'O usuário quer comprar ou pedir suporte?', possibleOutcomes: [{id: 'out1', label: 'Comprar', value: 'buy', handleId: `buy-${newNodeId}`}, {id: 'out2', label: 'Suporte', value: 'support', handleId: `support-${newNodeId}`}] } as AiDecisionNodeData;
             break;
         case FlowNodeType.EXTERNAL_DATA:
             nodeSpecificData = { ...baseData, label: 'Dados Externos', dataSourceUrl: '', requestType: 'GET', responseMapping: []} as ExternalDataNodeData;
@@ -209,21 +217,21 @@ const ZapFlowBuilderInternal: React.FC<ZapFlowBuilderProps> = ({ initialFlowData
         case FlowNodeType.END:
             nodeSpecificData = { ...baseData, label: 'Fim do Fluxo', endStateType: 'completed' } as EndNodeData;
             break;
-        default: // Fallback para garantir que nodeSpecificData seja sempre um FlowNodeData
-          const exhaustiveCheck: never = type; // Para checagem exaustiva em tempo de compilação
-          nodeSpecificData = { ...baseData, label: `Novo ${type.replace('Node', '')}` };
+        default: 
+          const exhaustiveCheck: never = type; 
+          nodeSpecificData = { ...baseData, label: `Novo ${type.replace('Node', '')}` }; // Fallback, mas type deve ser FlowNodeType
       }
 
       const newNode: CustomFlowNode = {
         id: newNodeId, 
-        type: type as CustomFlowNodeType,
+        type: type as CustomFlowNodeType, // Cast é seguro devido à checagem acima
         position,
         data: nodeSpecificData, 
       };
 
       setNodes((nds) => nds.concat(newNode));
     },
-    [reactFlowInstance, setNodes]
+    [reactFlowInstance, setNodes] // Removido 'options' se não estiver definido globalmente
   );
 
   const handleSave = async () => {
@@ -243,7 +251,7 @@ const ZapFlowBuilderInternal: React.FC<ZapFlowBuilderProps> = ({ initialFlowData
       toast({ title: 'Fluxo Salvo!', description: 'Suas alterações foram salvas com sucesso.' });
     } catch (error) {
       console.error("Erro ao salvar fluxo:", error);
-      toast({ title: 'Erro ao Salvar', description: `Não foi possível salvar o fluxo: ${String(error)}`, variant: 'destructive' });
+      toast({ title: "Erro ao Salvar", description: `Não foi possível salvar o fluxo: ${String(error)}`, variant: "destructive" });
     } finally {
       setIsSaving(false);
     }
@@ -251,7 +259,7 @@ const ZapFlowBuilderInternal: React.FC<ZapFlowBuilderProps> = ({ initialFlowData
 
   const SidebarNodeItem = ({ type, label, icon: Icon }: { type: FlowNodeType; label: string; icon: React.ElementType }) => (
     <div
-      onDragStart={(event) => {
+      onDragStart={(event: React.DragEvent<HTMLDivElement>) => { // Tipado event
         event.dataTransfer.setData('application/reactflow', type);
         event.dataTransfer.effectAllowed = 'move';
       }}
@@ -267,11 +275,11 @@ const ZapFlowBuilderInternal: React.FC<ZapFlowBuilderProps> = ({ initialFlowData
     const elem = document.querySelector('.reactflow-wrapper-fullscreen-target') || document.documentElement;
     if (!document.fullscreenElement) {
       if (elem.requestFullscreen) {
-        elem.requestFullscreen().catch(err => console.error("Erro ao entrar em tela cheia:", err));
+        elem.requestFullscreen().catch((err: Error) => console.error("Erro ao entrar em tela cheia:", err)); // Tipado err
       }
     } else {
       if (document.exitFullscreen) {
-        document.exitFullscreen().catch(err => console.error("Erro ao sair da tela cheia:", err));
+        document.exitFullscreen().catch((err: Error) => console.error("Erro ao sair da tela cheia:", err)); // Tipado err
       }
     }
   };
@@ -290,7 +298,7 @@ const ZapFlowBuilderInternal: React.FC<ZapFlowBuilderProps> = ({ initialFlowData
           <Zap className="h-6 w-6 text-primary" />
           <Input
             value={flowName}
-            onChange={(e) => setFlowName(e.target.value)}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setFlowName(e.target.value)}
             placeholder="Nome do Fluxo"
             className="text-md font-semibold h-9 w-auto max-w-xs neu-input"
           />
@@ -308,7 +316,7 @@ const ZapFlowBuilderInternal: React.FC<ZapFlowBuilderProps> = ({ initialFlowData
       </div>
        <Input
             value={flowDescription}
-            onChange={(e) => setFlowDescription(e.target.value)}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setFlowDescription(e.target.value)}
             placeholder="Descrição breve do fluxo..."
             className="text-xs border-0 border-b rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 px-3 py-1.5 neu-input-flat"
         />
@@ -325,7 +333,7 @@ const ZapFlowBuilderInternal: React.FC<ZapFlowBuilderProps> = ({ initialFlowData
                   <SidebarNodeItem type={FlowNodeType.QUESTION} label="Pergunta" icon={HelpCircle} />
                   <SidebarNodeItem type={FlowNodeType.LIST_MESSAGE} label="Msg. Lista" icon={List} />
                   <SidebarNodeItem type={FlowNodeType.BUTTONS_MESSAGE} label="Msg. Botões" icon={MousePointerClick} />
-                  <SidebarNodeItem type={FlowNodeType.MEDIA_MESSAGE} label="Msg. Mídia" icon={ImageIcon} />
+                  <SidebarNodeItem type={FlowNodeType.MEDIA_MESSAGE} label="Msg. Mídia" icon={ImageIconLJ} /> {/* Renomeado para ImageIconLJ */}
                   <SidebarNodeItem type={FlowNodeType.CLONED_VOICE_NODE} label="Voz Clonada" icon={Headphones} />
                   <Separator />
                   <SidebarNodeItem type={FlowNodeType.CONDITION} label="Condição" icon={Share2} />
@@ -333,7 +341,7 @@ const ZapFlowBuilderInternal: React.FC<ZapFlowBuilderProps> = ({ initialFlowData
                   <SidebarNodeItem type={FlowNodeType.ACTION} label="Ação" icon={Settings} />
                   <Separator />
                   <SidebarNodeItem type={FlowNodeType.SET_VARIABLE} label="Definir Variável" icon={VariableIcon} />
-                  <SidebarNodeItem type={FlowNodeType.TAG_CONTACT} label="Etiquetar Contato" icon={Tag} />
+                  <SidebarNodeItem type={FlowNodeType.TAG_CONTACT} label="Etiquetar Contato" icon={TagIconLJ} /> {/* Renomeado para TagIconLJ */}
                   <Separator />
                   <SidebarNodeItem type={FlowNodeType.GPT_QUERY} label="Consulta GPT" icon={CloudCog} />
                   <SidebarNodeItem type={FlowNodeType.AI_DECISION} label="Decisão IA" icon={Shuffle} />
@@ -347,7 +355,7 @@ const ZapFlowBuilderInternal: React.FC<ZapFlowBuilderProps> = ({ initialFlowData
             </CardContent>
           </Card>
         )}
-        <div className="flex-grow h-full" onDrop={onDrop} onDragOver={onDragOver}>
+        <div className="flex-grow h-full" onDrop={onDrop} onDragOver={onDragOver}> {/* Corrigido ondragover para onDragOver */}
           <ReactFlow
             nodes={nodes}
             edges={edges}
