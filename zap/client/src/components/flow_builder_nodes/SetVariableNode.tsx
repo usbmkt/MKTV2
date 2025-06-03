@@ -1,86 +1,159 @@
-// zap/client/src/components/flow_builder_nodes/SetVariableNode.tsx
-import React, { memo, ChangeEvent } from 'react'; // Adicionado ChangeEvent
-import { Handle, Position, NodeProps } from '@xyflow/react';
+import React, { memo, useState, ChangeEvent, useCallback } from 'react';
+import { Handle, Position, NodeProps, Node, useReactFlow } from '@xyflow/react';
 import { Card, CardContent, CardHeader, CardTitle } from '@zap_client/components/ui/card';
 import { Input } from '@zap_client/components/ui/input';
 import { Label } from '@zap_client/components/ui/label';
 import { Button } from '@zap_client/components/ui/button';
-import { Variable, PlusCircle, Trash2 } from 'lucide-react';
-import { SetVariableNodeData, SetVariableNodeDataAssignment } from '@zap_client/features/types/whatsapp_flow_types'; // Assumindo que SetVariableNodeDataAssignment é exportado ou defina-o aqui
+import { GripVertical, PlusCircle, Trash2, Settings2 } from 'lucide-react';
+import { SetVariableNodeData, VariableAssignment } from '@zap_client/features/types/whatsapp_flow_types'; // Ajustado o import
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@zap_client/components/ui/select';
 
-const SetVariableNode: React.FC<NodeProps<SetVariableNodeData>> = ({ data, id, selected }) => {
-  const { 
-    label = 'Definir Variável', 
-    assignments = [{ variableName: '', value: '' }] 
-  } = data;
 
-  // Lógica para atualizar 'data'
-  // const updateData = (newAssignments: SetVariableNodeData['assignments']) => {
-  //   // onNodesChange([{ id, type: 'dataUpdate', data: { ...data, assignments: newAssignments } }]);
-  // };
+const SetVariableNode: React.FC<NodeProps<SetVariableNodeData>> = ({ id, data, selected }) => {
+  const { setNodes } = useReactFlow();
+  const [nodeData, setNodeData] = useState<SetVariableNodeData>(data);
 
-  // const handleAssignmentChange = (index: number, field: keyof SetVariableNodeDataAssignment, val: string) => {
-  //   const newAssignments = [...(assignments || [])];
-  //   if(newAssignments[index]) {
-  //     (newAssignments[index] as any)[field] = val; // Use um cast mais seguro se possível
-  //     updateData(newAssignments);
-  //   }
-  // };
+  const updateNodeData = useCallback((newData: Partial<SetVariableNodeData>) => {
+    setNodes((nds) =>
+      nds.map((node: Node) => {
+        if (node.id === id) {
+          return { ...node, data: { ...node.data, ...newData } };
+        }
+        return node;
+      })
+    );
+    setNodeData(prev => ({ ...prev, ...newData }));
+  }, [id, setNodes]);
 
-  // const addAssignment = () => {
-  //   updateData([...(assignments || []), { variableName: '', value: '' }]);
-  // };
+  const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
+     const { name, value } = e.target;
+     updateNodeData({ [name]: value });
+  };
 
-  // const removeAssignment = (index: number) => {
-  //   updateData((assignments || []).filter((_, i) => i !== index));
-  // };
+  const handleAssignmentChange = (index: number, field: keyof VariableAssignment, value: string | VariableAssignment['source']) => {
+    const newAssignments = [...(nodeData.assignments || [])];
+    if (newAssignments[index]) {
+      (newAssignments[index] as any)[field] = value;
+      updateNodeData({ assignments: newAssignments });
+    }
+  };
+
+  const addAssignment = () => {
+    const newAssignment: VariableAssignment = { variableName: '', value: '', source: 'static' };
+    updateNodeData({ assignments: [...(nodeData.assignments || []), newAssignment] });
+  };
+
+  const removeAssignment = (index: number) => {
+    const newAssignments = (nodeData.assignments || []).filter((_, i) => i !== index);
+    updateNodeData({ assignments: newAssignments });
+  };
 
   return (
-    <Card className={`text-xs shadow-md w-72 ${selected ? 'ring-2 ring-lime-500' : 'border-border'} bg-card`}>
-      <CardHeader className="bg-muted/50 p-2 rounded-t-lg">
-        <CardTitle className="text-xs font-semibold flex items-center">
-          <Variable className="w-4 h-4 text-lime-500 mr-2" />
-          {label || 'Definir Variável'}
-        </CardTitle>
+    <Card className={`w-96 shadow-md ${selected ? 'ring-2 ring-blue-500' : ''}`}>
+      <CardHeader className="bg-gray-100 p-4 rounded-t-lg flex flex-row items-center justify-between">
+        <div className="flex items-center">
+          <Settings2 className="w-4 h-4 mr-2 text-gray-600" />
+          <CardTitle className="text-sm font-medium">{nodeData.label || 'Definir Variável'}</CardTitle>
+        </div>
+        <GripVertical className="w-5 h-5 text-gray-400 cursor-grab drag-handle" />
       </CardHeader>
-      <CardContent className="p-3 space-y-2">
-        {(assignments || []).map((assignment: SetVariableNodeDataAssignment, index: number) => ( // Tipagem adicionada
-          <div key={index} className="space-y-1 p-2 border rounded border-dashed">
-            <div className="flex items-center justify-between">
-                <Label htmlFor={`varName-${id}-${index}`} className="text-xs font-medium">Nome da Variável</Label>
-                {/* { (assignments || []).length > 1 && (
-                     <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => removeAssignment(index)}>
-                        <Trash2 className="h-3 w-3 text-destructive"/>
-                    </Button>
-                )} */}
+      <CardContent className="p-4 space-y-3">
+        <Handle type="target" position={Position.Left} className="w-3 h-3 bg-blue-500 rounded-full" />
+        <div>
+          <Label htmlFor={`label-${id}`} className="text-xs font-medium">Rótulo do Nó</Label>
+          <Input
+            id={`label-${id}`}
+            name="label"
+            value={nodeData.label || ''}
+            onChange={handleInputChange}
+            placeholder="Ex: Salvar Email do Usuário"
+            className="mt-1 w-full nodrag"
+          />
+        </div>
+
+        <div className="space-y-2">
+            <div className="flex justify-between items-center">
+                <h4 className="text-xs font-semibold text-gray-800">Atribuições de Variáveis</h4>
+                <Button variant="outline" size="sm" onClick={addAssignment} className="nodrag">
+                    <PlusCircle className="w-3 h-3 mr-1" /> Add Atribuição
+                </Button>
             </div>
-            <Input
-              id={`varName-${id}-${index}`}
-              type="text"
-              placeholder="Ex: nome_cliente"
-              value={assignment.variableName || ''}
-              // onChange={(e: ChangeEvent<HTMLInputElement>) => handleAssignmentChange(index, 'variableName', e.target.value)}
-              className="w-full h-7 text-xs"
-            />
-            <div>
-              <Label htmlFor={`varValue-${id}-${index}`} className="text-xs font-medium">Valor</Label>
-              <Input
-                id={`varValue-${id}-${index}`}
-                type="text"
-                placeholder="Ex: João ou {{outra_variavel}}"
-                value={String(assignment.value ?? '')}
-                // onChange={(e: ChangeEvent<HTMLInputElement>) => handleAssignmentChange(index, 'value', e.target.value)}
-                className="w-full h-7 text-xs"
-              />
+          {(nodeData.assignments || []).map((assignment: VariableAssignment, index: number) => (
+            <div key={index} className="p-3 border rounded bg-gray-50 space-y-2">
+              <div className="flex items-end space-x-2">
+                <div className="flex-grow">
+                  <Label htmlFor={`variableName-${id}-${index}`} className="text-xs">Nome da Variável</Label>
+                  <Input
+                    id={`variableName-${id}-${index}`}
+                    placeholder="Ex: userEmail"
+                    value={assignment.variableName || ''}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) => handleAssignmentChange(index, 'variableName', e.target.value)}
+                    className="mt-1 w-full nodrag"
+                  />
+                </div>
+                <Button variant="ghost" size="icon" onClick={() => removeAssignment(index)} className="nodrag mb-1">
+                  <Trash2 className="w-4 h-4 text-red-500" />
+                </Button>
+              </div>
+              <div>
+                <Label htmlFor={`source-${id}-${index}`} className="text-xs">Fonte do Valor</Label>
+                <Select
+                    value={assignment.source || 'static'}
+                    onValueChange={(value) => handleAssignmentChange(index, 'source', value as VariableAssignment['source'])}
+                >
+                    <SelectTrigger id={`source-${id}-${index}`} className="w-full mt-1 nodrag">
+                        <SelectValue placeholder="Selecione a fonte" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="static">Valor Estático</SelectItem>
+                        <SelectItem value="expression">Expressão</SelectItem>
+                        <SelectItem value="contact_data">Dado do Contato</SelectItem>
+                        {/* Adicionar mais fontes se necessário */}
+                    </SelectContent>
+                </Select>
+              </div>
+
+              {assignment.source === 'static' && (
+                <div>
+                  <Label htmlFor={`value-${id}-${index}`} className="text-xs">Valor</Label>
+                  <Input
+                    id={`value-${id}-${index}`}
+                    placeholder="Valor estático"
+                    value={String(assignment.value || '')}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) => handleAssignmentChange(index, 'value', e.target.value)}
+                    className="mt-1 w-full nodrag"
+                  />
+                </div>
+              )}
+              {assignment.source === 'expression' && (
+                <div>
+                  <Label htmlFor={`expression-${id}-${index}`} className="text-xs">Expressão</Label>
+                  <Input
+                    id={`expression-${id}-${index}`}
+                    placeholder="Ex: {{variavel1}} + {{variavel2}}"
+                    value={assignment.expression || ''}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) => handleAssignmentChange(index, 'expression', e.target.value)}
+                    className="mt-1 w-full nodrag"
+                  />
+                </div>
+              )}
+              {assignment.source === 'contact_data' && (
+                <div>
+                  <Label htmlFor={`contactField-${id}-${index}`} className="text-xs">Campo do Contato</Label>
+                  <Input
+                    id={`contactField-${id}-${index}`}
+                    placeholder="Ex: email, phone_number, name"
+                    value={assignment.contactField || ''}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) => handleAssignmentChange(index, 'contactField', e.target.value)}
+                    className="mt-1 w-full nodrag"
+                  />
+                </div>
+              )}
             </div>
-          </div>
-        ))}
-        {/* <Button variant="outline" size="xs" className="text-xs mt-1 w-full h-7" onClick={addAssignment}>
-          <PlusCircle className="w-3.5 h-3.5 mr-1" /> Adicionar Atribuição
-        </Button> */}
+          ))}
+        </div>
+        <Handle type="source" position={Position.Right} className="w-3 h-3 bg-green-500 rounded-full" />
       </CardContent>
-      <Handle type="target" position={Position.Left} className="!bg-muted-foreground w-2.5 h-2.5" />
-      <Handle type="source" position={Position.Right} className="!bg-primary w-2.5 h-2.5" />
     </Card>
   );
 };
