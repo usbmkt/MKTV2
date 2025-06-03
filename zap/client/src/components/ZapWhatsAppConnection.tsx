@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@zap_client/components/ui/card';
 import { Button } from '@zap_client/components/ui/button';
 import { Badge } from '@zap_client/components/ui/badge';
-import { Input } from '@zap_client/components/ui/input'; // Mantido para outros usos no arquivo
+import { Input } from '@zap_client/components/ui/input';
 import { Label } from '@zap_client/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@zap_client/components/ui/tabs';
 import { Alert, AlertDescription as UIAlertDescription } from '@zap_client/components/ui/alert';
@@ -195,7 +195,7 @@ return (
               <Alert className="mt-4 neu-card-inset">
                 <Smartphone className="h-4 w-4" />
                 <UIAlertDescription className="text-xs">
-                  Abra WhatsApp > Configurações > Aparelhos conectados > Conectar um aparelho.
+                  Abra WhatsApp &gt; Configurações &gt; Aparelhos conectados &gt; Conectar um aparelho.
                 </UIAlertDescription>
               </Alert>
             </div>
@@ -255,26 +255,13 @@ return (
               <CardContent className="space-y-3">
                   <div>
                       <Label htmlFor="apiToken" className="text-xs">Seu Token de API (se usar provedor externo)</Label>
-                      {/* === LINHA 200 (APROXIMADAMENTE) - TESTE DE SIMPLIFICAÇÃO === */}
-                      {/* Comente o Input original que está causando o erro: */}
-                      {/* <Input 
+                      <Input 
                         id="apiToken" 
                         type="password" 
                         placeholder="Cole seu token aqui se necessário" 
                         value={apiToken} 
                         onChange={(e: React.ChangeEvent<HTMLInputElement>) => setApiToken(e.target.value)} 
                         className="neu-input mt-1"
-                      /> 
-                      */}
-
-                      {/* TENTE ESTA VERSÃO ULTRA-SIMPLIFICADA COM UM INPUT HTML PADRÃO: */}
-                      <input 
-                        id="apiTokenSimpleTest" 
-                        type="password" 
-                        placeholder="Teste" 
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 neu-input mt-1"
-                        value={apiToken}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setApiToken(e.target.value)}
                       />
                   </div>
                   <Button className="neu-button text-xs" size="sm" type="button">
@@ -288,7 +275,6 @@ return (
               <CardContent className="space-y-3">
                   <p className="text-xs text-muted-foreground">Configure esta URL no seu provedor WhatsApp para receber mensagens e eventos.</p>
                   <div className="flex items-center space-x-2">
-                      {/* Usando o componente Input aqui, pois ele não parece ser o problemático no log mais recente */}
                       <Input value={webhookUrlToCopy} readOnly className="neu-input text-xs"/>
                       <Button variant="outline" size="icon" onClick={() => copyToClipboard(webhookUrlToCopy)} className="neu-button h-9 w-9"><Copy className="h-4 w-4"/></Button>
                   </div>
