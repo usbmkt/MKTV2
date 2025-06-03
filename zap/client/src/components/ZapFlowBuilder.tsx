@@ -1,258 +1,312 @@
-// MKTV2/zap/client/src/components/ZapFlowBuilder.tsx
-import React, { useState, useCallback, useEffect, useRef, ComponentType } from 'react'; // Adicionado ComponentType
-import {
-  ReactFlow,
-  Controls,
-  Background,
-  addEdge,
-  applyNodeChanges,
-  applyEdgeChanges,
-  Node,
-  Edge,
-  Connection,
-  NodeChange,
-  EdgeChange,
-  MiniMap,
-  BackgroundVariant,
-  Panel,
-  NodeProps,
-  ReactFlowInstance,
-  NodeTypes 
-} from '@xyflow/react';
+import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { ReactFlow, MiniMap, Controls, Background, useNodesState, useEdgesState, addEdge, Connection, Edge, Node, Panel, NodeTypes, ReactFlowProvider, useReactFlow, NodeProps, BackgroundVariant } from '@xyflow/react';
+
 import '@xyflow/react/dist/style.css';
+import '@xyflow/react/dist/base.css';
 
-import TextMessageNode from '@zap_client/components/flow_builder_nodes/TextMessageNode';
-import QuestionNode from '@zap_client/components/flow_builder_nodes/QuestionNode';
-import ConditionNode from '@zap_client/components/flow_builder_nodes/ConditionNode';
-import ActionNode from '@zap_client/components/flow_builder_nodes/ActionNode';
-import DelayNode from '@zap_client/components/flow_builder_nodes/DelayNode';
-import TriggerNode from '@zap_client/components/flow_builder_nodes/TriggerNode';
-import EndNode from '@zap_client/components/flow_builder_nodes/EndNode';
-import ListMessageNode from '@zap_client/components/flow_builder_nodes/ListMessageNode';
-import ButtonsMessageNode from '@zap_client/components/flow_builder_nodes/ButtonsMessageNode';
-import MediaMessageNode from '@zap_client/components/flow_builder_nodes/MediaMessageNode';
-import GPTQueryNode from '@zap_client/components/flow_builder_nodes/GptQueryNode'; // Corrigido para GPTQueryNode
-import AiDecisionNode from '@zap_client/components/flow_builder_nodes/AiDecisionNode';
-import ClonedVoiceNode from '@zap_client/components/flow_builder_nodes/ClonedVoiceNode';
-import TagContactNode from '@zap_client/components/flow_builder_nodes/TagContactNode';
-import SetVariableNode from '@zap_client/components/flow_builder_nodes/SetVariableNode';
-import ExternalDataNode from '@zap_client/components/flow_builder_nodes/ExternalDataNode';
-import ApiCallNode from '@zap_client/components/flow_builder_nodes/ApiCallNode';
 
+// Importações de Nós Customizados (usando alias @zap_client)
+import TriggerNodeComponent from '@zap_client/components/flow_builder_nodes/TriggerNode';
+import TextMessageNodeComponent from '@zap_client/components/flow_builder_nodes/TextMessageNode';
+import QuestionNodeComponent from '@zap_client/components/flow_builder_nodes/QuestionNode';
+import ListMessageNodeComponent from '@zap_client/components/flow_builder_nodes/ListMessageNode';
+import ButtonsMessageNodeComponent from '@zap_client/components/flow_builder_nodes/ButtonsMessageNode';
+import MediaMessageNodeComponent from '@zap_client/components/flow_builder_nodes/MediaMessageNode';
+import ConditionNodeComponent from '@zap_client/components/flow_builder_nodes/ConditionNode';
+import DelayNodeComponent from '@zap_client/components/flow_builder_nodes/DelayNode';
+import ActionNodeComponent from '@zap_client/components/flow_builder_nodes/ActionNode';
+import GptQueryNodeComponent from '@zap_client/components/flow_builder_nodes/GptQueryNode'; // Corrigido Case
+import AiDecisionNodeComponent from '@zap_client/components/flow_builder_nodes/AiDecisionNode';
+import ClonedVoiceNodeComponent from '@zap_client/components/flow_builder_nodes/ClonedVoiceNode';
+import TagContactNodeComponent from '@zap_client/components/flow_builder_nodes/TagContactNode';
+import SetVariableNodeComponent from '@zap_client/components/flow_builder_nodes/SetVariableNode';
+import ExternalDataNodeComponent from '@zap_client/components/flow_builder_nodes/ExternalDataNode'; // Corrigido Case
+import ApiCallNodeComponent from '@zap_client/components/flow_builder_nodes/ApiCallNode';
+import EndNodeComponent from '@zap_client/components/flow_builder_nodes/EndNode';
+
+// Importações de Tipos (usando alias @zap_client)
 import {
-  TriggerNodeData, TextMessageNodeData, QuestionNodeData, ConditionNodeData,
-  ActionNodeData, DelayNodeData, EndNodeData, ListMessageNodeData, 
-  ButtonsMessageNodeData, MediaMessageNodeData, GPTQueryNodeData, // Corrigido para GPTQueryNodeData
-  AiDecisionNodeData, ClonedVoiceNodeData, TagContactNodeData, SetVariableNodeData, 
-  ExternalDataFetchNodeData, 
+  FlowNodeType,
+  CustomFlowNode, // Usar este tipo para os nós
+  CustomFlowEdge, // Usar este tipo para as arestas
+  FlowData,       // Para a estrutura geral do fluxo
+  FlowNodeData,   // Tipo base para `node.data`
+  TriggerNodeData,
+  TextMessageNodeData,
+  QuestionNodeData,
+  ListMessageNodeData,
+  ButtonsMessageNodeData,
+  MediaMessageNodeData,
+  ConditionNodeData,
+  DelayNodeData,
+  ActionNodeData,
+  GptQueryNodeData, // Corrigido Case
+  AiDecisionNodeData,
+  ClonedVoiceNodeData,
+  TagContactNodeData,
+  SetVariableNodeData,
+  ExternalDataNodeData, // Corrigido Case
   ApiCallNodeData,
-  CustomNodeDataType, // Importar a união
-  ZapFlowNode // Importar o tipo de nó customizado
-} from '@zap_client/features/types/whatsapp_flow_types';
+  EndNodeData,
+} from '@zap_client/features/types/whatsapp_flow_types'; // Corrigido para o caminho dentro do zap
 
 import { Button } from '@zap_client/components/ui/button';
-import { Input } from '@zap_client/components/ui/input'; 
-import { PlusCircle, Save, Trash2, Loader2 } from 'lucide-react'; 
+import { Input } from '@zap_client/components/ui/input';
+import { Card, CardContent } from '@zap_client/components/ui/card';
+import { ScrollArea } from '@zap_client/components/ui/scroll-area';
+import { Separator } from '@zap_client/components/ui/separator';
+import { PlusCircle, Save, Upload, Download, Eraser, Search, Settings, Play, Zap, Maximize, Minimize } from 'lucide-react';
+import { nanoid } from 'nanoid';
+import { useToast } from '@zap_client/hooks/use-toast'; // Corrigido para o caminho dentro do zap
 
-export interface ZapFlowBuilderProps {
-  flowId: string;
-  initialNodes?: ZapFlowNode[]; // Usar ZapFlowNode
-  initialEdges?: Edge[];
-  initialFlowName?: string | null;
-  onSaveFlow?: (flowId: string, nodes: ZapFlowNode[], edges: Edge[], name?: string) => Promise<void>;
-  onLoadFlow?: (flowId: string) => Promise<{ nodes: ZapFlowNode[], edges: Edge[], name?: string } | null>;
-  onCloseEditor?: () => void;
-  onSaveSuccess?: (flowId: string, flowName: string) => void;
+// Definição dos tipos de nó para ReactFlow
+// O ReactFlow espera um objeto onde as chaves são os nomes dos tipos de nó
+// e os valores são os componentes React para renderizá-los.
+// A tipagem para ComponentType<NodeProps<T>> onde T é o tipo de data específico é importante.
+const nodeTypes: NodeTypes = {
+  [FlowNodeType.TRIGGER]: TriggerNodeComponent as React.ComponentType<NodeProps<TriggerNodeData>>,
+  [FlowNodeType.TEXT_MESSAGE]: TextMessageNodeComponent as React.ComponentType<NodeProps<TextMessageNodeData>>,
+  [FlowNodeType.QUESTION]: QuestionNodeComponent as React.ComponentType<NodeProps<QuestionNodeData>>,
+  [FlowNodeType.LIST_MESSAGE]: ListMessageNodeComponent as React.ComponentType<NodeProps<ListMessageNodeData>>,
+  [FlowNodeType.BUTTONS_MESSAGE]: ButtonsMessageNodeComponent as React.ComponentType<NodeProps<ButtonsMessageNodeData>>,
+  [FlowNodeType.MEDIA_MESSAGE]: MediaMessageNodeComponent as React.ComponentType<NodeProps<MediaMessageNodeData>>,
+  [FlowNodeType.CONDITION]: ConditionNodeComponent as React.ComponentType<NodeProps<ConditionNodeData>>,
+  [FlowNodeType.DELAY]: DelayNodeComponent as React.ComponentType<NodeProps<DelayNodeData>>,
+  [FlowNodeType.ACTION]: ActionNodeComponent as React.ComponentType<NodeProps<ActionNodeData>>,
+  [FlowNodeType.GPT_QUERY]: GptQueryNodeComponent as React.ComponentType<NodeProps<GptQueryNodeData>>,
+  [FlowNodeType.AI_DECISION]: AiDecisionNodeComponent as React.ComponentType<NodeProps<AiDecisionNodeData>>,
+  [FlowNodeType.CLONED_VOICE_NODE]: ClonedVoiceNodeComponent as React.ComponentType<NodeProps<ClonedVoiceNodeData>>,
+  [FlowNodeType.TAG_CONTACT]: TagContactNodeComponent as React.ComponentType<NodeProps<TagContactNodeData>>,
+  [FlowNodeType.SET_VARIABLE]: SetVariableNodeComponent as React.ComponentType<NodeProps<SetVariableNodeData>>,
+  [FlowNodeType.EXTERNAL_DATA]: ExternalDataNodeComponent as React.ComponentType<NodeProps<ExternalDataNodeData>>,
+  [FlowNodeType.API_CALL]: ApiCallNodeComponent as React.ComponentType<NodeProps<ApiCallNodeData>>,
+  [FlowNodeType.END]: EndNodeComponent as React.ComponentType<NodeProps<EndNodeData>>,
+};
+
+interface ZapFlowBuilderProps {
+  initialFlowData?: FlowData; // Para carregar um fluxo existente
+  onSaveFlow: (flowData: FlowData) => Promise<void>; // Função para salvar o fluxo
+  // Outras props, como ID do fluxo atual, modo read-only, etc.
+  flowId?: string;
 }
 
-// Tipagem mais precisa para NodeTypes
-// O ReactFlow espera ComponentType<NodeProps<T>> onde T são os dados do nó.
-const nodeTypes: NodeTypes = {
-  trigger: TriggerNode as ComponentType<NodeProps<TriggerNodeData>>,
-  textMessage: TextMessageNode as ComponentType<NodeProps<TextMessageNodeData>>,
-  question: QuestionNode as ComponentType<NodeProps<QuestionNodeData>>,
-  listMessage: ListMessageNode as ComponentType<NodeProps<ListMessageNodeData>>,
-  buttonsMessage: ButtonsMessageNode as ComponentType<NodeProps<ButtonsMessageNodeData>>,
-  mediaMessage: MediaMessageNode as ComponentType<NodeProps<MediaMessageNodeData>>,
-  condition: ConditionNode as ComponentType<NodeProps<ConditionNodeData>>,
-  delay: DelayNode as ComponentType<NodeProps<DelayNodeData>>,
-  action: ActionNode as ComponentType<NodeProps<ActionNodeData>>,
-  gptQuery: GPTQueryNode as ComponentType<NodeProps<GPTQueryNodeData>>,
-  aiDecision: AiDecisionNode as ComponentType<NodeProps<AiDecisionNodeData>>,
-  clonedVoice: ClonedVoiceNode as ComponentType<NodeProps<ClonedVoiceNodeData>>,
-  tagContact: TagContactNode as ComponentType<NodeProps<TagContactNodeData>>,
-  setVariable: SetVariableNode as ComponentType<NodeProps<SetVariableNodeData>>,
-  externalData: ExternalDataNode as ComponentType<NodeProps<ExternalDataFetchNodeData>>,
-  apiCall: ApiCallNode as ComponentType<NodeProps<ApiCallNodeData>>,
-  end: EndNode as ComponentType<NodeProps<EndNodeData>>,
-};
-
-const defaultViewport = { x: 0, y: 0, zoom: 1 };
-
-const ZapFlowBuilderWrapper: React.FC<ZapFlowBuilderProps> = ({
-  flowId,
-  initialNodes: initialNodesProp,
-  initialEdges: initialEdgesProp,
-  initialFlowName,
-  onSaveFlow,
-  onLoadFlow,
-  onCloseEditor,
-  onSaveSuccess,
-}) => {
-  const [nodes, setNodes] = useState<ZapFlowNode[]>(initialNodesProp || []); // Usar ZapFlowNode
-  const [edges, setEdges] = useState<Edge[]>(initialEdgesProp || []);
-  const [flowName, setFlowName] = useState(initialFlowName || `Fluxo ${flowId}`);
-  const [isLoading, setIsLoading] = useState(true);
-  const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  const [rfInstance, setRfInstance] = useState<ReactFlowInstance<CustomNodeDataType, Edge> | null>(null);
+const ZapFlowBuilderInternal: React.FC<ZapFlowBuilderProps> = ({ initialFlowData, onSaveFlow, flowId }) => {
+  const [nodes, setNodes, onNodesChange] = useNodesState<FlowNodeData>(initialFlowData?.nodes || []);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<FlowEdgeData>(initialFlowData?.edges || []);
+  const [flowName, setFlowName] = useState(initialFlowData?.name || 'Novo Fluxo');
+  const [flowDescription, setFlowDescription] = useState(initialFlowData?.description || '');
+  const [isSaving, setIsSaving] = useState(false);
+  const [isFullScreen, setIsFullScreen] = useState(false);
+  const reactFlowInstance = useReactFlow<FlowNodeData, FlowEdgeData>();
+  const { toast } = useToast();
 
   useEffect(() => {
-    const load = async () => {
-      setIsLoading(true);
-      // Garantir que defaultInitialNodes use ZapFlowNode e TriggerNodeData
-      const defaultInitialNodes: ZapFlowNode[] = [{ 
-        id: 'trigger_0', 
-        type: 'trigger', 
-        position: { x: 250, y: 5 }, 
-        data: { label: 'Início do Fluxo' } as TriggerNodeData // Cast para o tipo de dados específico
-      }];
-      
-      if (onLoadFlow && flowId && flowId !== 'new') {
-        try {
-          const loadedData = await onLoadFlow(flowId);
-          if (loadedData) {
-            setNodes(loadedData.nodes || defaultInitialNodes);
-            setEdges(loadedData.edges || []);
-            if(loadedData.name) setFlowName(loadedData.name);
-            else setFlowName(`Fluxo ${flowId}`);
-          } else {
-            setNodes(defaultInitialNodes);
-            setEdges([]);
-            setFlowName(initialFlowName || `Novo Fluxo`);
-          }
-        } catch (error) {
-          console.error("Erro ao carregar fluxo:", error);
-           setNodes(defaultInitialNodes);
-           setEdges([]);
-           setFlowName(initialFlowName || `Fluxo (Erro ao Carregar)`);
-        }
-      } else {
-         setNodes(defaultInitialNodes);
-         setEdges([]);
-         setFlowName(initialFlowName || `Novo Fluxo`);
-      }
-      setIsLoading(false);
-    };
-    if(flowId) load(); else setIsLoading(false);
-  }, [flowId, onLoadFlow, initialFlowName]);
+    if (initialFlowData) {
+      setNodes(initialFlowData.nodes as Node<FlowNodeData>[]); // Cast para Node<FlowNodeData>
+      setEdges(initialFlowData.edges as Edge<FlowEdgeData>[]); // Cast para Edge<FlowEdgeData>
+      setFlowName(initialFlowData.name || 'Novo Fluxo');
+      setFlowDescription(initialFlowData.description || '');
+    }
+  }, [initialFlowData, setNodes, setEdges]);
 
-  const onNodesChange = useCallback(
-    (changes: NodeChange[]) => setNodes((nds) => applyNodeChanges(changes, nds)),
-    [setNodes]
-  );
-  const onEdgesChange = useCallback(
-    (changes: EdgeChange[]) => setEdges((eds) => applyEdgeChanges(changes, eds)),
-    [setEdges]
-  );
   const onConnect = useCallback(
-    (connection: Connection) => setEdges((eds) => addEdge(connection, eds)),
+    (params: Connection | Edge) => setEdges((eds) => addEdge(params, eds as Edge<FlowEdgeData>[])), // Cast para Edge<FlowEdgeData>
     [setEdges]
   );
 
-  const addNode = (type: keyof typeof nodeTypes) => {
-    const newNodeId = `${type}_${nodes.length + Date.now()}`;
-    let initialData: Partial<CustomNodeDataType> = { label: `Novo ${type}` }; 
+  const getNodeId = () => `dndnode_${nanoid()}`;
 
-    const newNode: ZapFlowNode = { 
-      id: newNodeId,
-      type,
-      position: {
-        x: Math.random() * (reactFlowWrapper.current?.clientWidth || 800) * 0.7,
-        y: Math.random() * (reactFlowWrapper.current?.clientHeight || 600) * 0.7,
-      },
-      data: initialData as CustomNodeDataType, 
-    };
-    setNodes((nds) => nds.concat(newNode));
-  };
+  const onDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+  }, []);
+
+  const onDrop = useCallback(
+    (event: React.DragEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      const type = event.dataTransfer.getData('application/reactflow') as FlowNodeType;
+      if (!type || !Object.values(FlowNodeType).includes(type)) {
+        return;
+      }
+
+      const position = reactFlowInstance.screenToFlowPosition({
+        x: event.clientX,
+        y: event.clientY,
+      });
+
+      const newNodeData: Partial<FlowNodeData> = { // Usar FlowNodeData para o tipo base
+        id: getNodeId(), // ID lógico interno ao data, o React Flow usará seu próprio ID único
+        label: type, // Default label
+        nodeType: type,
+      };
+
+      // Adicionar dados default específicos para cada tipo de nó
+      switch (type) {
+        case FlowNodeType.TRIGGER:
+          (newNodeData as Partial<TriggerNodeData>).triggerType = 'keyword';
+          (newNodeData as Partial<TriggerNodeData>).keywords = ['oi'];
+          newNodeData.label = 'Gatilho';
+          break;
+        case FlowNodeType.TEXT_MESSAGE:
+          (newNodeData as Partial<TextMessageNodeData>).message = 'Olá!';
+          newNodeData.label = 'Mensagem Texto';
+          break;
+        // Adicionar outros defaults aqui
+        default:
+          newNodeData.label = `Novo ${type}`;
+      }
+
+      const newNode: CustomFlowNode = { // Usar CustomFlowNode
+        id: newNodeData.id!, // React Flow ID, pode ser o mesmo que o data.id
+        type,
+        position,
+        data: newNodeData as FlowNodeData, // Cast para o tipo base
+      };
+
+      setNodes((nds) => nds.concat(newNode));
+    },
+    [reactFlowInstance, setNodes]
+  );
 
   const handleSave = async () => {
-    if (onSaveFlow) {
-      setIsLoading(true);
-      try {
-        if (flowName) {
-            await onSaveFlow(flowId, nodes, edges, flowName);
-            if (onSaveSuccess) onSaveSuccess(flowId, flowName);
-            alert('Fluxo salvo com sucesso!'); // Substituir por toast
-        } else {
-            alert('Nome do fluxo é necessário para salvar.'); // Substituir por toast
-        }
-      } catch (error) {
-        console.error("Erro ao salvar fluxo:", error);
-        alert('Falha ao salvar o fluxo.'); // Substituir por toast
-      }
-      setIsLoading(false);
-    }
-  };
-  
-  const handleDeleteFlow = () => {
-    if (window.confirm(`Tem certeza que deseja excluir o fluxo "${flowName}"?`)) {
-      console.log("Excluir fluxo:", flowId);
-      if (onCloseEditor) onCloseEditor();
+    setIsSaving(true);
+    const flowToSave: FlowData = {
+      id: flowId || initialFlowData?.id || `flow_${nanoid()}`,
+      name: flowName,
+      description: flowDescription,
+      nodes: reactFlowInstance.getNodes() as CustomFlowNode[], // Cast para CustomFlowNode
+      edges: reactFlowInstance.getEdges() as CustomFlowEdge[],   // Cast para CustomFlowEdge
+      // Adicionar outras propriedades como variáveis etc.
+    };
+    try {
+      await onSaveFlow(flowToSave);
+      toast({ title: 'Fluxo Salvo!', description: 'Suas alterações foram salvas com sucesso.' });
+    } catch (error) {
+      console.error("Erro ao salvar fluxo:", error);
+      toast({ title: 'Erro ao Salvar', description: 'Não foi possível salvar o fluxo.', variant: 'destructive' });
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  if (isLoading && flowId && flowId !== 'new') {
-    return <div className="flex items-center justify-center h-full"><Loader2 className="w-8 h-8 animate-spin text-primary" /> Carregando fluxo...</div>;
-  }
-
-  return (
-    <div className="h-[calc(100vh-250px)] md:h-[calc(100vh-200px)] w-full border rounded-lg shadow-md neu-card overflow-hidden" ref={reactFlowWrapper}>
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
-        nodeTypes={nodeTypes} 
-        defaultViewport={defaultViewport}
-        fitView
-        onInit={setRfInstance as (instance: ReactFlowInstance<any, any>) => void}
-        attributionPosition="bottom-left"
-        proOptions={{ hideAttribution: true }}
-      >
-        <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
-        <Controls />
-        <MiniMap nodeStrokeWidth={3} zoomable pannable />
-        <Panel position="top-left" className="p-2 space-x-2 flex bg-background/80 rounded-md shadow">
-            <Input 
-                value={flowName} 
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFlowName(e.target.value)} 
-                placeholder="Nome do Fluxo"
-                className="border-border w-auto text-xs h-8 neu-input"
-            />
-        </Panel>
-        <Panel position="top-right" className="p-2 space-x-1 flex bg-background/80 rounded-md shadow">
-          <Button onClick={() => addNode('trigger')} size="sm" variant="outline" className="neu-button text-xs">Trigger</Button>
-          <Button onClick={() => addNode('textMessage')} size="sm" variant="outline" className="neu-button text-xs">Texto</Button>
-          <Button onClick={() => addNode('condition')} size="sm" variant="outline" className="neu-button text-xs">Condição</Button>
-          <Button onClick={() => addNode('end')} size="sm" variant="outline" className="neu-button text-xs">Fim</Button>
-          
-          <Button onClick={handleSave} size="sm" variant="default" className="neu-button-primary text-xs" disabled={isLoading}>
-            {isLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />} Salvar
-          </Button>
-          {flowId && flowId !== 'new' && ( 
-            <Button onClick={handleDeleteFlow} size="sm" variant="destructive" className="text-xs">
-              <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Excluir
-            </Button>
-          )}
-           {onCloseEditor && (
-             <Button onClick={onCloseEditor} size="sm" variant="outline" className="neu-button text-xs">
-                Fechar
-             </Button>
-           )}
-        </Panel>
-      </ReactFlow>
+  const SidebarNodeItem = ({ type, label, icon: Icon }: { type: FlowNodeType; label: string; icon: React.ElementType }) => (
+    <div
+      onDragStart={(event) => {
+        event.dataTransfer.setData('application/reactflow', type);
+        event.dataTransfer.effectAllowed = 'move';
+      }}
+      draggable
+      className="p-2 border rounded-md cursor-grab flex items-center gap-2 hover:bg-muted neu-card-sm"
+    >
+      <Icon className="h-5 w-5 text-primary" />
+      <span className="text-xs">{label}</span>
     </div>
   );
-};
-export default ZapFlowBuilderWrapper;
+
+  const toggleFullScreen = () => {
+    const elem = document.documentElement; // Ou um elemento wrapper específico do builder
+    if (!isFullScreen) {
+      if (elem.requestFullscreen) {
+        elem.requestFullscreen();
+      }
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      }
+    }
+    setIsFullScreen(!isFullScreen);
+  };
+  
+  useEffect(() => {
+    const handleFullScreenChange = () => setIsFullScreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', handleFullScreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullScreenChange);
+  }, []);
+
+
+  return (
+    <div className={`flex flex-col h-[calc(100vh-220px)] border rounded-lg shadow-sm ${isFullScreen ? 'fixed inset-0 z-50 bg-background' : 'relative'}`}>
+      {/* Cabeçalho do Builder */}
+      <div className="p-2 border-b bg-muted/30 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Zap className="h-6 w-6 text-primary" />
+          <Input
+            value={flowName}
+            onChange={(e) => setFlowName(e.target.value)}
+            placeholder="Nome do Fluxo"
+            className="text-md font-semibold h-9 w-auto max-w-xs neu-input"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <Button onClick={handleSave} size="sm" disabled={isSaving} className="bg-green-600 hover:bg-green-700 text-white">
+            {isSaving ? <Save className="h-4 w-4 mr-1 animate-pulse" /> : <Save className="h-4 w-4 mr-1" />}
+            Salvar Fluxo
+          </Button>
+          <Button onClick={toggleFullScreen} variant="outline" size="sm">
+            {isFullScreen ? <Minimize className="h-4 w-4 mr-1" /> : <Maximize className="h-4 w-4 mr-1" />}
+             {isFullScreen ? "Sair Tela Cheia" : "Tela Cheia"}
+          </Button>
+          {/* Outros botões: Importar, Exportar, Limpar Canvas */}
+        </div>
+      </div>
+       <Input
+            value={flowDescription}
+            onChange={(e) => setFlowDescription(e.target.value)}
+            placeholder="Descrição breve do fluxo..."
+            className="text-xs border-0 border-b rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 px-3 py-1.5 neu-input-flat"
+        />
+
+
+      <div className="flex-grow flex">
+        {/* Sidebar de Nós */}
+        {!isFullScreen && (
+          <Card className="w-60 border-0 border-r rounded-none p-0">
+            <CardContent className="p-2 h-full">
+              <p className="text-xs font-semibold mb-2 px-1">Arraste os Nós:</p>
+              <ScrollArea className="h-[calc(100%-30px)]">
+                <div className="space-y-2 p-1">
+                  <SidebarNodeItem type={FlowNodeType.TRIGGER} label="Gatilho" icon={Play} />
+                  <Separator />
+                  <SidebarNodeItem type={FlowNodeType.TEXT_MESSAGE} label="Msg. Texto" icon={Zap} />
+                  <SidebarNodeItem type={FlowNodeType.QUESTION} label="Pergunta" icon={Zap} />
+                  <SidebarNodeItem type={FlowNodeType.LIST_MESSAGE} label="Msg. Lista" icon={Zap} />
+                  <SidebarNodeItem type={FlowNodeType.BUTTONS_MESSAGE} label="Msg. Botões" icon={Zap} />
+                  <SidebarNodeItem type={FlowNodeType.MEDIA_MESSAGE} label="Msg. Mídia" icon={Zap} />
+                  <SidebarNodeItem type={FlowNodeType.CLONED_VOICE_NODE} label="Voz Clonada" icon={Zap} />
+                  <Separator />
+                  <SidebarNodeItem type={FlowNodeType.CONDITION} label="Condição" icon={Zap} />
+                  <SidebarNodeItem type={FlowNodeType.DELAY} label="Aguardar" icon={Zap} />
+                  <SidebarNodeItem type={FlowNodeType.ACTION} label="Ação" icon={Zap} />
+                  <Separator />
+                  <SidebarNodeItem type={FlowNodeType.SET_VARIABLE} label="Definir Variável" icon={Zap} />
+                  <SidebarNodeItem type={FlowNodeType.TAG_CONTACT} label="Etiquetar Contato" icon={Zap} />
+                  <Separator />
+                  <SidebarNodeItem type={FlowNodeType.GPT_QUERY} label="Consulta GPT" icon={Zap} />
+                  <SidebarNodeItem type={FlowNodeType.AI_DECISION} label="Decisão IA" icon={Zap} />
+                  <Separator />
+                  <SidebarNodeItem type={FlowNodeType.API_CALL} label="Chamada API" icon={Zap} />
+                  <SidebarNodeItem type={FlowNodeType.EXTERNAL_DATA} label="Dados Externos" icon={Zap} />
+                  <Separator />
+                  <SidebarNodeItem type={FlowNodeType.END} label="Fim do Fluxo" icon={Zap} />
+                </div>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Área do ReactFlow */}
+        <div className="flex-grow h-full" onDrop={onDrop} onDragOver={onDragOver}>
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            nodeTypes={nodeTypes}
+            fitView
+            className="bg-background dark:bg-gray-800"
+            proOptions={{ hideAttribution: true }}
+          >
+            <Controls />
+            <MiniMap />
+            <Background variant={BackgroundVariant.Dots} gap
