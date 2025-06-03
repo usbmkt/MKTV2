@@ -73,10 +73,9 @@ export interface HandleData {
 // -----------------------------------------------------------------------------
 
 export interface BaseNodeData {
-  // id: string; // O ID lógico do nó é o próprio ID do Node do React Flow.
-  label: string; // Nome/título do nó exibido no editor.
+  label: string; 
   description?: string;
-  nodeType: FlowNodeType; // O tipo do nó, usado para mapear para um componente.
+  nodeType: FlowNodeType; 
   handles?: HandleData[];
 }
 
@@ -260,7 +259,6 @@ export interface EndNodeData extends BaseNodeData {
   finalMessage?: string; 
 }
 
-
 export type FlowNodeSpecificData =
   | TriggerNodeData
   | TextMessageNodeData
@@ -280,19 +278,22 @@ export type FlowNodeSpecificData =
   | ExternalDataNodeData
   | EndNodeData;
 
-export type FlowNodeData = FlowNodeSpecificData; // Simplificado: FlowNodeData é a união dos tipos de dados específicos.
+// FlowNodeData é a união de todos os tipos de dados específicos que podem ir em `node.data`.
+export type FlowNodeData = FlowNodeSpecificData;
 
 // Tipos para Node e Edge do React Flow, usando nossos tipos de dados customizados.
-export type CustomFlowNodeType = Extract<FlowNodeType | string, string>; // Garante que o tipo do nó seja sempre uma string.
-export type CustomFlowNode = Node<FlowNodeData, CustomFlowNodeType>;    // Node onde `data` é FlowNodeData e `type` é CustomFlowNodeType.
+export type CustomFlowNodeType = Extract<FlowNodeType | string, string>; 
+// Um Nó do React Flow onde o campo `data` é do tipo `FlowNodeData` e o campo `type` é `CustomFlowNodeType`.
+export type CustomFlowNode = Node<FlowNodeData, CustomFlowNodeType>;    
 
-export interface FlowEdgeData { // O que vai em `edge.data`
+// Opcionalmente, o campo `data` de uma Aresta pode ser do tipo `FlowEdgeData`.
+export interface FlowEdgeData { 
   conditionLabel?: string;
 }
-export type CustomFlowEdge = Edge<FlowEdgeData>; // Edge onde `data` (opcional) é FlowEdgeData.
+export type CustomFlowEdge = Edge<FlowEdgeData>; 
 
 // Props para os componentes de nó customizados.
-// `ReactFlowNodeProps<T>` é `NodeProps<T>` do React Flow, onde T é o tipo do campo `data`.
+// ReactFlowNodeProps<TData> é NodeProps<TData> do React Flow, onde TData é o tipo do campo `data` do nó.
 export type CustomNodeProps<TData extends FlowNodeData> = ReactFlowNodeProps<TData>;
 
 
@@ -315,7 +316,7 @@ export type FlowBuilderContextType = {
   onEdgesChange: OnEdgesChange;
   onConnect: OnConnect;
   addNode: (type: FlowNodeType, position: XYPosition, data?: Partial<FlowNodeData>) => void;
-  updateNodeData: <T extends FlowNodeData>(nodeId: string, newData: Partial<T>) => void; // T é o tipo específico do data
+  updateNodeData: <T extends FlowNodeData>(nodeId: string, newData: Partial<T>) => void; 
   getNodeData: <T extends FlowNodeData>(nodeId: string) => T | undefined;
   setNodes: React.Dispatch<React.SetStateAction<CustomFlowNode[]>>;
   setEdges: React.Dispatch<React.SetStateAction<CustomFlowEdge[]>>;
@@ -375,8 +376,8 @@ export interface WhatsAppMessage {
 }
 
 export interface WhatsAppTemplateCategory {
-  id: string;
-  name: string;
+  id: string; // ex: 'UTILITY', 'MARKETING'
+  name: string; // ex: 'UTILITY', 'MARKETING'
 }
 
 export interface WhatsAppTemplateComponent {
@@ -406,7 +407,7 @@ export interface WhatsAppTemplate {
   name: string;
   language: string;
   status: 'APPROVED' | 'PENDING' | 'REJECTED' | 'PAUSED' | 'DISABLED' | 'IN_APPEAL';
-  category: string;
+  category: string; // Deveria ser string, ou um tipo mais específico se tivermos categorias fixas
   components: WhatsAppTemplateComponent[];
   qualityScore?: {
     score: 'GREEN' | 'YELLOW' | 'RED' | 'UNKNOWN';
@@ -420,7 +421,6 @@ export interface WhatsAppTemplate {
 
 export interface WhatsAppSavedFlow extends FlowData {
   waFlowId?: string;
-  // status já está em FlowData
   version?: number;
   totalUsers?: number;
   completionRate?: number;
