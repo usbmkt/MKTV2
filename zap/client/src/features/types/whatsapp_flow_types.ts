@@ -33,16 +33,78 @@ export interface FlowPerformanceData {
 // --- DEFINIÇÕES DE DADOS PARA NÓS CUSTOMIZADOS ---
 export interface BaseNodeData {
   label?: string; 
-  [key: string]: any; // Restaurado temporariamente para resolver TS2344 no CustomNodeDataType
+  // Adicionando a assinatura de índice para resolver o erro TS2344 em CustomNodeDataType
+  // Isso permite que qualquer propriedade string seja adicionada, o que é flexível,
+  // mas menos seguro. Idealmente, cada NodeData seria estritamente tipado.
+  [key: string]: any; 
 }
 
-// ... (TODAS as outras interfaces ...NodeData que definimos na penúltima mensagem permanecem aqui) ...
-// Garantindo que os nomes exportados sejam:
-// ListMessageNodeData (NÃO ListMessageNodeDataFE)
-// GPTQueryNodeData (NÃO GptQueryNodeData)
-// ExternalDataFetchNodeData (NÃO ExternalDataFetchNodeDataFE)
+export interface TriggerNodeData extends BaseNodeData {
+  triggerType?: 'keyword' | 'form_submission' | 'webhook' | 'manual' | 'scheduled' | '';
+  keywords?: string[]; 
+  formId?: string;
+  webhookUrl?: string; 
+  scheduleDateTime?: string; 
+  exactMatch?: boolean;
+}
 
-// Exemplo (mantendo as correções de nome):
+export interface TextMessageNodeData extends BaseNodeData {
+  message?: string; 
+}
+
+export interface ButtonOption { 
+  id: string; 
+  displayText: string; 
+  value?: string; 
+}
+export interface ButtonsMessageNodeData extends BaseNodeData {
+  messageText?: string;
+  buttons?: ButtonOption[];
+  headerText?: string;
+  footerText?: string;
+}
+
+export interface ImageNodeData extends BaseNodeData {
+  url?: string;
+  caption?: string;
+}
+
+export interface AudioNodeData extends BaseNodeData {
+  url?: string;
+  caption?: string; 
+  ptt?: boolean;    
+}
+
+export interface FileNodeData extends BaseNodeData {
+  url?: string;
+  fileName?: string; 
+  mimeType?: string; 
+  caption?: string;
+}
+
+export interface LocationNodeData extends BaseNodeData {
+  latitude?: string; 
+  longitude?: string; 
+  name?: string;
+  address?: string;
+}
+
+export interface DelayNodeData extends BaseNodeData { 
+  delayAmount?: number; 
+  delayUnit?: 'seconds' | 'minutes' | 'hours' | 'days';
+}
+
+export interface ListItem { 
+  id: string; 
+  title: string; 
+  description?: string; 
+}
+export interface ListSection { 
+  id: string; 
+  title: string; 
+  rows: ListItem[]; 
+}
+// Nome CORRIGIDO para corresponder ao que ZapFlowBuilder.tsx espera após o "Did you mean?"
 export interface ListMessageNodeData extends BaseNodeData { 
   messageText?: string; 
   buttonText?: string; 
@@ -51,6 +113,52 @@ export interface ListMessageNodeData extends BaseNodeData {
   sections?: ListSection[]; 
 }
 
+export interface WaitInputNodeData extends BaseNodeData {
+  variableName?: string;
+  message?: string; 
+  timeoutSeconds?: number;
+}
+
+export interface VariableAssignment { 
+    variableName: string;
+    value?: string; 
+    source?: 'static' | 'expression' | 'contact_data' | 'message_data'; 
+    expression?: string; 
+    contactField?: string; 
+    messagePath?: string; 
+}
+export interface SetVariableNodeData extends BaseNodeData { 
+  assignments?: VariableAssignment[];
+}
+
+export interface ConditionNodeData extends BaseNodeData { 
+  variableToCheck?: string; 
+  operator?: 'equals' | 'not_equals' | 'contains' | 'greater_than' | 'less_than' | 'startsWith' | 'endsWith' | 'isSet' | 'isNotSet' | 'regex';
+  valueToCompare?: string; 
+}
+
+export interface TimeConditionNodeData extends BaseNodeData {
+  startTime?: string; // HH:MM
+  endTime?: string;   // HH:MM
+}
+
+export interface ApiCallNodeData extends BaseNodeData { 
+  url?: string;
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+  headers?: string; 
+  body?: string;    
+  responseMapping?: string; 
+}
+
+export interface WebhookCallNodeData extends BaseNodeData { 
+  url?: string;
+  method?: 'GET' | 'POST';
+  headers?: string;
+  body?: string;
+  saveResponseTo?: string;
+}
+
+// Nome CORRIGIDO para corresponder ao que ZapFlowBuilder.tsx espera após o "Did you mean?"
 export interface GPTQueryNodeData extends BaseNodeData { 
   promptTemplate?: string; 
   variableToSaveResult?: string; 
@@ -61,19 +169,79 @@ export interface GPTQueryNodeData extends BaseNodeData {
   maxTokens?: number; 
 }
 
+export interface AssignAgentNodeData extends BaseNodeData {
+  department?: string;
+  agentId?: string;
+  message?: string; 
+}
+
+export interface EndNodeData extends BaseNodeData { 
+  endStateType?: 'completed' | 'abandoned' | 'error_fallback' | string; 
+  message?: string; 
+}
+
+export interface GoToFlowNodeData extends BaseNodeData {
+  targetFlowId?: string; 
+}
+
+export interface TagContactNodeData extends BaseNodeData { 
+  tagName?: string;
+  tagOperation?: 'add' | 'remove'; 
+}
+
+export interface LoopNodeData extends BaseNodeData {
+  repetitions?: number;
+}
+
+export interface QuickReply { 
+    id: string;
+    text: string;
+    payload?: string;
+}
+export interface QuestionNodeData extends BaseNodeData { 
+  questionText?: string;
+  expectedResponseType?: 'text' | 'number' | 'email' | 'quick_reply' | 'list_reply' | '';
+  variableToSaveAnswer?: string;
+  quickReplies?: QuickReply[];
+}
+
+// Nome CORRIGIDO para corresponder ao que ZapFlowBuilder.tsx espera após o "Did you mean?"
+// (Assumindo que MediaMessageNodeData era o que você queria, e não ListMessageNodeData como sugerido pelo erro, pois são diferentes)
+export interface MediaMessageNodeData extends BaseNodeData { 
+  mediaType?: 'image' | 'video' | 'audio' | 'document' | '';
+  mediaUrl?: string; 
+  caption?: string;
+  fileName?: string; 
+  mimeType?: string; 
+  ptt?: boolean; 
+}
+
+// Nome CORRIGIDO para corresponder ao que ZapFlowBuilder.tsx espera após o "Did you mean?"
 export interface ExternalDataFetchNodeData extends BaseNodeData { 
   url?: string;
   method?: 'GET'; 
   saveToVariable?: string; 
 }
 
-// ... (TODAS AS OUTRAS ...NodeData interfaces da penúltima mensagem vão aqui) ...
-// TriggerNodeData, TextMessageNodeData, ButtonsMessageNodeData, ImageNodeData, etc.
-// ... (certifique-se de que TODAS as 17+ interfaces de nó estejam aqui)
+export interface ActionNodeData extends BaseNodeData { 
+  actionType?: 'add_tag' | 'remove_tag' | 'assign_agent' | 'send_email' | 'update_contact_prop' | 'call_api' | string;
+  tagName?: string; 
+  agentId?: string; 
+  emailTemplateId?: string; 
+  contactPropertyName?: string; 
+  contactPropertyValue?: string | number | boolean; 
+  apiUrl?: string; 
+}
 
-// (COPIE E COLE TODAS AS INTERFACES ...NodeData DA MINHA PENÚLTIMA MENSAGEM AQUI,
-//  APENAS GARANTINDO QUE ListMessageNodeData, GPTQueryNodeData, e ExternalDataFetchNodeData
-//  ESTEJAM COM OS NOMES CORRIGIDOS COMO MOSTRADO ACIMA)
+export interface AiDecisionNodeData extends BaseNodeData { 
+  inputVariable?: string; 
+  decisionCategories?: Array<{ id: string; name: string; keywords?: string; }>; 
+}
+
+export interface ClonedVoiceNodeData extends BaseNodeData { 
+  textToSpeak?: string; 
+  voiceId?: string; 
+}
 
 // --- União de todos os tipos de dados de nós ---
 export type CustomNodeDataType =
@@ -85,7 +253,7 @@ export type CustomNodeDataType =
   | AudioNodeData
   | FileNodeData
   | LocationNodeData
-  | ListMessageNodeData // Nome corrigido
+  | ListMessageNodeData 
   | DelayNodeData
   | WaitInputNodeData
   | SetVariableNodeData
@@ -93,15 +261,15 @@ export type CustomNodeDataType =
   | TimeConditionNodeData
   | ApiCallNodeData
   | WebhookCallNodeData
-  | GPTQueryNodeData // Nome corrigido
+  | GPTQueryNodeData 
   | AssignAgentNodeData
   | EndNodeData
   | GoToFlowNodeData
   | TagContactNodeData
   | LoopNodeData
   | QuestionNodeData
-  | MediaMessageNodeData
-  | ExternalDataFetchNodeData // Nome corrigido
+  | MediaMessageNodeData 
+  | ExternalDataFetchNodeData 
   | ActionNodeData
   | AiDecisionNodeData
   | ClonedVoiceNodeData;
@@ -114,7 +282,7 @@ export interface FlowDefinition {
   viewport?: { x: number; y: number; zoom: number };
 }
 
-// Seus tipos FlowNode e FlowEdge originais (se ainda usados em outro lugar no módulo zap)
+// Seus tipos FlowNode e FlowEdge originais (mantidos para compatibilidade se usados em outro lugar)
 export interface FlowNode {
   id: string;
   type?: string; 
@@ -133,4 +301,4 @@ export interface FlowEdge {
   markerEnd?: any; 
 }
 
-export type { NodeProps, Edge }; // Node já está coberto por ZapFlowNode
+export type { NodeProps, Edge };
