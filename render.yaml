@@ -1,44 +1,32 @@
 services:
   - type: web
-    name: mktv5-render # Nome do seu serviço web principal
+    name: mktv5-render
     env: node
-    plan: free # Certifique-se de que o plano free suporta os recursos que você precisa
+    plan: free
     region: oregon
-    buildCommand: npm install && npm run build # Este build deve construir o MKTV2 e o Zap (conforme package.json raiz)
-    startCommand: npm run migrate:deploy && npm run migrate:zap:deploy && npm start # Executa migrações de ambos antes de iniciar
+    buildCommand: npm install && npm run build
+    startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
-        value: 10000 # Porta que o Render espera
+        value: 10000
       - key: FORCE_AUTH_BYPASS
-        value: false # Recomenda-se false em produção
-      - key: GEMINI_API_KEY # Chave principal, pode ser usada pelo Zap se ZAP_GEMINI_API_KEY não for definida
-        value: AIzaSyBh6HdznlhY0Xvm-rKWMBuQh83xVlEdSd4 
+        value: false
+      - key: GEMINI_API_KEY
+        value: AIzaSyBh6HdznlhY0Xvm-rKWMBuQh83xVlEdSd4
       - key: JWT_SECRET
-        value: k3jHs9aF3dLmN5pQrT7vWxYz1bC4eI0oP2uV6iM/s= # Segredo forte e único para produção
+        value: k3jHs9aF3dLmN5pQrT7vWxYz1bC4eI0oP2uV6iM/s=
       - key: JWT_EXPIRES_IN
         value: 8d
       - key: GRAPESJS_STUDIO_LICENSE_KEY
         value: bcea48b82acd486f90429a86ef8e5f42b6abdef35d0e486f8649b929acfde5df
-      - key: DATABASE_URL # URL do banco de dados principal do MKTV2
+      - key: DATABASE_URL
         fromDatabase:
-          name: mktv5-render-db # Nome do seu serviço de banco de dados no Render
+          name: mktv5-render-db
           property: connectionString
-      - key: ZAP_DATABASE_URL # URL do banco para o módulo Zap (mesmo banco do MKTV2)
-        fromDatabase:
-          name: mktv5-render-db # Aponta para o mesmo serviço de banco de dados
-          property: connectionString
-      # Adicione aqui outras variáveis de ambiente específicas do Zap, se houver:
-      # Exemplo:
-      # - key: ZAP_GEMINI_API_KEY 
-      #   value: SUA_CHAVE_GEMINI_PARA_O_ZAP (pode ser a mesma ou diferente)
-      # - key: ZAP_ELEVENLABS_API_KEY
-      #   sync: false # Exemplo se for um segredo que você não quer no render.yaml diretamente
-      # - key: ZAP_LOG_LEVEL
-      #   value: info
-    healthCheckPath: /api/health # Corrigido: sem o ponto final
-
+    healthCheckPath: /api/health
+    
 databases:
   - name: mktv5-render-db
     plan: free
