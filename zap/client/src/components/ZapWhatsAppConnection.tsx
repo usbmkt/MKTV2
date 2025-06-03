@@ -249,22 +249,23 @@ export default function ZapWhatsAppConnection({ onConnectionChange }: ZapWhatsAp
             </Button>
         </TabsContent>
         
+        {/* Aba de Configurações - Linha 198 (Input) e 201 (Button) no contexto original do arquivo */}
         <TabsContent value="settings" className="p-6 space-y-6">
             <Card className="neu-card">
                 <CardHeader><CardTitle className="text-base">Configurações de API (Opcional)</CardTitle></CardHeader>
                 <CardContent className="space-y-3">
                     <div>
                         <Label htmlFor="apiToken" className="text-xs">Seu Token de API (se usar provedor externo)</Label>
+                        {/* Esta é a linha que o log do Render aponta como problemática (linha 198) */}
                         <Input 
                           id="apiToken" 
                           type="password" 
                           placeholder="Cole seu token aqui se necessário" 
                           value={apiToken} 
-                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setApiToken(e.target.value)} // Tipagem adicionada
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setApiToken(e.target.value)} 
                           className="neu-input mt-1"
                         />
                     </div>
-                    {/* Linha problemática (anteriormente 201, agora ajustada pela contagem de linhas) */}
                     <Button className="neu-button text-xs" size="sm" type="button">
                         <Settings className="mr-1.5 h-3.5 w-3.5"/>
                         <span>Salvar Token</span>
