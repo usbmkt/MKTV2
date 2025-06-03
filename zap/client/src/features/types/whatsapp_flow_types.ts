@@ -1,4 +1,4 @@
-import { Node, Edge, Position, XYPosition, OnNodesChange, OnEdgesChange, OnConnect, NodeProps as ReactFlowNodeProps, EdgeProps as ReactFlowEdgeProps, NodeChange, EdgeChange } from '@xyflow/react';
+import { Node, Edge, Position, XYPosition, OnNodesChange, OnEdgesChange, OnConnect, NodeProps as ReactFlowNodeProps, EdgeProps as ReactFlowEdgeProps } from '@xyflow/react';
 
 // -----------------------------------------------------------------------------
 // ENUMS E TIPOS BÁSICOS
@@ -271,6 +271,7 @@ export interface EndNodeData extends BaseNodeData {
   finalMessage?: string; 
 }
 
+// FlowNodeData é a união de todos os tipos de dados específicos que podem ir em `node.data`.
 export type FlowNodeData =
   | TriggerNodeData
   | TextMessageNodeData
@@ -290,14 +291,21 @@ export type FlowNodeData =
   | ExternalDataNodeData
   | EndNodeData;
 
-export type CustomFlowNodeType = FlowNodeType | string; // Permite tipos de string literais do enum ou strings genéricas
+// Tipos para Node e Edge do React Flow, usando nossos tipos de dados customizados.
+export type CustomFlowNodeType = FlowNodeType | string; 
+// Simplificado: CustomFlowNode é um Nó do React Flow onde o campo `data` é do tipo `FlowNodeData`.
+// O segundo genérico de Node<T, U> é o `type` do nó (string).
 export type CustomFlowNode = Node<FlowNodeData, CustomFlowNodeType>;    
 
 export interface FlowEdgeData { 
   conditionLabel?: string;
+  // Outros dados específicos da aresta, se houver
 }
-export type CustomFlowEdge = Edge<FlowEdgeData>; 
+// O campo `data` da aresta é opcional.
+export type CustomFlowEdge = Edge<FlowEdgeData | undefined>; 
 
+// Props para os componentes de nó customizados.
+// ReactFlowNodeProps<TData> é NodeProps<TData> do React Flow, onde TData é o tipo do campo `data`.
 export type CustomNodeProps<TData extends FlowNodeData = FlowNodeData> = ReactFlowNodeProps<TData>;
 
 
@@ -313,29 +321,24 @@ export interface FlowData {
   status?: 'draft' | 'active' | 'inactive' | 'archived';
 }
 
-// Tipagem para os hooks useNodesState e useEdgesState
-// OnNodesChange e OnEdgesChange já são tipados genericamente pela biblioteca.
-// As funções setNodes e setEdges devem aceitar Node<FlowNodeData>[] e Edge<FlowEdgeData>[]
-export type CustomOnNodesChange = OnNodesChange; // React Flow lida com o genérico NodeChange<Node<T>>
-export type CustomOnEdgesChange = OnEdgesChange; // React Flow lida com o genérico EdgeChange<Edge<U>>
-
-
 export type FlowBuilderContextType = {
-  nodes: CustomFlowNode[]; // Ou Node<FlowNodeData, CustomFlowNodeType>[]
-  edges: CustomFlowEdge[];   // Ou Edge<FlowEdgeData>[]
-  onNodesChange: CustomOnNodesChange; 
-  onEdgesChange: CustomOnEdgesChange; 
+  nodes: CustomFlowNode[];
+  edges: CustomFlowEdge[];
+  onNodesChange: OnNodesChange; 
+  onEdgesChange: OnEdgesChange; 
   onConnect: OnConnect;         
   addNode: (type: FlowNodeType, position: XYPosition, data?: Partial<FlowNodeData>) => void;
   updateNodeData: <T extends FlowNodeData>(nodeId: string, newData: Partial<T>) => void; 
   getNodeData: <T extends FlowNodeData>(nodeId: string) => T | undefined;
-  setNodes: React.Dispatch<React.SetStateAction<CustomFlowNode[]>>; // Ou Node<FlowNodeData>[]
-  setEdges: React.Dispatch<React.SetStateAction<CustomFlowEdge[]>>;   // Ou Edge<FlowEdgeData>[]
+  setNodes: React.Dispatch<React.SetStateAction<CustomFlowNode[]>>;
+  setEdges: React.Dispatch<React.SetStateAction<CustomFlowEdge[]>>;
   selectedNodeId: string | null;
   setSelectedNodeId: (id: string | null) => void;
 };
 
-// ... (restante dos tipos WhatsApp...)
+// -----------------------------------------------------------------------------
+// TIPOS RELACIONADOS AO WHATSAPP (Conexão, Mensagens, Templates)
+// -----------------------------------------------------------------------------
 export interface WhatsAppConnectionStatus {
   instanceName: string;
   qrCode?: string;
@@ -394,9 +397,10 @@ export interface WhatsAppTemplateComponent {
   format?: 'TEXT' | 'IMAGE' | 'VIDEO' | 'DOCUMENT' | 'LOCATION';
   text?: string;
   example?: {
-    header_handle?: string[];
-    header_text?: string[];
-    body_text?: any[][];
+    header_handle?: string[]; // Para mídia no header
+    header_text?: string; // Para texto no header (note que é string, não string[])
+    body_text?: (string | { type: 'VARIABLE', placeholder: string })[][]; // Permite texto e variáveis
+    // Adicionar 'buttons_example' se necessário para variáveis em botões
   };
   buttons?: WhatsAppTemplateButton[];
 }
@@ -406,7 +410,7 @@ export interface WhatsAppTemplateButton {
   text: string;
   url?: string;
   phoneNumber?: string;
-  example?: string[];
+  example?: string[]; // Para variáveis na URL ou número de telefone
   flow_id?: string;
   flow_action?: 'navigate' | 'data_exchange';
 }
@@ -437,6 +441,7 @@ export interface WhatsAppSavedFlow extends FlowData {
   triggerKeywords?: string[];
 }
 
+// Placeholder types para resolver erros de importação em ZapAnalytics
 export type ApiError = {
   message: string;
   statusCode?: number;
@@ -449,6 +454,6 @@ export interface FlowPerformanceData {
   totalStarted: number;
   totalCompleted: number;
   completionRate: number; 
-  averageDurationSeconds: number; 
+  averageDurationSeconds: number; // Usado em ZapAnalytics
   errorCount?: number;
 }
