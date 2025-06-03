@@ -48,7 +48,7 @@ const ExternalDataNodeComponent: React.FC<ReactFlowNodeProps<ExternalDataNodeDat
           if (node.id === id) {
             const currentData = node.data as ExternalDataNodeData;
              let processedNewData = { ...newData };
-             if (newData.requestPayload && typeof newData.requestPayload !== 'string') {
+             if ('requestPayload' in newData && newData.requestPayload && typeof newData.requestPayload !== 'string') {
                  try {
                      processedNewData.requestPayload = JSON.stringify(newData.requestPayload, null, 2);
                  } catch (e) {
@@ -85,13 +85,12 @@ const ExternalDataNodeComponent: React.FC<ReactFlowNodeProps<ExternalDataNodeDat
   const handlePayloadChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
     const payloadString = e.target.value;
     setRequestPayload(payloadString);
-    // A atualização do nó é feita com a string, o backend que lida com o parse
     updateNodePartialData({ requestPayload: payloadString });
   };
   
   const handleMappingChange = (index: number, field: keyof ApiResponseMapping, value: string) => {
     const newMappings = [...responseMapping];
-    if (!newMappings[index]) newMappings[index] = { id: `map-${Date.now()}-${index}`, sourcePath: '', targetVariable: ''}; // Safety check
+    if (!newMappings[index]) newMappings[index] = { id: `map-${Date.now()}-${index}`, sourcePath: '', targetVariable: ''};
     (newMappings[index] as any)[field] = value;
     setResponseMapping(newMappings);
     updateNodePartialData({ responseMapping: newMappings });
@@ -156,7 +155,7 @@ const ExternalDataNodeComponent: React.FC<ReactFlowNodeProps<ExternalDataNodeDat
              <div className="space-y-1 border-t pt-2 mt-2">
                 <div className="flex justify-between items-center"><Label className="text-xs">Mapeamento da Resposta para Variáveis</Label><Button variant="link" size="xs" onClick={addMapping}><PlusCircle className="h-3 w-3 mr-1"/>Add Mapeamento</Button></div>
                 {responseMapping.map((mapItem: ApiResponseMapping, index: number) => (
-                    <Card key={mapItem.id || index} className="p-2 neu-card-inset space-y-1 mb-1"> {/* Linha ~124 no código original */}
+                    <Card key={mapItem.id || index} className="p-2 neu-card-inset space-y-1 mb-1">
                         <div className="flex items-center gap-1">
                             <Input value={mapItem.sourcePath} onChange={(e: ChangeEvent<HTMLInputElement>) => handleMappingChange(index, 'sourcePath', e.target.value)} placeholder="Caminho JSON (Ex: $.user.id)" className="neu-input text-xs h-7"/>
                             <Input value={mapItem.targetVariable} onChange={(e: ChangeEvent<HTMLInputElement>) => handleMappingChange(index, 'targetVariable', e.target.value)} placeholder="Nome Variável (Ex: id_usuario_api)" className="neu-input text-xs h-7"/>
