@@ -53,7 +53,6 @@ const ExternalDataNodeComponent: React.FC<ReactFlowNodeProps<ExternalDataNodeDat
                      processedNewData.requestPayload = JSON.stringify(newData.requestPayload, null, 2);
                  } catch (e) {
                      console.error("Erro ao serializar payload para JSON:", e);
-                     // Considerar manter a string original se o parse falhar ou mostrar erro
                      processedNewData.requestPayload = typeof newData.requestPayload === 'object' ? '{}' : String(newData.requestPayload);
                  }
              }
@@ -86,13 +85,20 @@ const ExternalDataNodeComponent: React.FC<ReactFlowNodeProps<ExternalDataNodeDat
   const handlePayloadChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
     const payloadString = e.target.value;
     setRequestPayload(payloadString);
-    // A atualização do nó é feita com a string, o backend que lida com o parse
-    updateNodePartialData({ requestPayload: payloadString });
+    // Tenta converter para objeto ao atualizar o nó, mas armazena string no estado local
+    try {
+        updateNodePartialData({ requestPayload: JSON.parse(payloadString) });
+    } catch (error) {
+        // Se não for JSON válido, talvez salvar como string ou mostrar erro
+        updateNodePartialData({ requestPayload: payloadString }); // Salva como string
+    }
   };
   
   const handleMappingChange = (index: number, field: keyof ApiResponseMapping, value: string) => {
     const newMappings = [...responseMapping];
-    (newMappings[index] as any)[field] = value; // Simples para string fields
+    // Assegura que o objeto existe antes de tentar atribuir
+    if (!newMappings[index]) newMappings[index] = { id: `map-${Date.now()}-${index}`, sourcePath: '', targetVariable: ''};
+    (newMappings[index] as any)[field] = value;
     setResponseMapping(newMappings);
     updateNodePartialData({ responseMapping: newMappings });
   };
@@ -156,13 +162,13 @@ const ExternalDataNodeComponent: React.FC<ReactFlowNodeProps<ExternalDataNodeDat
              <div className="space-y-1 border-t pt-2 mt-2">
                 <div className="flex justify-between items-center"><Label className="text-xs">Mapeamento da Resposta para Variáveis</Label><Button variant="link" size="xs" onClick={addMapping}><PlusCircle className="h-3 w-3 mr-1"/>Add Mapeamento</Button></div>
                 {responseMapping.map((mapItem: ApiResponseMapping, index: number) => (
-                    <Card key={mapItem.id || index} className="p-2 neu-card-inset space-y-1"> {/* Esta é a Card interna que causava o erro */}
+                    <Card key={mapItem.id || index} className="p-2 neu-card-inset space-y-1 mb-1"> {/* Adicionado mb-1 para espaçamento */}
                         <div className="flex items-center gap-1">
                             <Input value={mapItem.sourcePath} onChange={(e: ChangeEvent<HTMLInputElement>) => handleMappingChange(index, 'sourcePath', e.target.value)} placeholder="Caminho JSON (Ex: $.user.id)" className="neu-input text-xs h-7"/>
                             <Input value={mapItem.targetVariable} onChange={(e: ChangeEvent<HTMLInputElement>) => handleMappingChange(index, 'targetVariable', e.target.value)} placeholder="Nome Variável (Ex: id_usuario_api)" className="neu-input text-xs h-7"/>
-                            <Button variant="ghost" size="icon" onClick={() => removeMapping(index)} className="h-7 w-7 text-destructive"><XCircle className="h-3 w-3"/></Button>
+                            <Button variant="ghost" size="icon" onClick={() => removeMapping(index)} className="h-7 w-7 text-destructive shrink-0"><XCircle className="h-3 w-3"/></Button> {/* Adicionado shrink-0 */}
                         </div>
-                    </Card> {/* CORRIGIDO: Tag de fechamento </Card> adicionada aqui */}
+                    </Card> 
                 ))}
             </div>
         </ScrollArea>
