@@ -1,163 +1,235 @@
-import React, { memo, useState, ChangeEvent, useCallback } from 'react';
-import { Handle, Position, NodeProps, Node, useReactFlow } from '@xyflow/react';
+import React, { memo, useState, useEffect, useCallback, ChangeEvent, KeyboardEvent } from 'react';
+import { Handle, Position, useReactFlow, NodeToolbar, NodeProps as ReactFlowNodeProps } from '@xyflow/react';
+// CORRIGIDO: Path Aliases
+import { QuestionNodeData, FlowNodeType, HandleData } from '@zap_client/features/types/whatsapp_flow_types';
 import { Card, CardContent, CardHeader, CardTitle } from '@zap_client/components/ui/card';
+import { Textarea } from '@zap_client/components/ui/textarea';
 import { Input } from '@zap_client/components/ui/input';
 import { Label } from '@zap_client/components/ui/label';
-import { Textarea } from '@zap_client/components/ui/textarea';
 import { Button } from '@zap_client/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@zap_client/components/ui/select';
-import { GripVertical, HelpCircle, PlusCircle, Trash2 } from 'lucide-react';
-import { QuestionNodeData, QuickReply, ListItem } from '@zap_client/features/types/whatsapp_flow_types'; // Ajustado o import
+import { Checkbox } from '@zap_client/components/ui/checkbox';
+import { HelpCircle, Trash2, Edit3, PlusCircle, XCircle } from 'lucide-react';
+import { cn } from '@zap_client/lib/utils';
+import { Badge } from '@zap_client/components/ui/badge';
 
-const QuestionNode: React.FC<NodeProps<QuestionNodeData>> = ({ id, data, selected }) => {
+const defaultHandles: HandleData[] = [
+  { id: 'input', type: 'target', position: Position.Left, label: 'Entrada', style: {top: '50%'} },
+  // As saídas serão dinâmicas com base nas opções, ou uma saída padrão
+  { id: 'output_default', type: 'source', position: Position.Right, label: 'Próximo (Padrão)', style: {top: '50%'} },
+];
+
+// Tipagem correta das props
+const QuestionNodeComponent: React.FC<ReactFlowNodeProps<QuestionNodeData>> = ({ id, data, selected }) => {
   const { setNodes } = useReactFlow();
-  const [nodeData, setNodeData] = useState<QuestionNodeData>(data);
 
-  const updateNodeData = useCallback((newData: Partial<QuestionNodeData>) => {
-    setNodes((nds) =>
-      nds.map((node: Node) => {
-        if (node.id === id) {
-          return { ...node, data: { ...node.data, ...newData } };
-        }
-        return node;
-      })
-    );
-    setNodeData(prev => ({ ...prev, ...newData }));
-  }, [id, setNodes]);
+  const [label, setLabel] = useState<string>(data.label || 'Pergunta');
+  const [isEditingLabel, setIsEditingLabel] = useState<boolean>(false);
+  const [questionText, setQuestionText] = useState<string>(data.questionText || '');
+  const [expectedResponseType, setExpectedResponseType] = useState<QuestionNodeData['expectedResponseType']>(data.expectedResponseType || 'text');
+  const [variableToStoreAnswer, setVariableToStoreAnswer] = useState<string>(data.variableToStoreAnswer || 'user_answer');
+  const [options, setOptions] = useState<Array<{ id: string; label: string; value: string }>>(
+    data.options || [{ id: Date.now().toString(), label: 'Opção 1', value: 'opcao1' }]
+  );
+  const [validationRegex, setValidationRegex] = useState<string>(data.validationRegex || '');
+  const [errorMessage, setErrorMessage] = useState<string>(data.errorMessage || 'Resposta inválida.');
+  const [enableAiSuggestions, setEnableAiSuggestions] = useState<boolean>(data.enableAiSuggestions || false);
 
 
-  const handleInputChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    updateNodeData({ [name]: value });
+  useEffect(() => {
+    setLabel(data.label || 'Pergunta');
+    setQuestionText(data.questionText || '');
+    setExpectedResponseType(data.expectedResponseType || 'text');
+    setVariableToStoreAnswer(data.variableToStoreAnswer || 'user_answer');
+    setOptions(data.options || [{ id: Date.now().toString(), label: 'Opção 1', value: 'opcao1' }]);
+    setValidationRegex(data.validationRegex || '');
+    setErrorMessage(data.errorMessage || 'Resposta inválida.');
+    setEnableAiSuggestions(data.enableAiSuggestions || false);
+  }, [data]);
+
+  const updateNodePartialData = useCallback(
+    (newData: Partial<QuestionNodeData>) => {
+      setNodes((nds) =>
+        nds.map((node) => {
+          if (node.id === id) {
+            const currentData = node.data as QuestionNodeData;
+            return { ...node, data: { ...currentData, ...newData } };
+          }
+          return node;
+        })
+      );
+    },
+    [id, setNodes]
+  );
+
+  const handleLabelChange = (e: ChangeEvent<HTMLInputElement>) => setLabel(e.target.value);
+  const handleLabelSave = () => {
+    updateNodePartialData({ label });
+    setIsEditingLabel(false);
   };
 
-  const handleSelectChange = (name: keyof QuestionNodeData, value: string) => {
-    updateNodeData({ [name]: value as QuestionNodeData['expectedResponseType'] });
+  const handleQuestionTextChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
+    setQuestionText(e.target.value);
+    updateNodePartialData({ questionText: e.target.value });
   };
 
-  const handleQuickReplyChange = (index: number, field: keyof QuickReply, value: string) => {
-    const newQuickReplies = [...(nodeData.quickReplies || [])];
-    if (newQuickReplies[index]) {
-      (newQuickReplies[index] as any)[field] = value;
-      updateNodeData({ quickReplies: newQuickReplies });
-    }
-  };
-
-  const addQuickReply = () => {
-    const newQuickReply: QuickReply = { id: `qr-${Date.now()}`, text: 'Nova Resposta', payload: '' };
-    updateNodeData({ quickReplies: [...(nodeData.quickReplies || []), newQuickReply] });
-  };
-
-  const removeQuickReply = (index: number) => {
-    const newQuickReplies = (nodeData.quickReplies || []).filter((_, i) => i !== index);
-    updateNodeData({ quickReplies: newQuickReplies });
+  const handleExpectedResponseTypeChange = (value: string) => {
+    const newType = value as QuestionNodeData['expectedResponseType'];
+    setExpectedResponseType(newType);
+    updateNodePartialData({ expectedResponseType: newType, options: newType === 'options' ? options : undefined });
   };
   
-  // Funções para ListOptions (similar a QuickReplies se necessário)
-  // Por simplicidade, não implementado aqui mas seguiria o mesmo padrão
+  const handleVariableChange = (e: ChangeEvent<HTMLInputElement>) => {
+    setVariableToStoreAnswer(e.target.value);
+    updateNodePartialData({ variableToStoreAnswer: e.target.value });
+  };
+
+  const handleOptionChange = (index: number, field: 'label' | 'value', value: string) => {
+    const newOptions = [...options];
+    newOptions[index] = { ...newOptions[index], [field]: value };
+    setOptions(newOptions);
+    updateNodePartialData({ options: newOptions });
+  };
+
+  const addOption = () => {
+    const newOption = { id: Date.now().toString(), label: `Opção ${options.length + 1}`, value: `opcao${options.length + 1}` };
+    const newOptions = [...options, newOption];
+    setOptions(newOptions);
+    updateNodePartialData({ options: newOptions });
+  };
+
+  const removeOption = (indexToRemove: number) => {
+    const newOptions = options.filter((_: any, index: number) => index !== indexToRemove);
+    setOptions(newOptions);
+    updateNodePartialData({ options: newOptions });
+  };
+  
+  const handleRegexChange = (e: ChangeEvent<HTMLInputElement>) => {
+    setValidationRegex(e.target.value);
+    updateNodePartialData({ validationRegex: e.target.value });
+  };
+
+  const handleErrorMessageChange = (e: ChangeEvent<HTMLInputElement>) => {
+    setErrorMessage(e.target.value);
+    updateNodePartialData({ errorMessage: e.target.value });
+  };
+  
+  const handleAiSuggestionsChange = (checked: boolean) => {
+    setEnableAiSuggestions(checked);
+    updateNodePartialData({ enableAiSuggestions: checked });
+  };
+
+
+  const handleDeleteNode = () => {
+    setNodes((nds) => nds.filter(node => node.id !== id));
+  };
+
+  const handlesToRender = useMemo(() => {
+    const baseHandles = data.handles || defaultHandles;
+    if (expectedResponseType === 'options') {
+        // Remover a saída padrão se houver opções, pois cada opção terá sua própria saída
+        const inputHandle = baseHandles.find(h => h.type === 'target');
+        const optionHandles = options.map((opt, index) => ({
+            id: `option_output_${opt.id || index}`, // Usar ID da opção ou índice
+            type: 'source' as 'source',
+            position: Position.Right,
+            label: `Saída: ${opt.label || `Opção ${index + 1}`}`,
+            style: { top: `${(index + 1) * (100 / (options.length +1 ))}%` },
+        }));
+        return inputHandle ? [inputHandle, ...optionHandles] : optionHandles;
+    }
+    return baseHandles;
+  }, [data.handles, options, expectedResponseType]);
+
 
   return (
-    <Card className={`w-96 shadow-md ${selected ? 'ring-2 ring-blue-500' : ''}`}>
-      <CardHeader className="bg-gray-100 p-4 rounded-t-lg flex flex-row items-center justify-between">
-        <div className="flex items-center">
-          <HelpCircle className="w-4 h-4 mr-2 text-gray-600" />
-          <CardTitle className="text-sm font-medium">{nodeData.label || 'Fazer Pergunta'}</CardTitle>
-        </div>
-        <GripVertical className="w-5 h-5 text-gray-400 cursor-grab drag-handle" />
+    <Card className={cn("w-80 shadow-md neu-card", selected && "ring-2 ring-purple-500 ring-offset-2")}>
+      <NodeToolbar isVisible={selected} position={Position.Top} className="flex gap-2">
+        <Button variant="outline" size="sm" onClick={() => setIsEditingLabel(true)} title="Editar Nome"> <Edit3 className="h-4 w-4" /> </Button>
+        <Button variant="destructive" size="sm" onClick={handleDeleteNode} title="Remover Nó"> <Trash2 className="h-4 w-4" /> </Button>
+      </NodeToolbar>
+
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 pt-3 px-4 bg-purple-500/10 dark:bg-purple-700/20 rounded-t-lg">
+        {isEditingLabel ? (
+          <div className="flex items-center gap-2">
+            <Input value={label} onChange={handleLabelChange} className="text-sm h-7" autoFocus onBlur={handleLabelSave} onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => e.key === 'Enter' && handleLabelSave()} />
+            <Button size="sm" onClick={handleLabelSave} className="h-7">Salvar</Button>
+          </div>
+        ) : (
+          <CardTitle className="text-sm font-semibold flex items-center cursor-pointer" onClick={() => setIsEditingLabel(true)}>
+            <HelpCircle className="h-4 w-4 mr-2 text-purple-600 dark:text-purple-400" />
+            {data.label || 'Pergunta'}
+          </CardTitle>
+        )}
+        <Badge variant="default" className="bg-purple-500 text-white capitalize">{data.nodeType.replace('Node', '')}</Badge>
       </CardHeader>
-      <CardContent className="p-4 space-y-3">
-        <Handle type="target" position={Position.Left} className="w-3 h-3 bg-blue-500 rounded-full" />
+      <CardContent className="p-3 space-y-3">
         <div>
-          <Label htmlFor={`label-${id}`} className="text-xs font-medium">Rótulo do Nó</Label>
-          <Input
-            id={`label-${id}`}
-            name="label"
-            value={nodeData.label || ''}
-            onChange={handleInputChange}
-            placeholder="Ex: Perguntar Nome"
-            className="mt-1 w-full nodrag"
-          />
+          <Label htmlFor={`question-text-${id}`} className="text-xs">Texto da Pergunta</Label>
+          <Textarea id={`question-text-${id}`} value={questionText} onChange={handleQuestionTextChange} placeholder="Ex: Qual o seu email?" className="mt-1 neu-input" rows={2}/>
         </div>
         <div>
-          <Label htmlFor={`questionText-${id}`} className="text-xs font-medium">Texto da Pergunta</Label>
-          <Textarea
-            id={`questionText-${id}`}
-            name="questionText"
-            value={nodeData.questionText || ''}
-            onChange={handleInputChange}
-            placeholder="Qual é o seu nome?"
-            className="mt-1 w-full nodrag"
-            rows={2}
-          />
-        </div>
-        <div>
-          <Label htmlFor={`expectedResponseType-${id}`} className="text-xs font-medium">Tipo de Resposta Esperada</Label>
-          <Select
-            name="expectedResponseType"
-            value={nodeData.expectedResponseType || ''}
-            onValueChange={(value) => handleSelectChange('expectedResponseType', value)}
-          >
-            <SelectTrigger id={`expectedResponseType-${id}`} className="w-full mt-1 nodrag">
-              <SelectValue placeholder="Selecione o tipo" />
-            </SelectTrigger>
+          <Label htmlFor={`response-type-${id}`} className="text-xs">Tipo de Resposta Esperada</Label>
+          <Select value={expectedResponseType} onValueChange={handleExpectedResponseTypeChange}>
+            <SelectTrigger id={`response-type-${id}`} className="mt-1 neu-input"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="text">Texto Livre</SelectItem>
               <SelectItem value="number">Número</SelectItem>
               <SelectItem value="email">Email</SelectItem>
-              <SelectItem value="quick_reply">Resposta Rápida (Botões)</SelectItem>
-              <SelectItem value="list_reply">Resposta de Lista</SelectItem>
+              <SelectItem value="phone">Telefone</SelectItem>
+              <SelectItem value="date">Data</SelectItem>
+              <SelectItem value="options">Opções (Botões/Respostas Rápidas)</SelectItem>
             </SelectContent>
           </Select>
         </div>
         <div>
-          <Label htmlFor={`variableToSaveAnswer-${id}`} className="text-xs font-medium">Variável para Salvar Resposta</Label>
-          <Input
-            id={`variableToSaveAnswer-${id}`}
-            name="variableToSaveAnswer"
-            value={nodeData.variableToSaveAnswer || ''}
-            onChange={handleInputChange}
-            placeholder="Ex: nomeUsuario"
-            className="mt-1 w-full nodrag"
-          />
+          <Label htmlFor={`variable-store-${id}`} className="text-xs">Salvar Resposta na Variável</Label>
+          <Input id={`variable-store-${id}`} value={variableToStoreAnswer} onChange={handleVariableChange} placeholder="Ex: email_cliente" className="mt-1 neu-input"/>
         </div>
 
-        {nodeData.expectedResponseType === 'quick_reply' && (
-          <div className="space-y-2">
-            <div className="flex justify-between items-center">
-                <h4 className="text-xs font-semibold text-gray-800">Respostas Rápidas</h4>
-                <Button variant="outline" size="sm" onClick={addQuickReply} className="nodrag">
-                    <PlusCircle className="w-3 h-3 mr-1" /> Add Resposta
-                </Button>
-            </div>
-            {(nodeData.quickReplies || []).map((reply: QuickReply, index: number) => (
-              <div key={reply.id || index} className="flex items-center space-x-2 p-2 border rounded bg-gray-50">
-                <Input
-                  placeholder="Texto da Resposta"
-                  value={reply.text}
-                  onChange={(e: ChangeEvent<HTMLInputElement>) => handleQuickReplyChange(index, 'text', e.target.value)}
-                  className="flex-grow nodrag"
-                />
-                <Input
-                  placeholder="Payload (opcional)"
-                  value={reply.payload || ''}
-                  onChange={(e: ChangeEvent<HTMLInputElement>) => handleQuickReplyChange(index, 'payload', e.target.value)}
-                  className="flex-grow nodrag"
-                />
-                <Button variant="ghost" size="icon" onClick={() => removeQuickReply(index)} className="nodrag">
-                  <Trash2 className="w-4 h-4 text-red-500" />
-                </Button>
+        {expectedResponseType === 'options' && (
+          <div className="space-y-2 border-t pt-2">
+            <Label className="text-xs">Opções de Resposta</Label>
+            {options.map((opt, index) => (
+              <div key={opt.id || index} className="flex items-center gap-2">
+                <Input value={opt.label} onChange={(e: ChangeEvent<HTMLInputElement>) => handleOptionChange(index, 'label', e.target.value)} placeholder={`Label Opção ${index + 1}`} className="neu-input text-xs h-8"/>
+                <Input value={opt.value} onChange={(e: ChangeEvent<HTMLInputElement>) => handleOptionChange(index, 'value', e.target.value)} placeholder={`Valor Opção ${index + 1}`} className="neu-input text-xs h-8"/>
+                <Button variant="ghost" size="icon" onClick={() => removeOption(index)} className="h-8 w-8 text-destructive"> <XCircle className="h-4 w-4"/> </Button>
               </div>
             ))}
+            <Button variant="outline" size="sm" onClick={addOption} className="mt-1 text-xs"> <PlusCircle className="h-3 w-3 mr-1"/> Adicionar Opção </Button>
           </div>
         )}
-        {/* Similar UI for listOptions if expectedResponseType is 'list_reply' */}
-
-        <Handle type="source" position={Position.Right} className="w-3 h-3 bg-green-500 rounded-full" />
-        <Handle type="source" position={Position.Bottom} id="no-answer" style={{ bottom: -5, background: '#FFA500' }} className="w-3 h-3 rounded-full" />
+         {(expectedResponseType !== 'options' && expectedResponseType !== 'text') && ( // Para tipos como number, email, phone, date
+            <div>
+                <Label htmlFor={`validation-regex-${id}`} className="text-xs">Regex de Validação (Opcional)</Label>
+                <Input id={`validation-regex-${id}`} value={validationRegex} onChange={handleRegexChange} placeholder="Ex: ^\d+$ para números" className="mt-1 neu-input"/>
+            </div>
+         )}
+         <div>
+            <Label htmlFor={`error-message-${id}`} className="text-xs">Mensagem de Erro (se inválido)</Label>
+            <Input id={`error-message-${id}`} value={errorMessage} onChange={handleErrorMessageChange} placeholder="Ex: Por favor, insira um email válido." className="mt-1 neu-input"/>
+        </div>
+        <div className="flex items-center space-x-2 pt-2">
+            <Checkbox id={`ai-suggestions-${id}`} checked={enableAiSuggestions} onCheckedChange={handleAiSuggestionsChange} />
+            <Label htmlFor={`ai-suggestions-${id}`} className="text-xs font-normal">Habilitar sugestões da IA para respostas?</Label>
+        </div>
 
       </CardContent>
+
+      {handlesToRender.map((handleItem: HandleData) => (
+        <Handle
+          key={handleItem.id}
+          id={handleItem.id}
+          type={handleItem.type}
+          position={handleItem.position}
+          isConnectable={true}
+          style={{ ...handleItem.style, background: '#a855f7', width: '10px', height: '10px' }} // Cor Roxo
+          aria-label={handleItem.label}
+        />
+      ))}
     </Card>
   );
 };
 
-export default memo(QuestionNode);
+export default memo(QuestionNodeComponent);
