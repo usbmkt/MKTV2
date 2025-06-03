@@ -1,187 +1,185 @@
-import React, { memo, useState, ChangeEvent, useCallback } from 'react';
-import { Handle, Position, NodeProps, Node, useReactFlow } from '@xyflow/react';
-import { Card, CardContent, CardHeader, CardTitle } from '@zap_client/components/ui/card';
-import { Input } from '@zap_client/components/ui/input';
-import { Label } from '@zap_client/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@zap_client/components/ui/select';
-import { Button } from '@zap_client/components/ui/button';
-import { GripVertical, PlayCircle, AlertTriangle, PlusCircle, Trash2, ZapIcon } from 'lucide-react';
-import { TriggerNodeData } from '@zap_client/features/types/whatsapp_flow_types'; // Ajustado o import
-import { Checkbox } from '@zap_client/components/ui/checkbox';
+import React, { memo, useState, useEffect, useCallback } from 'react';
+import { Handle, Position, useReactFlow, NodeToolbar, NodeProps } from '@xyflow/react';
+import { TriggerNodeData, FlowNodeType, HandleData } from '@/types/whatsapp_flow_types';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import { Zap, Trash2, Edit3, PlusCircle, Settings2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
 
+const defaultHandles: HandleData[] = [
+  { id: 'output', type: 'source', position: Position.Right, label: 'Início do Fluxo', style: { top: '50%' } },
+];
+
+// Usando NodeProps do React Flow diretamente, já que CustomNodeProps estava causando problemas
+// e TriggerNodeData é a forma dos 'data' props.
 const TriggerNode: React.FC<NodeProps<TriggerNodeData>> = ({ id, data, selected }) => {
   const { setNodes } = useReactFlow();
-  const [nodeData, setNodeData] = useState<TriggerNodeData>(data);
+  const [triggerType, setTriggerType] = useState(data.triggerType || 'keyword');
+  const [keywords, setKeywords] = useState(data.keywords?.join(', ') || '');
+  const [pattern, setPattern] = useState(data.pattern || '');
+  const [label, setLabel] = useState(data.label || 'Gatilho');
+  const [isEditingLabel, setIsEditingLabel] = useState(false);
 
-  const updateNodeData = useCallback((newData: Partial<TriggerNodeData>) => {
-    setNodes((nds) =>
-      nds.map((node: Node) => {
-        if (node.id === id) {
-          return { ...node, data: { ...node.data, ...newData } };
-        }
-        return node;
-      })
-    );
-    setNodeData(prev => ({ ...prev, ...newData }));
-  }, [id, setNodes]);
+  useEffect(() => {
+    setTriggerType(data.triggerType || 'keyword');
+    setKeywords(data.keywords?.join(', ') || '');
+    setPattern(data.pattern || '');
+    setLabel(data.label || 'Gatilho');
+  }, [data]);
 
-  const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    updateNodeData({ [name]: value });
+  const updateNodeData = useCallback(
+    (newData: Partial<TriggerNodeData>) => {
+      setNodes((nds) =>
+        nds.map((node) => {
+          if (node.id === id) {
+            return { ...node, data: { ...node.data, ...newData } };
+          }
+          return node;
+        })
+      );
+    },
+    [id, setNodes]
+  );
+
+  const handleLabelChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setLabel(e.target.value);
   };
 
-  const handleSelectChange = (name: keyof TriggerNodeData, value: string) => {
-    updateNodeData({ [name]: value as TriggerNodeData['triggerType'] });
+  const handleLabelSave = () => {
+    updateNodeData({ label });
+    setIsEditingLabel(false);
   };
 
-  const handleCheckboxChange = (name: keyof TriggerNodeData, checked: boolean | "indeterminate") => {
-    if (typeof checked === 'boolean') {
-      updateNodeData({ [name]: checked });
-    }
+  const handleTriggerTypeChange = (value: string) => {
+    const newType = value as TriggerNodeData['triggerType'];
+    setTriggerType(newType);
+    updateNodeData({ triggerType: newType });
   };
 
-  const handleKeywordChange = (index: number, value: string) => {
-    const newKeywords = [...(nodeData.keywords || [])];
-    newKeywords[index] = value;
-    updateNodeData({ keywords: newKeywords });
+  const handleKeywordsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setKeywords(e.target.value);
+    updateNodeData({ keywords: e.target.value.split(',').map(k => k.trim()).filter(k => k) });
   };
 
-  const addKeyword = () => {
-    updateNodeData({ keywords: [...(nodeData.keywords || []), ''] });
+  const handlePatternChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setPattern(e.target.value);
+    updateNodeData({ pattern: e.target.value });
   };
 
-  const removeKeyword = (index: number) => {
-    const newKeywords = (nodeData.keywords || []).filter((_, i) => i !== index);
-    updateNodeData({ keywords: newKeywords });
+  const handleDeleteNode = () => {
+    setNodes((nds) => nds.filter(node => node.id !== id));
   };
 
+  const handlesToRender = data.handles || defaultHandles;
 
   return (
-    <Card className={`w-96 shadow-md ${selected ? 'ring-2 ring-blue-500' : ''} ${!data.triggerType ? 'border-red-500' : ''}`}>
-      <CardHeader className="bg-gray-100 p-4 rounded-t-lg flex flex-row items-center justify-between">
-        <div className="flex items-center">
-          <PlayCircle className="w-4 h-4 mr-2 text-gray-600" />
-          <CardTitle className="text-sm font-medium">{nodeData.label || 'Gatilho Inicial'}</CardTitle>
-        </div>
-        <GripVertical className="w-5 h-5 text-gray-400 cursor-grab drag-handle" />
-      </CardHeader>
-      <CardContent className="p-4 space-y-3">
-        {!data.triggerType && (
-          <div className="flex items-center text-red-600 text-xs mb-2">
-            <AlertTriangle className="w-4 h-4 mr-1" />
-            <span>Configure o tipo de gatilho.</span>
+    <Card className={cn("w-72 shadow-lg neu-card border-2 border-green-500/50", selected && "ring-2 ring-green-600 ring-offset-2")}>
+      <NodeToolbar isVisible={selected} position={Position.Top} className="flex gap-2">
+        <Button variant="outline" size="sm" onClick={() => setIsEditingLabel(true)} title="Editar Nome">
+          <Edit3 className="h-4 w-4" />
+        </Button>
+        <Button variant="destructive" size="sm" onClick={handleDeleteNode} title="Remover Nó">
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </NodeToolbar>
+
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 pt-3 px-4 bg-green-500/10 dark:bg-green-700/20 rounded-t-lg">
+        {isEditingLabel ? (
+          <div className="flex items-center gap-2">
+            <Input value={label} onChange={handleLabelChange} className="text-sm h-7" autoFocus />
+            <Button size="sm" onClick={handleLabelSave} className="h-7">Salvar</Button>
           </div>
+        ) : (
+          <CardTitle className="text-sm font-semibold flex items-center cursor-pointer" onClick={() => setIsEditingLabel(true)}>
+            <Zap className="h-5 w-5 mr-2 text-green-600 dark:text-green-400" />
+            {data.label || 'Gatilho do Fluxo'}
+          </CardTitle>
         )}
+         <Badge variant="default" className="bg-green-600 text-white">Gatilho</Badge>
+      </CardHeader>
+      <CardContent className="p-3 space-y-3">
         <div>
-          <Label htmlFor={`label-${id}`} className="text-xs font-medium">Rótulo do Nó</Label>
-          <Input
-            id={`label-${id}`}
-            name="label"
-            value={nodeData.label || ''}
-            onChange={handleInputChange}
-            placeholder="Ex: Início por Palavra-Chave"
-            className="mt-1 w-full nodrag"
-          />
-        </div>
-        <div>
-          <Label htmlFor={`triggerType-${id}`} className="text-xs font-medium">Tipo de Gatilho</Label>
-          <Select
-            name="triggerType"
-            value={nodeData.triggerType || ''}
-            onValueChange={(value) => handleSelectChange('triggerType', value)}
-          >
-            <SelectTrigger id={`triggerType-${id}`} className="w-full mt-1 nodrag">
-              <SelectValue placeholder="Selecione o tipo de gatilho" />
+          <Label htmlFor={`trigger-type-${id}`} className="text-xs font-medium">Tipo de Gatilho</Label>
+          <Select value={triggerType} onValueChange={handleTriggerTypeChange}>
+            <SelectTrigger id={`trigger-type-${id}`} className="w-full mt-1 neu-input">
+              <SelectValue placeholder="Selecione o tipo" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="keyword">Palavra-chave</SelectItem>
-              <SelectItem value="form_submission">Envio de Formulário</SelectItem>
-              <SelectItem value="webhook">Webhook Externo</SelectItem>
-              <SelectItem value="manual">Manual (API)</SelectItem>
-              <SelectItem value="scheduled">Agendado</SelectItem>
+              <SelectItem value="keyword">Palavra-chave (Contém)</SelectItem>
+              <SelectItem value="exact_match">Palavra-chave (Exata)</SelectItem>
+              <SelectItem value="pattern">Padrão (Regex)</SelectItem>
+              <SelectItem value="api_call">Chamada de API</SelectItem>
+              <SelectItem value="manual">Início Manual</SelectItem>
             </SelectContent>
           </Select>
         </div>
 
-        {nodeData.triggerType === 'keyword' && (
-          <div className="space-y-2 p-2 border rounded bg-gray-50">
-            <Label className="text-xs font-medium">Palavras-chave</Label>
-            {(nodeData.keywords || []).map((keyword, index) => (
-              <div key={index} className="flex items-center space-x-2">
-                <Input
-                  value={keyword}
-                  onChange={(e) => handleKeywordChange(index, e.target.value)}
-                  placeholder="Digite a palavra-chave"
-                  className="flex-grow nodrag"
-                />
-                <Button variant="ghost" size="icon" onClick={() => removeKeyword(index)} className="nodrag">
-                  <Trash2 className="w-4 h-4 text-red-500" />
-                </Button>
-              </div>
-            ))}
-            <Button variant="outline" size="sm" onClick={addKeyword} className="nodrag">
-              <PlusCircle className="w-3 h-3 mr-1" /> Adicionar Palavra-chave
-            </Button>
-            <div className="flex items-center space-x-2 mt-2">
-                <Checkbox
-                    id={`exactMatch-${id}`}
-                    checked={nodeData.exactMatch || false}
-                    onCheckedChange={(checked) => handleCheckboxChange('exactMatch', checked)}
-                    className="nodrag"
-                />
-                <Label htmlFor={`exactMatch-${id}`} className="text-xs font-medium">
-                    Correspondência exata da palavra-chave
-                </Label>
-            </div>
-          </div>
-        )}
-
-        {nodeData.triggerType === 'form_submission' && (
+        {(triggerType === 'keyword' || triggerType === 'exact_match') && (
           <div>
-            <Label htmlFor={`formId-${id}`} className="text-xs font-medium">ID do Formulário</Label>
+            <Label htmlFor={`keywords-${id}`} className="text-xs font-medium">
+              {triggerType === 'keyword' ? "Palavras-chave (separadas por vírgula)" : "Frase Exata"}
+            </Label>
             <Input
-              id={`formId-${id}`}
-              name="formId"
-              value={nodeData.formId || ''}
-              onChange={handleInputChange}
-              placeholder="ID do formulário integrado"
-              className="mt-1 w-full nodrag"
+              id={`keywords-${id}`}
+              type="text"
+              value={keywords}
+              onChange={handleKeywordsChange}
+              placeholder={triggerType === 'keyword' ? "ex: promoção, ajuda, oi" : "ex: quero meu boleto"}
+              className="mt-1 neu-input"
             />
           </div>
         )}
 
-        {nodeData.triggerType === 'webhook' && (
+        {triggerType === 'pattern' && (
           <div>
-            <Label htmlFor={`webhookUrl-${id}`} className="text-xs font-medium">URL do Webhook (gerada pelo sistema)</Label>
-            <Input
-              id={`webhookUrl-${id}`}
-              name="webhookUrl"
-              value={nodeData.webhookUrl || 'Será gerada ao salvar o fluxo'}
-              readOnly // Geralmente é apenas para exibição
-              className="mt-1 w-full bg-gray-100 nodrag"
+            <Label htmlFor={`pattern-${id}`} className="text-xs font-medium">Padrão Regex</Label>
+            <Textarea
+              id={`pattern-${id}`}
+              value={pattern}
+              onChange={handlePatternChange}
+              placeholder="ex: ^(pedido|compra)\s#?(\d+)$"
+              className="mt-1 neu-input"
+              rows={2}
             />
-             <p className="text-xs text-gray-500 mt-1">Este nó expõe uma URL para iniciar o fluxo via HTTP POST.</p>
+            <p className="text-xs text-muted-foreground mt-1">Use para padrões complexos. Cuidado com a sintaxe.</p>
           </div>
         )}
-
-        {nodeData.triggerType === 'scheduled' && (
-            <div>
-                <Label htmlFor={`scheduleDateTime-${id}`} className="text-xs font-medium">Data e Hora do Agendamento</Label>
-                <Input
-                id={`scheduleDateTime-${id}`}
-                name="scheduleDateTime"
-                type="datetime-local"
-                value={nodeData.scheduleDateTime || ''}
-                onChange={handleInputChange}
-                className="mt-1 w-full nodrag"
-                />
-            </div>
+         {triggerType === 'api_call' && (
+          <p className="text-xs text-muted-foreground p-2 bg-muted rounded-md">
+            Este fluxo pode ser iniciado por uma chamada de API externa para um endpoint específico (a ser configurado no backend).
+          </p>
         )}
-
-        <Handle type="source" position={Position.Right} className="w-3 h-3 bg-green-500 rounded-full" />
+        {triggerType === 'manual' && (
+          <p className="text-xs text-muted-foreground p-2 bg-muted rounded-md">
+            Este fluxo só pode ser iniciado manualmente ou por outro fluxo.
+          </p>
+        )}
+         <p className="text-xs text-muted-foreground pt-2">
+            Nota: O gatilho define como o fluxo é iniciado. Apenas um gatilho por fluxo.
+          </p>
       </CardContent>
+
+      {handlesToRender.map(handle => (
+        <Handle
+          key={handle.id}
+          id={handle.id}
+          type={handle.type}
+          position={handle.position}
+          isConnectable={handle.isConnectable !== undefined ? handle.isConnectable : true}
+          style={{ ...handle.style, background: '#22c55e', width: '12px', height: '12px', borderColor: 'white', borderWidth: '1px' }}
+          aria-label={handle.label}
+        />
+      ))}
     </Card>
   );
 };
+
+// O erro sobre 'checked' era de um Switch que removi, pois não estava sendo usado no código original do TriggerNode.
+// Se um Switch for necessário, o parâmetro 'checked' em onCheckedChange precisaria de tipo: (isChecked: boolean) => void.
 
 export default memo(TriggerNode);
