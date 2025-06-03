@@ -1,64 +1,87 @@
- 
 // zap/client/src/components/flow_builder_nodes/ConditionNode.tsx
-import React from 'react';
+import React, { memo } from 'react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
-import { GitBranch, CheckCircle, XCircle } from 'lucide-react';
-import { cn } from '@zap_client/lib/utils';
+import { Card, CardContent, CardHeader, CardTitle } from '@zap_client/components/ui/card';
+import { Label } from '@zap_client/components/ui/label';
+import { Input } from '@zap_client/components/ui/input';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@zap_client/components/ui/select';
+import { GitCommitVertical } from 'lucide-react'; // Ícone para condição
+import { ConditionNodeData } from '@zap_client/features/types/whatsapp_flow_types';
 
-export interface Condition {
-  id: string;
-  variable?: string;
-  operator?: 'equals' | 'not_equals' | 'contains' | 'greater_than' | 'less_than';
-  value?: string;
-  outputLabel?: string; // Rótulo para o handle de saída desta condição
-}
+const ConditionNode: React.FC<NodeProps<ConditionNodeData>> = ({ data, id, selected }) => {
+  const { 
+    label = 'Condição',
+    // Assumindo a estrutura mais simples de condição do whatsapp_flow_types.ts de exemplo
+    variableToCheck = '',
+    operator = 'equals',
+    valueToCompare = ''
+  } = data;
 
-export interface ConditionNodeData {
-  label?: string;
-  conditions?: Condition[]; // Array de condições, cada uma pode ter uma saída
-  // defaultOutputLabel?: string; // Rótulo para a saída "else" / padrão
-}
-
-const ConditionNode: React.FC<NodeProps<ConditionNodeData>> = ({ data, selected, id }) => {
-  const conditions = data.conditions || [{ id: 'cond1', outputLabel: 'Saída 1 (Padrão)' }]; // Pelo menos uma saída
+  // Lógica para atualizar 'data' (ex: via onNodesChange)
+  // const updateData = (field: keyof ConditionNodeData, value: any) => { /* ... */ };
 
   return (
-    <div
-      className={cn(
-        "p-3 rounded-md shadow-md bg-card border border-yellow-600/70 w-72",
-        selected && "ring-2 ring-yellow-700 ring-offset-2 ring-offset-background"
-      )}
-    >
-      <Handle type="target" position={Position.Left} id={`${id}-target`} className="!bg-slate-400 w-2.5 h-2.5" />
-      <div className="flex items-center mb-2">
-        <GitBranch className="w-4 h-4 mr-2 text-yellow-700" />
-        <div className="text-sm font-semibold text-foreground">{data.label || 'Condição (Se/Então)'}</div>
-      </div>
-      {conditions.length > 0 ? (
-        <div className="space-y-1.5">
-          {conditions.map((cond, index) => (
-            <div key={cond.id || `cond-${index}`} className="text-xs text-muted-foreground flex justify-between items-center">
-              <span>{cond.variable ? `Se ${cond.variable} ${cond.operator} "${cond.value || ''}"` : (cond.outputLabel || `Condição ${index + 1}`)}</span>
-              <Handle
-                type="source"
-                position={Position.Right}
-                id={`${id}-source-${cond.id || index}`} // ID único para cada handle de saída
-                className="!bg-green-500 w-2.5 h-2.5 !mr-[-11px]" // Ajustar posição
-                style={{ top: `${(index + 1) * 20 + 10}px` }} // Espaçamento vertical dos handles
-              />
-            </div>
-          ))}
-          {/* Handle para "else" / default output, se necessário */}
-          {/* <div className="text-xs text-muted-foreground flex justify-between items-center mt-1 pt-1 border-t">
-             <span>{data.defaultOutputLabel || "Senão (Padrão)"}</span>
-             <Handle type="source" position={Position.Right} id={`${id}-source-default`} className="!bg-red-500 w-2.5 h-2.5 !mr-[-11px]" style={{ top: `${(conditions.length + 1) * 20 + 10}px` }} />
-          </div> */}
+    <Card className={`text-xs shadow-md w-72 ${selected ? 'ring-2 ring-yellow-500' : 'border-border'} bg-card`}>
+      <CardHeader className="bg-muted/50 p-2 rounded-t-lg">
+        <CardTitle className="text-xs font-semibold flex items-center">
+          <GitCommitVertical className="w-4 h-4 text-yellow-500 mr-2" />
+          {label || 'Condição Se/Então'}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-3 space-y-2">
+        <div>
+          <Label htmlFor={`variable-${id}`} className="text-xs font-medium">Variável a Verificar</Label>
+          <Input
+            id={`variable-${id}`}
+            type="text"
+            placeholder="Ex: {{user_score}}"
+            value={variableToCheck}
+            // onChange={(e) => updateData('variableToCheck', e.target.value)}
+            className="w-full h-8 text-xs"
+          />
         </div>
-      ) : (
-         <p className="text-xs text-muted-foreground">Clique para configurar as condições e saídas...</p>
-      )}
-    </div>
+        <div>
+          <Label htmlFor={`operator-${id}`} className="text-xs font-medium">Operador</Label>
+          <Select
+            value={operator}
+            // onValueChange={(value) => updateData('operator', value as ConditionNodeData['operator'])}
+          >
+            <SelectTrigger id={`operator-${id}`} className="w-full h-8 text-xs">
+              <SelectValue placeholder="Selecione operador" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="equals">Igual a</SelectItem>
+              <SelectItem value="not_equals">Diferente de</SelectItem>
+              <SelectItem value="contains">Contém</SelectItem>
+              <SelectItem value="greater_than">Maior que</SelectItem>
+              <SelectItem value="less_than">Menor que</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label htmlFor={`value-${id}`} className="text-xs font-medium">Valor para Comparar</Label>
+          <Input
+            id={`value-${id}`}
+            type="text"
+            placeholder="Ex: 100 ou 'aprovado'"
+            value={String(valueToCompare ?? '')}
+            // onChange={(e) => updateData('valueToCompare', e.target.value)}
+            className="w-full h-8 text-xs"
+          />
+        </div>
+        <p className="text-muted-foreground text-[10px] truncate">
+          Se "{{variableToCheck}}" {operator} "{valueToCompare}"
+        </p>
+      </CardContent>
+      <Handle type="target" position={Position.Left} id="a" className="!bg-muted-foreground w-2.5 h-2.5" />
+      <Handle type="source" position={Position.Right} id="true" style={{ top: '35%', background: '#55FF55' }} className="w-2.5 h-2.5" >
+        <span className="absolute -left-8 top-[-6px] text-[9px] text-muted-foreground">Sim</span>
+      </Handle>
+      <Handle type="source" position={Position.Right} id="false" style={{ top: '65%', background: '#FF5555' }} className="w-2.5 h-2.5" >
+         <span className="absolute -left-8 top-[-6px] text-[9px] text-muted-foreground">Não</span>
+      </Handle>
+    </Card>
   );
 };
 
-export default ConditionNode;
+export default memo(ConditionNode);
