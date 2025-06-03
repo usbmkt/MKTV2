@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@zap_client/components
 import { Input } from '@zap_client/components/ui/input';
 import { Label } from '@zap_client/components/ui/label';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@zap_client/components/ui/select';
-import { Tag as TagIcon } from 'lucide-react'; // Renomeado para TagIcon
+import { Tag as TagIcon } from 'lucide-react';
 import { TagContactNodeData } from '@zap_client/features/types/whatsapp_flow_types';
 
 const TagContactNode: React.FC<NodeProps<TagContactNodeData>> = ({ data, id, selected }) => {
@@ -34,7 +34,7 @@ const TagContactNode: React.FC<NodeProps<TagContactNodeData>> = ({ data, id, sel
             // onValueChange={(value) => updateData('tagOperation', value as TagContactNodeData['tagOperation'])}
           >
             <SelectTrigger id={`operation-${id}`} className="w-full h-8 text-xs">
-              <SelectValue />
+              <SelectValue placeholder="Selecione a operação"/>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="add">Adicionar Tag</SelectItem>
@@ -43,13 +43,13 @@ const TagContactNode: React.FC<NodeProps<TagContactNodeData>> = ({ data, id, sel
           </Select>
         </div>
         <div>
-          <Label htmlFor={`tagName-${id}`} className="text-xs font-medium">Nome da Tag</Label>
+          <Label htmlFor={`tagName-${id}`} className="text-xs font-medium">Nome da Tag*</Label>
           <Input
             id={`tagName-${id}`}
             type="text"
             placeholder="Ex: cliente_vip"
             value={tagName}
-            // onChange={(e) => updateData('tagName', e.target.value)}
+            // onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateData('tagName', e.target.value)}
             className="w-full h-8 text-xs"
           />
         </div>
