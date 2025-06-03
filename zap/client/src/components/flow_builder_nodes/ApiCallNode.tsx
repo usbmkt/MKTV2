@@ -1,116 +1,234 @@
-// zap/client/src/components/flow_builder_nodes/ApiCallNode.tsx
-import React, { memo } from 'react';
-import { Handle, Position, NodeProps } from '@xyflow/react';
+import React, { memo, useState, useEffect, useCallback, ChangeEvent, KeyboardEvent } from 'react';
+import { Handle, Position, useReactFlow, NodeToolbar, NodeProps as ReactFlowNodeProps } from '@xyflow/react';
+// CORRIGIDO: Path Aliases
+import { ApiCallNodeData, FlowNodeType, HandleData, ApiHeader, ApiQueryParam, ApiResponseMapping } from '@zap_client/features/types/whatsapp_flow_types';
 import { Card, CardContent, CardHeader, CardTitle } from '@zap_client/components/ui/card';
 import { Input } from '@zap_client/components/ui/input';
 import { Label } from '@zap_client/components/ui/label';
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@zap_client/components/ui/select';
+import { Button } from '@zap_client/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@zap_client/components/ui/select';
 import { Textarea } from '@zap_client/components/ui/textarea';
-import { Zap as ZapIcon, Settings2 } from 'lucide-react'; // Usando ZapIcon ou Settings2
-import { ApiCallNodeData } from '@zap_client/features/types/whatsapp_flow_types';
+import { Webhook, Trash2, Edit3, PlusCircle, XCircle } from 'lucide-react';
+import { cn } from '@zap_client/lib/utils';
+import { Badge } from '@zap_client/components/ui/badge';
+import { ScrollArea } from '@zap_client/components/ui/scroll-area';
 
-const ApiCallNode: React.FC<NodeProps<ApiCallNodeData>> = ({ data, id, selected }) => {
-  // Forneça valores padrão para todas as propriedades desestruturadas de 'data'
-  // com base na sua definição em whatsapp_flow_types.ts
-  const {
-    label = 'Chamada API',
-    url = '',
-    method = 'GET', // Valor padrão
-    headers = '{}', // JSON string como padrão
-    body = '{}',    // JSON string como padrão
-    responseMapping = ''
-  } = data;
 
-  // Exemplo de função para atualizar dados (precisa ser conectada ao estado do ReactFlow)
-  // const handleChange = (field: keyof ApiCallNodeData, value: any) => {
-  //   console.log(`Updating ${field} for node ${id}:`, value);
-  //   // Aqui você chamaria uma função para atualizar o nó no estado do ReactFlow
-  //   // Ex: props.onDataChange(id, { ...data, [field]: value });
-  // };
+const defaultHandles: HandleData[] = [
+  { id: 'input', type: 'target', position: Position.Left, label: 'Entrada', style: {top: '50%'} },
+  { id: 'output_success', type: 'source', position: Position.Right, label: 'Sucesso', style: {top: '35%'} },
+  { id: 'output_error', type: 'source', position: Position.Right, label: 'Erro', style: {top: '65%'} },
+];
+
+const httpMethods: ApiCallNodeData['method'][] = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'];
+
+// CORRIGIDO: Tipagem explícita das props
+const ApiCallNodeComponent: React.FC<ReactFlowNodeProps<ApiCallNodeData>> = ({ id, data, selected }) => {
+  const { setNodes } = useReactFlow();
+
+  const [label, setLabel] = useState<string>(data.label || 'Chamada API');
+  const [isEditingLabel, setIsEditingLabel] = useState<boolean>(false);
+  const [apiUrl, setApiUrl] = useState<string>(data.apiUrl || '');
+  const [method, setMethod] = useState<ApiCallNodeData['method']>(data.method || 'GET');
+  const [headers, setHeaders] = useState<ApiHeader[]>(data.headers || []);
+  const [queryParams, setQueryParams] = useState<ApiQueryParam[]>(data.queryParams || []);
+  const [body, setBody] = useState<string>(data.body || '');
+  const [variableToStoreResponse, setVariableToStoreResponse] = useState<string>(data.variableToStoreResponse || '');
+  const [responsePath, setResponsePath] = useState<string>(data.responsePath || '');
+  const [responseMappings, setResponseMappings] = useState<ApiResponseMapping[]>(data.responseMappings || []);
+
+  useEffect(() => {
+    setLabel(data.label || 'Chamada API');
+    setApiUrl(data.apiUrl || '');
+    setMethod(data.method || 'GET');
+    setHeaders(data.headers || []);
+    setQueryParams(data.queryParams || []);
+    setBody(data.body || '');
+    setVariableToStoreResponse(data.variableToStoreResponse || '');
+    setResponsePath(data.responsePath || '');
+    setResponseMappings(data.responseMappings || []);
+  }, [data]);
+
+  const updateNodePartialData = useCallback(
+    (newData: Partial<ApiCallNodeData>) => {
+      setNodes((nds) =>
+        nds.map((node) => {
+          if (node.id === id) {
+            const currentData = node.data as ApiCallNodeData;
+            return { ...node, data: { ...currentData, ...newData } };
+          }
+          return node;
+        })
+      );
+    },
+    [id, setNodes]
+  );
+  
+  const handleLabelChange = (e: ChangeEvent<HTMLInputElement>) => setLabel(e.target.value);
+  const handleLabelSave = () => {
+    updateNodePartialData({ label });
+    setIsEditingLabel(false);
+  };
+
+  const handleGenericInputChange = (field: keyof ApiCallNodeData, value: string | ApiCallNodeData['method']) => {
+    // @ts-ignore
+    updateNodePartialData({ [field]: value });
+    if (field === 'apiUrl') setApiUrl(value as string);
+    if (field === 'method') setMethod(value as ApiCallNodeData['method']);
+    if (field === 'body') setBody(value as string);
+    if (field === 'variableToStoreResponse') setVariableToStoreResponse(value as string);
+    if (field === 'responsePath') setResponsePath(value as string);
+  };
+
+  // Headers, Query Params, Response Mappings
+  const createNewItem = (type: 'header' | 'queryParam' | 'responseMapping') => {
+    const newItemId = `${type}-${Date.now()}`;
+    if (type === 'header') return { id: newItemId, key: '', value: '' };
+    if (type === 'queryParam') return { id: newItemId, key: '', value: '' };
+    if (type === 'responseMapping') return { id: newItemId, sourcePath: '', targetVariable: '' };
+    return {id: ''}; // fallback
+  };
+
+  const handleArrayItemChange = (
+    index: number, 
+    field: keyof ApiHeader | keyof ApiQueryParam | keyof ApiResponseMapping, 
+    value: string, 
+    arrayType: 'headers' | 'queryParams' | 'responseMappings'
+  ) => {
+    let newArray: any[];
+    if (arrayType === 'headers') newArray = [...headers];
+    else if (arrayType === 'queryParams') newArray = [...queryParams];
+    else newArray = [...responseMappings];
+
+    (newArray[index] as any)[field] = value;
+
+    if (arrayType === 'headers') setHeaders(newArray as ApiHeader[]);
+    else if (arrayType === 'queryParams') setQueryParams(newArray as ApiQueryParam[]);
+    else setResponseMappings(newArray as ApiResponseMapping[]);
+    
+    updateNodePartialData({ [arrayType]: newArray });
+  };
+
+  const addArrayItem = (arrayType: 'headers' | 'queryParams' | 'responseMappings') => {
+    if (arrayType === 'headers') {
+        const newHeaders = [...headers, createNewItem('header') as ApiHeader];
+        setHeaders(newHeaders); updateNodePartialData({ headers: newHeaders });
+    } else if (arrayType === 'queryParams') {
+        const newParams = [...queryParams, createNewItem('queryParam') as ApiQueryParam];
+        setQueryParams(newParams); updateNodePartialData({ queryParams: newParams });
+    } else {
+        const newMappings = [...responseMappings, createNewItem('responseMapping') as ApiResponseMapping];
+        setResponseMappings(newMappings); updateNodePartialData({ responseMappings: newMappings });
+    }
+  };
+
+  const removeArrayItem = (index: number, arrayType: 'headers' | 'queryParams' | 'responseMappings') => {
+    let newArray: any[];
+    if (arrayType === 'headers') {
+        newArray = headers.filter((_: ApiHeader, i: number) => i !== index);
+        setHeaders(newArray as ApiHeader[]);
+    } else if (arrayType === 'queryParams') {
+        newArray = queryParams.filter((_: ApiQueryParam, i: number) => i !== index);
+        setQueryParams(newArray as ApiQueryParam[]);
+    } else {
+        newArray = responseMappings.filter((_: ApiResponseMapping, i: number) => i !== index);
+        setResponseMappings(newArray as ApiResponseMapping[]);
+    }
+    updateNodePartialData({ [arrayType]: newArray });
+  };
+
+  const handleDeleteNode = () => {
+    setNodes((nds) => nds.filter(node => node.id !== id));
+  };
+
+  const handlesToRender = data.handles || defaultHandles;
 
   return (
-    <Card className={`text-xs shadow-md w-72 ${selected ? 'ring-2 ring-teal-500' : 'border-border'} bg-card`}>
-      <CardHeader className="bg-muted/50 p-2 rounded-t-lg">
-        <CardTitle className="text-xs font-semibold flex items-center">
-          <ZapIcon className="w-4 h-4 text-teal-500 mr-2" />
-          {label || 'Chamada de API'}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="p-3 space-y-2">
-        <div>
-          <Label htmlFor={`url-${id}`} className="text-xs font-medium">URL da API*</Label>
-          <Input
-            id={`url-${id}`}
-            type="text"
-            placeholder="https://sua.api.com/endpoint"
-            value={url}
-            // onChange={(e) => handleChange('url', e.target.value)}
-            className="w-full h-8 text-xs"
-          />
-        </div>
-        <div>
-          <Label htmlFor={`method-${id}`} className="text-xs font-medium">Método HTTP</Label>
-          <Select
-            value={method}
-            // onValueChange={(value) => handleChange('method', value as ApiCallNodeData['method'])}
-          >
-            <SelectTrigger id={`method-${id}`} className="w-full h-8 text-xs">
-              <SelectValue placeholder="Selecione o método" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="GET">GET</SelectItem>
-              <SelectItem value="POST">POST</SelectItem>
-              <SelectItem value="PUT">PUT</SelectItem>
-              <SelectItem value="DELETE">DELETE</SelectItem>
-              {/* Adicione outros métodos se necessário */}
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <Label htmlFor={`headers-${id}`} className="text-xs font-medium">Cabeçalhos (JSON)</Label>
-          <Textarea
-            id={`headers-${id}`}
-            placeholder='{ "Authorization": "Bearer SEU_TOKEN", "Content-Type": "application/json" }'
-            value={headers}
-            // onChange={(e) => handleChange('headers', e.target.value)}
-            rows={3}
-            className="w-full text-xs font-mono"
-          />
-        </div>
-        {(method === 'POST' || method === 'PUT' || method === 'PATCH') && ( // Adicionado PATCH
-          <div>
-            <Label htmlFor={`body-${id}`} className="text-xs font-medium">Corpo da Requisição (JSON)</Label>
-            <Textarea
-              id={`body-${id}`}
-              placeholder='{ "chave": "valor", "id_usuario": "{{user_id}}" }'
-              value={body}
-              // onChange={(e) => handleChange('body', e.target.value)}
-              rows={4}
-              className="w-full text-xs font-mono"
-            />
-          </div>
+    <Card className={cn("w-96 shadow-md neu-card", selected && "ring-2 ring-gray-500 ring-offset-2")}>
+      <NodeToolbar isVisible={selected} position={Position.Top} className="flex gap-2">
+        <Button variant="outline" size="sm" onClick={() => setIsEditingLabel(true)} title="Editar Nome"><Edit3 className="h-4 w-4" /></Button>
+        <Button variant="destructive" size="sm" onClick={handleDeleteNode} title="Remover Nó"><Trash2 className="h-4 w-4" /></Button>
+      </NodeToolbar>
+
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 pt-3 px-4 bg-gray-500/10 dark:bg-gray-700/20 rounded-t-lg">
+         {isEditingLabel ? (
+            <div className="flex items-center gap-2">
+                <Input value={label} onChange={handleLabelChange} className="text-sm h-7" autoFocus onBlur={handleLabelSave} onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => e.key === 'Enter' && handleLabelSave()} />
+                <Button size="sm" onClick={handleLabelSave} className="h-7">Salvar</Button>
+            </div>
+        ) : (
+            <CardTitle className="text-sm font-semibold flex items-center cursor-pointer" onClick={() => setIsEditingLabel(true)}>
+                <Webhook className="h-4 w-4 mr-2 text-gray-600 dark:text-gray-400" />
+                {data.label || 'Chamada API'}
+            </CardTitle>
         )}
-         <div>
-          <Label htmlFor={`responseMapping-${id}`} className="text-xs font-medium">Mapeamento da Resposta (Opcional)</Label>
-          <Input
-            id={`responseMapping-${id}`}
-            type="text"
-            placeholder="Ex: data.token para var {{api_token}}"
-            value={responseMapping}
-            // onChange={(e) => handleChange('responseMapping', e.target.value)}
-            className="w-full h-8 text-xs"
-          />
-        </div>
+        <Badge variant="default" className="bg-gray-500 text-white capitalize">{data.nodeType.replace('Node', '')}</Badge>
+      </CardHeader>
+      <CardContent className="p-3 space-y-3 max-h-96">
+        <ScrollArea className="h-80 pr-3">
+            <div><Label htmlFor={`api-url-${id}`} className="text-xs">URL da API *</Label><Input id={`api-url-${id}`} value={apiUrl} onChange={(e: ChangeEvent<HTMLInputElement>) => handleGenericInputChange('apiUrl', e.target.value)} placeholder="https://api.example.com/data" className="mt-1 neu-input"/></div>
+            <div>
+                <Label htmlFor={`api-method-${id}`} className="text-xs">Método HTTP *</Label>
+                <Select value={method} onValueChange={(value: string) => handleGenericInputChange('method', value as ApiCallNodeData['method'])}>
+                    <SelectTrigger id={`api-method-${id}`} className="mt-1 neu-input"><SelectValue /></SelectTrigger>
+                    <SelectContent>{httpMethods.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                </Select>
+            </div>
+
+            <div className="space-y-1 border-t pt-2 mt-2">
+                <div className="flex justify-between items-center"><Label className="text-xs">Headers (Opcional)</Label><Button variant="link" size="xs" onClick={() => addArrayItem('headers')}><PlusCircle className="h-3 w-3 mr-1"/>Add Header</Button></div>
+                {headers.map((header: ApiHeader, index: number) => (
+                    <div key={header.id || index} className="flex items-center gap-1">
+                        <Input value={header.key} onChange={(e: ChangeEvent<HTMLInputElement>) => handleArrayItemChange(index, 'key', e.target.value, 'headers')} placeholder="Chave (Ex: Authorization)" className="neu-input text-xs h-7"/>
+                        <Input value={header.value} onChange={(e: ChangeEvent<HTMLInputElement>) => handleArrayItemChange(index, 'value', e.target.value, 'headers')} placeholder="Valor (Ex: Bearer token)" className="neu-input text-xs h-7"/>
+                        <Button variant="ghost" size="icon" onClick={() => removeArrayItem(index, 'headers')} className="h-7 w-7 text-destructive"><XCircle className="h-3 w-3"/></Button>
+                    </div>
+                ))}
+            </div>
+             <div className="space-y-1 border-t pt-2 mt-2">
+                <div className="flex justify-between items-center"><Label className="text-xs">Query Params (Opcional)</Label><Button variant="link" size="xs" onClick={() => addArrayItem('queryParams')}><PlusCircle className="h-3 w-3 mr-1"/>Add Param</Button></div>
+                {queryParams.map((param: ApiQueryParam, index: number) => (
+                    <div key={param.id || index} className="flex items-center gap-1">
+                        <Input value={param.key} onChange={(e: ChangeEvent<HTMLInputElement>) => handleArrayItemChange(index, 'key', e.target.value, 'queryParams')} placeholder="Chave (Ex: userId)" className="neu-input text-xs h-7"/>
+                        <Input value={param.value} onChange={(e: ChangeEvent<HTMLInputElement>) => handleArrayItemChange(index, 'value', e.target.value, 'queryParams')} placeholder="Valor (Ex: 123)" className="neu-input text-xs h-7"/>
+                        <Button variant="ghost" size="icon" onClick={() => removeArrayItem(index, 'queryParams')} className="h-7 w-7 text-destructive"><XCircle className="h-3 w-3"/></Button>
+                    </div>
+                ))}
+            </div>
+
+            {(method === 'POST' || method === 'PUT' || method === 'PATCH') && (
+                <div><Label htmlFor={`api-body-${id}`} className="text-xs">Corpo da Requisição (JSON)</Label><Textarea id={`api-body-${id}`} value={body} onChange={(e: ChangeEvent<HTMLTextAreaElement>) => handleGenericInputChange('body', e.target.value)} placeholder='{ "chave": "valor", "user": "{{user_id}}" }' className="mt-1 neu-input" rows={3}/></div>
+            )}
+            
+            <div><Label htmlFor={`api-store-var-${id}`} className="text-xs">Salvar Resposta Completa na Variável (Opcional)</Label><Input id={`api-store-var-${id}`} value={variableToStoreResponse} onChange={(e: ChangeEvent<HTMLInputElement>) => handleGenericInputChange('variableToStoreResponse', e.target.value)} placeholder="Ex: dados_api" className="mt-1 neu-input"/></div>
+            <div><Label htmlFor={`api-resp-path-${id}`} className="text-xs">Extrair via JSONPath (Opcional, se var acima não preenchida)</Label><Input id={`api-resp-path-${id}`} value={responsePath} onChange={(e: ChangeEvent<HTMLInputElement>) => handleGenericInputChange('responsePath', e.target.value)} placeholder="Ex: $.data.token" className="mt-1 neu-input"/></div>
+            
+            <div className="space-y-1 border-t pt-2 mt-2">
+                <div className="flex justify-between items-center"><Label className="text-xs">Mapeamento da Resposta para Variáveis (Opcional)</Label><Button variant="link" size="xs" onClick={() => addArrayItem('responseMappings')}><PlusCircle className="h-3 w-3 mr-1"/>Add Mapping</Button></div>
+                {responseMappings.map((map: ApiResponseMapping, index: number) => (
+                    <div key={map.id || index} className="flex items-center gap-1">
+                        <Input value={map.sourcePath} onChange={(e: ChangeEvent<HTMLInputElement>) => handleArrayItemChange(index, 'sourcePath', e.target.value, 'responseMappings')} placeholder="Caminho JSON (Ex: $.user.id)" className="neu-input text-xs h-7"/>
+                        <Input value={map.targetVariable} onChange={(e: ChangeEvent<HTMLInputElement>) => handleArrayItemChange(index, 'targetVariable', e.target.value, 'responseMappings')} placeholder="Nome Variável (Ex: id_usuario_api)" className="neu-input text-xs h-7"/>
+                        <Button variant="ghost" size="icon" onClick={() => removeArrayItem(index, 'responseMappings')} className="h-7 w-7 text-destructive"><XCircle className="h-3 w-3"/></Button>
+                    </div>
+                ))}
+            </div>
+        </ScrollArea>
       </CardContent>
-      <Handle type="target" position={Position.Left} id="a" className="!bg-muted-foreground w-2.5 h-2.5" />
-      <Handle type="source" position={Position.Right} id="onSuccess" style={{ top: '30%', background: '#22C55E' }} className="w-2.5 h-2.5" >
-         <span className="absolute -left-[45px] top-[-7px] text-[9px] text-muted-foreground bg-background px-0.5 rounded-sm border border-input">Sucesso</span>
-      </Handle>
-      <Handle type="source" position={Position.Right} id="onFailure" style={{ top: '70%', background: '#EF4444' }} className="w-2.5 h-2.5" >
-        <span className="absolute -left-[40px] top-[-7px] text-[9px] text-muted-foreground bg-background px-0.5 rounded-sm border border-input">Falha</span>
-      </Handle>
+
+      {handlesToRender.map((handleItem: HandleData) => (
+        <Handle
+          key={handleItem.id}
+          id={handleItem.id}
+          type={handleItem.type}
+          position={handleItem.position}
+          isConnectable={true}
+          style={{ ...handleItem.style, background: '#64748b', width: '10px', height: '10px' }} // Cor Cinza
+          aria-label={handleItem.label}
+        />
+      ))}
     </Card>
   );
 };
 
-export default memo(ApiCallNode);
+export default memo(ApiCallNodeComponent);
