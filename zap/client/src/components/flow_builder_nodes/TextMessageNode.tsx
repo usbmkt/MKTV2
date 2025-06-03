@@ -1,6 +1,5 @@
 import React, { memo, useState, useEffect, useCallback, ChangeEvent, KeyboardEvent } from 'react';
 import { Handle, Position, useReactFlow, NodeToolbar, NodeProps as ReactFlowNodeProps } from '@xyflow/react';
-// CORRIGIDO: Path Aliases para @zap_client
 import { TextMessageNodeData, FlowNodeType, HandleData } from '@zap_client/features/types/whatsapp_flow_types';
 import { Card, CardContent, CardHeader, CardTitle } from '@zap_client/components/ui/card';
 import { Textarea } from '@zap_client/components/ui/textarea';
@@ -11,14 +10,15 @@ import { MessageSquareText, Trash2, Edit3 } from 'lucide-react';
 import { cn } from '@zap_client/lib/utils';
 import { Badge } from '@zap_client/components/ui/badge';
 
-
 const defaultHandles: HandleData[] = [
   { id: 'input', type: 'target', position: Position.Left, label: 'Entrada', style: { top: '50%' } },
   { id: 'output', type: 'source', position: Position.Right, label: 'Saída', style: { top: '50%' } },
 ];
 
+// CORRIGIDO: Tipagem explícita das props
 const TextMessageNodeComponent: React.FC<ReactFlowNodeProps<TextMessageNodeData>> = ({ id, data, selected }) => {
   const { setNodes } = useReactFlow();
+  // Agora 'data' é TextMessageNodeData
   const [message, setMessage] = useState<string>(data.message || '');
   const [label, setLabel] = useState<string>(data.label || 'Mensagem de Texto');
   const [isEditingLabel, setIsEditingLabel] = useState<boolean>(false);
@@ -96,13 +96,12 @@ const TextMessageNodeComponent: React.FC<ReactFlowNodeProps<TextMessageNodeData>
           </Label>
           <Textarea
             id={`text-message-content-${id}`}
-            value={message}
+            value={message} // Corrigido: era data.message, agora é o estado local 'message'
             onChange={handleMessageChange}
             placeholder="Digite sua mensagem aqui... Use {{variavel}} para variáveis."
             className="text-xs min-h-[80px] neu-input"
             rows={3}
           />
-          {/* CORRIGIDO: Sintaxe JSX para exibir o texto corretamente */}
           <p className="text-xs text-muted-foreground">
             Use <code>{"{{variavel}}"}</code> para inserir variáveis.
           </p>
