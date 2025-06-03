@@ -1,45 +1,37 @@
 import React, { useState, useEffect, useRef, ChangeEvent, KeyboardEvent, useCallback } from 'react';
 import { Loader2, Paperclip, Send, Smile, Phone, Search, ArrowLeft, Bot, MessageSquare } from 'lucide-react';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { ScrollArea, ScrollAreaViewport } from '@/components/ui/scroll-area';
-import { Badge } from '@/components/ui/badge';
-import { WhatsAppContact, WhatsAppMessage } from '@/types/whatsapp_flow_types';
-import { useToast } from '@/hooks/use-toast';
-import { apiRequest } from '@/lib/api'; // Usar apiRequest do projeto principal
-import { cn } from '@/lib/utils';
+// CORRIGIDO: Path Aliases para @zap_client
+import { Avatar, AvatarFallback, AvatarImage } from '@zap_client/components/ui/avatar';
+import { Button } from '@zap_client/components/ui/button';
+import { Input } from '@zap_client/components/ui/input';
+import { ScrollArea, ScrollAreaViewport } from '@zap_client/components/ui/scroll-area'; // ScrollAreaViewport se usado, senão só ScrollArea
+import { Badge } from '@zap_client/components/ui/badge';
+import { WhatsAppContact, WhatsAppMessage } from '@zap_client/features/types/whatsapp_flow_types'; // Corrigido para o local correto dentro do zap/client
+import { useToast } from '@zap_client/hooks/use-toast';
+import { apiRequest } from '@zap_client/lib/api'; // Assumindo que apiRequest está em lib do zap
+import { cn } from '@zap_client/lib/utils';
 
-// Mock data (substituir com chamadas de API reais)
+// Mock data (substituir com chamadas de API reais para o backend do ZAP)
 const mockContacts: WhatsAppContact[] = [
   { id: '1234567890@s.whatsapp.net', name: 'Alice Wonderland', profilePicUrl: 'https://i.pravatar.cc/150?img=1', lastMessage: 'Okay, obrigada!', lastMessageTimestamp: Date.now() - 1000 * 60 * 5, unreadCount: 2, tags: ['cliente', 'vip'], isBotActive: false },
   { id: '0987654321@s.whatsapp.net', name: 'Bob The Builder', profilePicUrl: 'https://i.pravatar.cc/150?img=2', lastMessage: 'Posso te ajudar com mais alguma coisa?', lastMessageTimestamp: Date.now() - 1000 * 60 * 30, unreadCount: 0, tags: ['lead'], isBotActive: true },
-  { id: '1122334455@s.whatsapp.net', name: 'Charlie Brown', profilePicUrl: 'https://i.pravatar.cc/150?img=3', lastMessage: 'Qual o prazo de entrega?', lastMessageTimestamp: Date.now() - 1000 * 60 * 60 * 2, unreadCount: 0, tags: [], isBotActive: false },
 ];
 
 const mockMessages: Record<string, WhatsAppMessage[]> = {
   '1234567890@s.whatsapp.net': [
     { id: 'msg1', from: '1234567890@s.whatsapp.net', to: 'me', body: 'Olá! Tenho uma dúvida sobre meu pedido.', type: 'chat', timestamp: Date.now() - 1000 * 60 * 10, isSentByMe: false },
     { id: 'msg2', from: 'me', to: '1234567890@s.whatsapp.net', body: 'Olá Alice! Claro, qual sua dúvida?', type: 'chat', timestamp: Date.now() - 1000 * 60 * 8, isSentByMe: true, isDelivered: true, isRead: true },
-    { id: 'msg3', from: '1234567890@s.whatsapp.net', to: 'me', body: 'Gostaria de saber o status.', type: 'chat', timestamp: Date.now() - 1000 * 60 * 6, isSentByMe: false },
-    { id: 'msg4', from: '1234567890@s.whatsapp.net', to: 'me', body: 'Okay, obrigada!', type: 'chat', timestamp: Date.now() - 1000 * 60 * 5, isSentByMe: false },
   ],
   '0987654321@s.whatsapp.net': [
     { id: 'msg5', from: '0987654321@s.whatsapp.net', to: 'me', body: 'Oi, preciso de um orçamento.', type: 'chat', timestamp: Date.now() - 1000 * 60 * 35, isSentByMe: false },
-    { id: 'msg6', from: 'me', to: '0987654321@s.whatsapp.net', body: 'Olá Bob, claro! Para qual serviço seria?', type: 'chat', timestamp: Date.now() - 1000 * 60 * 32, isSentByMe: true, isDelivered: true, isRead: false },
-    { id: 'msg7', from: '0987654321@s.whatsapp.net', to: 'me', body: 'Posso te ajudar com mais alguma coisa?', type: 'chat', timestamp: Date.now() - 1000 * 60 * 30, isSentByMe: false },
   ],
-   '1122334455@s.whatsapp.net': [
-    { id: 'msg8', from: '1122334455@s.whatsapp.net', to: 'me', body: 'Qual o prazo de entrega?', type: 'chat', timestamp: Date.now() - 1000 * 60 * 60 * 2, isSentByMe: false },
-  ]
 };
 
-
 interface WhatsappConversationsProps {
-  // Props adicionais se necessário, ex: userId
+  // Props adicionais se necessário
 }
 
-const WhatsappConversations: React.FC<WhatsappConversationsProps> = () => {
+const ZapConversations: React.FC<WhatsappConversationsProps> = () => {
   const [contacts, setContacts] = useState<WhatsAppContact[]>(mockContacts);
   const [selectedContact, setSelectedContact] = useState<WhatsAppContact | null>(null);
   const [messages, setMessages] = useState<WhatsAppMessage[]>([]);
@@ -51,15 +43,12 @@ const WhatsappConversations: React.FC<WhatsappConversationsProps> = () => {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const scrollAreaViewportRef = useRef<HTMLDivElement | null>(null);
 
-
-  // Simulação de busca de contatos
   useEffect(() => {
     const fetchContacts = async () => {
       setIsLoadingContacts(true);
       try {
-        // Substituir por chamada real: const response = await apiRequest('GET', '/api/whatsapp/contacts');
-        // setContacts(response.data);
-        setContacts(mockContacts); // Usando mock por enquanto
+        // const response = await apiRequest('GET', '/zap-api/contacts'); // Exemplo de rota no backend do Zap
+        setContacts(mockContacts);
       } catch (error) {
         toast({ title: 'Erro ao buscar contatos', description: String(error), variant: 'destructive' });
       } finally {
@@ -69,21 +58,17 @@ const WhatsappConversations: React.FC<WhatsappConversationsProps> = () => {
     fetchContacts();
   }, [toast]);
 
-  // Simulação de busca de mensagens ao selecionar contato
   useEffect(() => {
     if (selectedContact) {
       const fetchMessages = async () => {
         setIsLoadingMessages(true);
         try {
-          // Substituir por chamada real: const response = await apiRequest('GET', `/api/whatsapp/messages/${selectedContact.id}`);
-          // setMessages(response.data);
-          setMessages(mockMessages[selectedContact.id] || []); // Usando mock
+          // const response = await apiRequest('GET', `/zap-api/messages/${selectedContact.id}`);
+          setMessages(mockMessages[selectedContact.id] || []);
           if (selectedContact.unreadCount && selectedContact.unreadCount > 0) {
-             // Marcar mensagens como lidas no backend e atualizar estado local do contato
-             // await apiRequest('POST', `/api/whatsapp/contacts/${selectedContact.id}/mark-read`);
-             setContacts(prev => prev.map(c => c.id === selectedContact.id ? {...c, unreadCount: 0} : c));
+             // await apiRequest('POST', `/zap-api/contacts/${selectedContact.id}/mark-read`);
+             setContacts((prev: WhatsAppContact[]) => prev.map(c => c.id === selectedContact.id ? {...c, unreadCount: 0} : c));
           }
-
         } catch (error) {
           toast({ title: 'Erro ao buscar mensagens', description: String(error), variant: 'destructive' });
         } finally {
@@ -97,15 +82,12 @@ const WhatsappConversations: React.FC<WhatsappConversationsProps> = () => {
   }, [selectedContact, toast]);
 
   useEffect(() => {
-    if (messagesEndRef.current) {
-        messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-    // Para ScrollAreaViewport
     if (scrollAreaViewportRef.current) {
         scrollAreaViewportRef.current.scrollTop = scrollAreaViewportRef.current.scrollHeight;
+    } else if (messagesEndRef.current) { // Fallback se ScrollAreaViewport não for diretamente acessível
+        messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages]);
-
 
   const handleSelectContact = (contact: WhatsAppContact) => {
     setSelectedContact(contact);
@@ -124,23 +106,18 @@ const WhatsappConversations: React.FC<WhatsappConversationsProps> = () => {
       isSentByMe: true,
     };
     setMessages(prev => [...prev, sentMessage]);
+    const messageToSend = newMessage;
     setNewMessage('');
 
     try {
-      // Substituir por chamada real
-      // const response = await apiRequest('POST', '/api/whatsapp/messages/send', { to: selectedContact.id, messageContent: newMessage, type: 'chat' });
-      // Se o backend retornar a mensagem salva com ID real:
-      // setMessages(prev => prev.map(m => m.id === tempMessageId ? response.data : m));
-      console.log('Mensagem enviada (simulado):', sentMessage.body);
-      // Simular atualização de status da mensagem após um tempo
+      // await apiRequest('POST', '/zap-api/messages/send', { to: selectedContact.id, messageContent: messageToSend, type: 'chat' });
+      console.log('Mensagem enviada (simulado):', messageToSend);
       setTimeout(() => {
-        setMessages(prev => prev.map(m => m.id === tempMessageId ? {...m, isDelivered: true, isRead: Math.random() > 0.5} : m));
+        setMessages(prevMsgs => prevMsgs.map(m => m.id === tempMessageId ? {...m, isDelivered: true, isRead: Math.random() > 0.5} : m));
       }, 1000);
-
-
     } catch (error) {
       toast({ title: 'Erro ao enviar mensagem', description: String(error), variant: 'destructive' });
-      setMessages(prev => prev.filter(m => m.id !== tempMessageId)); // Remover mensagem otimista
+      setMessages(prevMsgs => prevMsgs.filter(m => m.id !== tempMessageId));
     }
   };
 
@@ -162,8 +139,7 @@ const WhatsappConversations: React.FC<WhatsappConversationsProps> = () => {
 
   return (
     <div className="flex h-[calc(100vh-180px)] border rounded-lg neu-card-inset overflow-hidden">
-      {/* Coluna de Contatos */}
-      <div className={cn("w-1/3 border-r bg-background/70 p-0 flex flex-col", selectedContact && "hidden md:flex")}>
+      <div className={cn("w-full md:w-1/3 border-r bg-background/70 p-0 flex flex-col", selectedContact && "hidden md:flex")}>
         <div className="p-3 border-b">
           <Input
             type="text"
@@ -213,7 +189,6 @@ const WhatsappConversations: React.FC<WhatsappConversationsProps> = () => {
         )}
       </div>
 
-      {/* Área de Chat */}
       <div className={cn("flex-1 flex flex-col bg-background", !selectedContact && "hidden md:flex", selectedContact && "flex")}>
         {selectedContact ? (
           <>
@@ -227,15 +202,14 @@ const WhatsappConversations: React.FC<WhatsappConversationsProps> = () => {
               </Avatar>
               <div className="flex-1">
                 <div className="font-semibold">{selectedContact.name || selectedContact.id}</div>
-                <div className="text-xs text-green-500">Online</div> {/* Status simulado */}
+                {/* <div className="text-xs text-green-500">Online</div> */}
               </div>
-              <Button variant="ghost" size="icon">
+              <Button variant="ghost" size="icon" title={`Ligar para ${selectedContact.name || selectedContact.id}`}>
                 <Phone className="h-5 w-5" />
               </Button>
-              {/* Mais botões de ação aqui (ex: informações do contato, etc.) */}
             </div>
 
-            <ScrollArea className="flex-grow p-4" ref={scrollAreaViewportRef}>
+            <ScrollArea className="flex-grow p-4" viewportRef={scrollAreaViewportRef}> {/* Usando viewportRef aqui */}
                <div className="space-y-4">
                 {isLoadingMessages ? (
                     <div className="flex justify-center items-center h-full"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
@@ -288,7 +262,6 @@ const WhatsappConversations: React.FC<WhatsappConversationsProps> = () => {
                   onChange={handleInputChange}
                   onKeyPress={handleKeyPress}
                   className="flex-1 neu-input"
-                  // disabled={isLoadingMessages} // Desabilitar enquanto mensagens carregam ou enviam
                 />
                 <Button onClick={handleSendMessage} disabled={!newMessage.trim()} className="bg-primary hover:bg-primary/90">
                   <Send className="h-5 w-5" />
@@ -308,4 +281,4 @@ const WhatsappConversations: React.FC<WhatsappConversationsProps> = () => {
   );
 };
 
-export default WhatsappConversations;
+export default ZapConversations;
