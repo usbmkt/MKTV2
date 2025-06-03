@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useCallback, ChangeEvent } from 'react';
 import { MoreHorizontal, PlusCircle, Search, Trash2, Edit, Eye, Loader2, Info } from 'lucide-react';
-// CORRIGIDO: Path Aliases para @zap_client
-import { Button } from '@zap_client/components/ui/button'; // MUDADO DE @/
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@zap_client/components/ui/card'; // MUDADO DE @/
+import { Button } from '@zap_client/components/ui/button';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@zap_client/components/ui/card';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,19 +9,18 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@zap_client/components/ui/dropdown-menu'; // MUDADO DE @/
-import { Input } from '@zap_client/components/ui/input'; // MUDADO DE @/
-import { Badge } from '@zap_client/components/ui/badge'; // MUDADO DE @/
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@zap_client/components/ui/dialog'; // MUDADO DE @/
-import { Label } from '@zap_client/components/ui/label'; // MUDADO DE @/
-import { Textarea } from '@zap_client/components/ui/textarea'; // MUDADO DE @/
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@zap_client/components/ui/select'; // MUDADO DE @/
-import { WhatsAppTemplate, WhatsAppTemplateComponent, WhatsAppTemplateButton, WhatsAppTemplateCategory } from '@zap_client/features/types/whatsapp_flow_types'; // MUDADO DE @/types/... para @zap_client/features/types/...
-import { useToast } from '@zap_client/hooks/use-toast'; // MUDADO DE @/
-import { apiRequest } from '@zap_client/lib/api'; // MUDADO DE @/
-import { cn } from '@zap_client/lib/utils'; // MUDADO DE @/
+} from '@zap_client/components/ui/dropdown-menu';
+import { Input } from '@zap_client/components/ui/input';
+import { Badge } from '@zap_client/components/ui/badge';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@zap_client/components/ui/dialog';
+import { Label } from '@zap_client/components/ui/label';
+import { Textarea } from '@zap_client/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@zap_client/components/ui/select';
+import { WhatsAppTemplate, WhatsAppTemplateComponent, WhatsAppTemplateButton, WhatsAppTemplateCategory } from '@zap_client/features/types/whatsapp_flow_types';
+import { useToast } from '@zap_client/hooks/use-toast';
+import { apiRequest } from '@zap_client/lib/api';
+import { cn } from '@zap_client/lib/utils';
 
-// Mock data (substituir com chamadas de API reais)
 const mockTemplates: WhatsAppTemplate[] = [
   {
     id: 'template1',
@@ -64,7 +62,6 @@ const templateCategoriesList: WhatsAppTemplateCategory[] = [
     { id: 'AUTHENTICATION', name: 'AUTHENTICATION'}
 ];
 
-
 const templateLanguages = [{ code: 'pt_BR', name: 'Português (Brasil)' }, { code: 'en_US', name: 'Inglês (EUA)' }, { code: 'es_ES', name: 'Espanhol (Espanha)' }];
 const componentTypes: WhatsAppTemplateComponent['type'][] = ['HEADER', 'BODY', 'FOOTER', 'BUTTONS'];
 const headerFormats: Array<WhatsAppTemplateComponent['format'] | ''> = ['', 'TEXT', 'IMAGE', 'VIDEO', 'DOCUMENT'];
@@ -82,7 +79,7 @@ const ZapTemplates: React.FC = () => {
   const fetchTemplates = useCallback(async () => {
     setIsLoading(true);
     try {
-      // const response = await apiRequest('GET', '/api/whatsapp/templates'); // Usar endpoint do zap/server
+      // const response = await apiRequest('GET', '/zap-api/templates'); // Exemplo de rota no backend do Zap
       setTemplates(mockTemplates); 
     } catch (error) {
       toast({ title: 'Erro ao buscar templates', description: String(error), variant: 'destructive' });
@@ -101,7 +98,7 @@ const ZapTemplates: React.FC = () => {
     }
   };
   
-  const handleComponentChange = (compIndex: number, field: keyof WhatsAppTemplateComponent, value: any) => {
+  const handleComponentChange = (compIndex: number, field: keyof WhatsAppTemplateComponent, value: string | WhatsAppTemplateComponent['format'] | undefined ) => {
     if (editingTemplate) {
       setEditingTemplate((prev: WhatsAppTemplate | null) => {
         if (!prev) return null;
@@ -109,7 +106,7 @@ const ZapTemplates: React.FC = () => {
         const targetComponent = { ...updatedComponents[compIndex] };
     
         if (field === 'format') {
-          if (value === '') { 
+          if (value === '' || value === undefined) { 
             delete targetComponent.format;
             if (targetComponent.example?.header_handle) {
               delete targetComponent.example.header_handle;
@@ -127,7 +124,7 @@ const ZapTemplates: React.FC = () => {
     }
   };
   
-  const handleButtonChange = (compIndex: number, btnIndex: number, field: keyof WhatsAppTemplateButton, value: any) => {
+  const handleButtonChange = (compIndex: number, btnIndex: number, field: keyof WhatsAppTemplateButton, value: string) => {
      if (editingTemplate) {
       setEditingTemplate((prev: WhatsAppTemplate | null) => {
         if (!prev) return null;
@@ -182,7 +179,7 @@ const ZapTemplates: React.FC = () => {
             const updatedComponents = [...prev.components];
             const targetComponent = { ...updatedComponents[compIndex] };
             if (targetComponent.buttons) {
-                targetComponent.buttons = targetComponent.buttons.filter((_: WhatsAppTemplateButton, i: number) => i !== btnIndex); // Adicionado tipo para _ e i
+                targetComponent.buttons = targetComponent.buttons.filter((_: WhatsAppTemplateButton, i: number) => i !== btnIndex);
                 updatedComponents[compIndex] = targetComponent;
                 return { ...prev, components: updatedComponents };
             }
@@ -201,14 +198,14 @@ const ZapTemplates: React.FC = () => {
     try {
       setIsLoading(true);
       if (editingTemplate.id && templates.some(t => t.id === editingTemplate.id)) { 
-        // await apiRequest('PUT', `/api/whatsapp/templates/${editingTemplate.id}`, editingTemplate); 
-        setTemplates(prev => prev.map(t => t.id === editingTemplate!.id ? editingTemplate! : t));
+        // await apiRequest('PUT', `/zap-api/templates/${editingTemplate.id}`, editingTemplate); 
+        setTemplates((prevTemps: WhatsAppTemplate[]) => prevTemps.map(t => t.id === editingTemplate!.id ? editingTemplate! : t));
         toast({ title: "Template atualizado!", description: `O template "${editingTemplate.name}" foi salvo.` });
       } else { 
         const payload = { ...editingTemplate, id: `template-${Date.now()}`}; 
-        // const response = await apiRequest('POST', '/api/whatsapp/templates', payload); 
-        // setTemplates(prev => [...prev, response.data as WhatsAppTemplate]);
-        setTemplates(prev => [...prev, payload as WhatsAppTemplate]);
+        // const response = await apiRequest('POST', '/zap-api/templates', payload); 
+        // setTemplates(prevTemps => [...prevTemps, response.data as WhatsAppTemplate]);
+        setTemplates((prevTemps: WhatsAppTemplate[]) => [...prevTemps, payload as WhatsAppTemplate]);
         toast({ title: "Template criado!", description: `O template "${payload.name}" foi criado.` });
       }
       setIsFormOpen(false);
@@ -224,8 +221,8 @@ const ZapTemplates: React.FC = () => {
     if (!window.confirm("Tem certeza que deseja excluir este template?")) return;
     try {
       setIsLoading(true);
-      // await apiRequest('DELETE', `/api/whatsapp/templates/${templateId}`); 
-      setTemplates(prev => prev.filter(t => t.id !== templateId));
+      // await apiRequest('DELETE', `/zap-api/templates/${templateId}`); 
+      setTemplates((prevTemps: WhatsAppTemplate[]) => prevTemps.filter(t => t.id !== templateId));
       toast({ title: "Template excluído!", variant: "default" });
     } catch (error) {
       toast({ title: "Erro ao excluir template", description: String(error), variant: "destructive" });
