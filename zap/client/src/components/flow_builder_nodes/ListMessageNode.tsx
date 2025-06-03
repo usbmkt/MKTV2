@@ -1,140 +1,174 @@
-// zap/client/src/components/flow_builder_nodes/ListMessageNode.tsx
-import React, { memo } from 'react';
-import { Handle, Position, NodeProps } from '@xyflow/react';
+import React, { memo, useState, ChangeEvent, useCallback } from 'react';
+import { Handle, Position, NodeProps, useReactFlow, Node } from '@xyflow/react';
 import { Card, CardContent, CardHeader, CardTitle } from '@zap_client/components/ui/card';
-import { Button } from '@zap_client/components/ui/button';
 import { Input } from '@zap_client/components/ui/input';
-import { Label } from '@zap_client/components/ui/label';
+import { Button } from '@zap_client/components/ui/button';
 import { Textarea } from '@zap_client/components/ui/textarea';
-import { ListChecks, PlusCircle, Trash2 } from 'lucide-react';
-import { ListMessageNodeDataFE, ListSectionData, ListItemData } from '@zap_client/features/types/whatsapp_flow_types';
+import { GripVertical, PlusCircle, Trash2 } from 'lucide-react';
+import { ListMessageNodeData, ListSection, ListItem } from '@zap_client/features/types/whatsapp_flow_types'; // Ajustado o import
 
-const ListMessageNode: React.FC<NodeProps<ListMessageNodeDataFE>> = ({ data, id, selected }) => {
-  const {
-    label = 'Mensagem de Lista',
-    headerText = '',
-    bodyText = '',
-    footerText = '',
-    buttonText = 'Ver Opções',
-    sections = [{ title: 'Seção 1', rows: [{ id: 'item1', title: 'Item 1', description: '' }] }]
-  } = data;
+const ListMessageNode: React.FC<NodeProps<ListMessageNodeData>> = ({ id, data, selected }) => {
+  const { setNodes } = useReactFlow();
+  const [nodeData, setNodeData] = useState<ListMessageNodeData>(data);
 
-  // Lógica para atualizar 'data' (ex: via onNodesChange)
-  // const updateData = (field: keyof ListMessageNodeDataFE, value: any) => { /* ... */ };
-  // const addSection = () => { /* ... */ };
-  // const updateSectionTitle = (sectionIndex: number, title: string) => { /* ... */ };
-  // const removeSection = (sectionIndex: number) => { /* ... */ };
-  // const addItemToSection = (sectionIndex: number) => { /* ... */ };
-  // const updateItem = (sectionIndex: number, itemIndex: number, field: keyof ListItemData, value: string) => { /* ... */ };
-  // const removeItem = (sectionIndex: number, itemIndex: number) => { /* ... */ };
+  const updateNodeData = useCallback((newData: Partial<ListMessageNodeData>) => {
+    setNodes((nds) =>
+      nds.map((node: Node) => {
+        if (node.id === id) {
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              ...newData,
+            },
+          };
+        }
+        return node;
+      })
+    );
+    setNodeData(prev => ({ ...prev, ...newData }));
+  }, [id, setNodes]);
+
+
+  const handleInputChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    updateNodeData({ [name]: value });
+  };
+
+  const handleSectionTitleChange = (sectionIndex: number, value: string) => {
+    const newSections = [...(nodeData.sections || [])];
+    newSections[sectionIndex] = { ...newSections[sectionIndex], title: value };
+    updateNodeData({ sections: newSections });
+  };
+
+  const handleItemChange = (sectionIndex: number, itemIndex: number, field: keyof ListItem, value: string) => {
+    const newSections = [...(nodeData.sections || [])];
+    if (newSections[sectionIndex] && newSections[sectionIndex].rows[itemIndex]) {
+      (newSections[sectionIndex].rows[itemIndex] as any)[field] = value; // Usar 'as any' temporariamente se ListItem for complexo
+      updateNodeData({ sections: newSections });
+    }
+  };
+
+  const addSection = () => {
+    const newSection: ListSection = { title: 'Nova Seção', rows: [{ id: `item-${Date.now()}`, title: 'Novo Item', description: '' }] };
+    updateNodeData({ sections: [...(nodeData.sections || []), newSection] });
+  };
+
+  const removeSection = (sectionIndex: number) => {
+    const newSections = (nodeData.sections || []).filter((_, index) => index !== sectionIndex);
+    updateNodeData({ sections: newSections });
+  };
+
+  const addItemToSection = (sectionIndex: number) => {
+    const newSections = [...(nodeData.sections || [])];
+    if (newSections[sectionIndex]) {
+      newSections[sectionIndex].rows.push({ id: `item-${Date.now()}`, title: 'Novo Item', description: '' });
+      updateNodeData({ sections: newSections });
+    }
+  };
+
+  const removeItemFromSection = (sectionIndex: number, itemIndex: number) => {
+    const newSections = [...(nodeData.sections || [])];
+    if (newSections[sectionIndex]) {
+      newSections[sectionIndex].rows = newSections[sectionIndex].rows.filter((_, index) => index !== itemIndex);
+      updateNodeData({ sections: newSections });
+    }
+  };
+
 
   return (
-    <Card className={`text-xs shadow-md w-80 ${selected ? 'ring-2 ring-green-500' : 'border-border'} bg-card`}>
-      <CardHeader className="bg-muted/50 p-2 rounded-t-lg">
-        <CardTitle className="text-xs font-semibold flex items-center">
-          <ListChecks className="w-4 h-4 text-green-500 mr-2" />
-          {label || 'Mensagem de Lista Interativa'}
-        </CardTitle>
+    <Card className={`w-80 shadow-md ${selected ? 'ring-2 ring-blue-500' : ''}`}>
+      <CardHeader className="bg-gray-100 p-4 rounded-t-lg flex flex-row items-center justify-between">
+        <CardTitle className="text-sm font-medium">Mensagem de Lista</CardTitle>
+        <GripVertical className="w-5 h-5 text-gray-400 cursor-grab drag-handle" />
       </CardHeader>
-      <CardContent className="p-3 space-y-2 max-h-96 overflow-y-auto">
+      <CardContent className="p-4 space-y-3">
+        <Handle type="target" position={Position.Left} className="w-3 h-3 bg-blue-500 rounded-full" />
         <div>
-          <Label htmlFor={`headerText-${id}`} className="text-xs font-medium">Texto do Cabeçalho (Opcional)</Label>
-          <Input
-            id={`headerText-${id}`}
-            type="text"
-            placeholder="Título principal da lista"
-            value={headerText}
-            // onChange={(e) => updateData('headerText', e.target.value)}
-            className="w-full h-8 text-xs"
-          />
-        </div>
-        <div>
-          <Label htmlFor={`bodyText-${id}`} className="text-xs font-medium">Texto do Corpo*</Label>
+          <label htmlFor={`messageText-${id}`} className="text-xs font-medium text-gray-700">Texto Principal</label>
           <Textarea
-            id={`bodyText-${id}`}
-            placeholder="Corpo da mensagem da lista"
-            value={bodyText}
-            // onChange={(e) => updateData('bodyText', e.target.value)}
+            id={`messageText-${id}`}
+            name="messageText"
+            placeholder="Olá! Escolha uma opção:"
+            value={nodeData.messageText || ''}
+            onChange={handleInputChange}
+            className="mt-1 w-full nodrag" // nodrag para permitir interação com textarea
             rows={2}
-            className="w-full text-xs"
           />
         </div>
         <div>
-          <Label htmlFor={`footerText-${id}`} className="text-xs font-medium">Texto do Rodapé (Opcional)</Label>
-          <Input
-            id={`footerText-${id}`}
-            type="text"
-            placeholder="Rodapé da lista"
-            value={footerText}
-            // onChange={(e) => updateData('footerText', e.target.value)}
-            className="w-full h-8 text-xs"
-          />
-        </div>
-        <div>
-          <Label htmlFor={`buttonText-${id}`} className="text-xs font-medium">Texto do Botão de Abertura*</Label>
+          <label htmlFor={`buttonText-${id}`} className="text-xs font-medium text-gray-700">Texto do Botão da Lista</label>
           <Input
             id={`buttonText-${id}`}
-            type="text"
-            placeholder="Ex: Ver Opções"
-            value={buttonText}
-            // onChange={(e) => updateData('buttonText', e.target.value)}
-            className="w-full h-8 text-xs"
+            name="buttonText"
+            placeholder="Ver Opções"
+            value={nodeData.buttonText || ''}
+            onChange={handleInputChange}
+            className="mt-1 w-full nodrag"
+          />
+        </div>
+        <div>
+          <label htmlFor={`footerText-${id}`} className="text-xs font-medium text-gray-700">Texto do Rodapé (opcional)</label>
+          <Input
+            id={`footerText-${id}`}
+            name="footerText"
+            placeholder="Rodapé da lista"
+            value={nodeData.footerText || ''}
+            onChange={handleInputChange}
+            className="mt-1 w-full nodrag"
           />
         </div>
 
-        {(sections || []).map((section, sectionIndex) => (
-          <div key={`section-${sectionIndex}`} className="mt-2 p-2 border rounded border-dashed">
-            <div className="flex justify-between items-center mb-1">
-              <Input
-                type="text"
-                placeholder={`Título Seção ${sectionIndex + 1}`}
-                value={section.title}
-                // onChange={(e) => updateSectionTitle(sectionIndex, e.target.value)}
-                className="w-full h-7 text-xs font-semibold"
-              />
-              {/* <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => removeSection(sectionIndex)}>
-                <Trash2 className="w-3 h-3 text-destructive" />
-              </Button> */}
-            </div>
-            {(section.rows || []).map((item, itemIndex) => (
-              <div key={item.id || `item-${sectionIndex}-${itemIndex}`} className="ml-2 mt-1 space-y-1">
-                <Input
-                  type="text"
-                  placeholder={`Título Item ${itemIndex + 1}`}
-                  value={item.title}
-                  // onChange={(e) => updateItem(sectionIndex, itemIndex, 'title', e.target.value)}
-                  className="w-full h-7 text-xs"
-                />
-                <Input
-                  type="text"
-                  placeholder="Descrição (Opcional)"
-                  value={item.description || ''}
-                  // onChange={(e) => updateItem(sectionIndex, itemIndex, 'description', e.target.value)}
-                  className="w-full h-7 text-xs"
-                />
-                <Handle
-                    type="source"
-                    position={Position.Right}
-                    id={`${id}-section-${sectionIndex}-item-${item.id || itemIndex}`}
-                    style={{ top: 'auto', bottom: 'auto', background: '#555' }} // Ajustar posicionamento conforme necessário
-                    className="w-2 h-2"
-                />
-                 {/* <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => removeItem(sectionIndex, itemIndex)}>
-                    <Trash2 className="w-3 h-3 text-destructive" />
-                 </Button> */}
-              </div>
-            ))}
-            {/* <Button variant="outline" size="xs" className="text-xs mt-1 w-full h-6" onClick={() => addItemToSection(sectionIndex)}>
-              <PlusCircle className="w-3 h-3 mr-1" /> Adicionar Item à Seção
-            </Button> */}
+        <div className="space-y-2">
+          <div className="flex justify-between items-center">
+            <h4 className="text-xs font-semibold text-gray-800">Seções e Itens</h4>
+            <Button variant="outline" size="sm" onClick={addSection} className="nodrag">
+              <PlusCircle className="w-3 h-3 mr-1" /> Adicionar Seção
+            </Button>
           </div>
-        ))}
-        {/* <Button variant="outline" size="sm" className="text-xs mt-2 w-full h-7" onClick={addSection}>
-          <PlusCircle className="w-3.5 h-3.5 mr-1" /> Adicionar Seção
-        </Button> */}
+          {(nodeData.sections || []).map((section: ListSection, sectionIndex: number) => (
+            <div key={sectionIndex} className="p-2 border rounded bg-gray-50 space-y-2">
+              <div className="flex items-center space-x-2">
+                <Input
+                  placeholder="Título da Seção"
+                  value={section.title}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => handleSectionTitleChange(sectionIndex, e.target.value)}
+                  className="flex-grow nodrag"
+                />
+                <Button variant="ghost" size="icon" onClick={() => removeSection(sectionIndex)} className="nodrag">
+                  <Trash2 className="w-4 h-4 text-red-500" />
+                </Button>
+              </div>
+              {section.rows.map((item: ListItem, itemIndex: number) => (
+                <div key={item.id || itemIndex} className="pl-4 space-y-1">
+                  <div className="flex items-center space-x-2">
+                    <Input
+                      placeholder="Título do Item"
+                      value={item.title}
+                      onChange={(e: ChangeEvent<HTMLInputElement>) => handleItemChange(sectionIndex, itemIndex, 'title', e.target.value)}
+                      className="flex-grow nodrag"
+                    />
+                     <Button variant="ghost" size="icon" onClick={() => removeItemFromSection(sectionIndex, itemIndex)} className="nodrag">
+                        <Trash2 className="w-3 h-3 text-red-400" />
+                    </Button>
+                  </div>
+                  <Textarea
+                    placeholder="Descrição do Item (opcional)"
+                    value={item.description || ''}
+                    onChange={(e: ChangeEvent<HTMLTextAreaElement>) => handleItemChange(sectionIndex, itemIndex, 'description', e.target.value)}
+                    className="w-full text-xs nodrag"
+                    rows={1}
+                  />
+                </div>
+              ))}
+              <Button variant="outline" size="xs" onClick={() => addItemToSection(sectionIndex)} className="mt-1 nodrag">
+                <PlusCircle className="w-3 h-3 mr-1" /> Adicionar Item à Seção
+              </Button>
+            </div>
+          ))}
+        </div>
+        <Handle type="source" position={Position.Right} className="w-3 h-3 bg-green-500 rounded-full" />
       </CardContent>
-      <Handle type="target" position={Position.Left} className="!bg-muted-foreground w-2.5 h-2.5" />
-      {/* Os handles de saída são por item da lista */}
     </Card>
   );
 };
