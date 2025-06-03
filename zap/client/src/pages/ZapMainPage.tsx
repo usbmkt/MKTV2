@@ -1,13 +1,13 @@
 // zap/client/src/pages/ZapMainPage.tsx
 import React, { useState } from 'react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@zap_client/components/ui/tabs';
-import ZapWhatsAppConnection from '@zap_client/components/ZapWhatsAppConnection';
-import ZapConversations from '@zap_client/components/whatsapp_features/ZapConversations';
-import ZapFlowsList from '@zap_client/components/whatsapp_features/ZapFlowsList';
-import ZapFlowBuilderWrapper from '@zap_client/components/ZapFlowBuilder'; 
-import ZapTemplates from '@zap_client/components/whatsapp_features/ZapTemplates';
-import ZapAnalytics from '@zap_client/components/whatsapp_features/ZapAnalytics';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@zap_client/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@zap_client/components/ui/tabs'; // Corrigido
+import ZapWhatsAppConnection from '@zap_client/components/ZapWhatsAppConnection'; // Corrigido
+import ZapConversations from '@zap_client/components/whatsapp_features/ZapConversations'; // Corrigido
+import ZapFlowsList, { ZapFlowsListProps } from '@zap_client/components/whatsapp_features/ZapFlowsList'; // Corrigido, importado Props
+import ZapFlowBuilderWrapper, { ZapFlowBuilderProps } from '@zap_client/components/ZapFlowBuilder';  // Corrigido, importado Props
+import ZapTemplates from '@zap_client/components/whatsapp_features/ZapTemplates'; // Corrigido
+import ZapAnalytics from '@zap_client/components/whatsapp_features/ZapAnalytics'; // Corrigido
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@zap_client/components/ui/card'; // Corrigido
 import { MessageCircle, Bot, ListChecks, Puzzle, BarChart2, Settings } from 'lucide-react';
 
 const PlaceholderComponent: React.FC<{ title: string; icon?: React.ElementType; description?: string }> = ({ title, icon: Icon, description }) => (
@@ -26,15 +26,25 @@ const PlaceholderComponent: React.FC<{ title: string; icon?: React.ElementType; 
   </Card>
 );
 
-interface FlowStructure { // Definindo uma interface básica para a estrutura do fluxo
+interface FlowStructure {
     id: string;
     name: string;
-    // Adicione mais campos conforme necessário
 }
+
+// Adicionando props que estavam causando erro
+interface ExtendedZapFlowsListProps extends ZapFlowsListProps {
+  onSelectFlow: (flowId: string, flowName: string) => void;
+  onEditFlow: (flowId: string, flowName: string) => void; 
+}
+
+interface ExtendedZapFlowBuilderProps extends ZapFlowBuilderProps {
+  initialFlowName?: string | null; // Adicionado
+}
+
 
 export default function ZapMainPage() {
   const [activeTab, setActiveTab] = useState('connection');
-  const [editingFlowId, setEditingFlowId] = useState<string | null>(null); // Garantir que seja string ou null
+  const [editingFlowId, setEditingFlowId] = useState<string | null>(null); 
   const [editingFlowName, setEditingFlowName] = useState<string | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [currentFlowStructure, setCurrentFlowStructure] = useState<FlowStructure | null>(null);
@@ -42,16 +52,14 @@ export default function ZapMainPage() {
   const handleSelectFlow = (flowId: string, flowName: string) => {
     setEditingFlowId(flowId);
     setEditingFlowName(flowName);
-    // Aqui você poderia buscar a estrutura detalhada do fluxo se necessário
-    // Por exemplo: fetchFlowStructure(flowId).then(data => setCurrentFlowStructure(data));
-    setActiveTab('editor'); // Mudar para a aba do editor ao selecionar um fluxo
+    setActiveTab('editor'); 
   };
 
   const handleCloseEditor = () => {
     setEditingFlowId(null);
     setEditingFlowName(null);
     setCurrentFlowStructure(null);
-    setActiveTab('flows'); // Voltar para a lista de fluxos ao fechar o editor
+    setActiveTab('flows'); 
   };
 
   return (
@@ -63,7 +71,6 @@ export default function ZapMainPage() {
             Gerencie suas conversas, automações e templates do WhatsApp.
           </p>
         </div>
-        {/* Pode adicionar botões de ação globais aqui se necessário */}
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
@@ -84,17 +91,18 @@ export default function ZapMainPage() {
         </TabsContent>
         <TabsContent value="flows" className="mt-2">
           <ZapFlowsList 
-            onSelectFlow={(flowId: string, flowName: string) => handleSelectFlow(flowId, flowName)} 
-            onEditFlow={(flowId: string, flowName: string) => { /* Lógica para editar metadados do fluxo se necessário antes de abrir editor */ handleSelectFlow(flowId, flowName); }}
+            onSelectFlow={handleSelectFlow} 
+            onEditFlow={(flowId: string, flowName: string) => handleSelectFlow(flowId, flowName)}
           />
         </TabsContent>
         <TabsContent value="editor" className="mt-2">
           {editingFlowId ? (
             <ZapFlowBuilderWrapper 
               key={editingFlowId} 
-              flowId={String(editingFlowId)} // Convertido para string
-              initialFlowName={editingFlowName}
-              onSaveSuccess={(savedFlowId: string, savedFlowName: string) => { // Tipos adicionados
+              flowId={String(editingFlowId)} // Assegura que é string
+              initialFlowName={editingFlowName} // Prop adicionada
+              onSaveSuccess={(savedFlowId: string, savedFlowName: string) => {
+                console.log("Fluxo salvo com ID:", savedFlowId, "e Nome:", savedFlowName);
                 setEditingFlowName(savedFlowName); 
               }}
               onCloseEditor={handleCloseEditor}

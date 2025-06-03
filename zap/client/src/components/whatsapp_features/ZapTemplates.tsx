@@ -4,38 +4,32 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@zap_
 import { Button } from '@zap_client/components/ui/button';
 import { Input } from '@zap_client/components/ui/input';
 import { Badge } from '@zap_client/components/ui/badge';
-// import { Avatar, AvatarFallback } from '@zap_client/components/ui/avatar'; // Comentado pois não é usado neste arquivo específico
-// import { Separator } from '@zap_client/components/ui/separator'; // Comentado pois não é usado neste arquivo específico
 import { ScrollArea } from '@zap_client/components/ui/scroll-area';
-// import { Tabs, TabsContent, TabsList, TabsTrigger } from '@zap_client/components/ui/tabs'; // Comentado pois não é usado neste arquivo específico
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@zap_client/components/ui/select';
 import { Label } from '@zap_client/components/ui/label';
 import { Textarea } from '@zap_client/components/ui/textarea';
-// import { Switch } from '@zap_client/components/ui/switch'; // Comentado pois não é usado neste arquivo específico
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from '@zap_client/components/ui/dialog'; // DialogDescription e DialogFooter adicionados
-// import FlowBuilder from '@zap_client/components/flow-builder'; // Comentado, assumindo que é ZapFlowBuilder que é usado em ZapMainPage
-// import WhatsAppConnection from '@zap_client/components/whatsapp-connection'; // Comentado
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from '@zap_client/components/ui/dialog';
 import { 
   MessageSquare, 
   Search, 
   Plus,
-  Edit2, // Certifique-se que este está sendo usado ou remova
+  Edit2,
   Trash2,
-  Loader2, // Importado
+  Loader2,
   AlertTriangle,
   XCircle, 
   Info
 } from 'lucide-react';
-import { useToast } from '@zap_client/hooks/use-toast'; // Assumindo que use-toast está em zap/client/src/hooks
-import { Alert, AlertDescription as UIAlertDescription } from '@zap_client/components/ui/alert';
+import { useToast } from '@zap_client/hooks/use-toast'; // Ajustado para @zap_client
+import { Alert, AlertDescription as UIAlertDescription } from '@zap_client/components/ui/alert'; // Ajustado para @zap_client
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  // DropdownMenuSeparator, // Comentado pois não é usado
   DropdownMenuTrigger,
-} from "@zap_client/components/ui/dropdown-menu";
+} from "@zap_client/components/ui/dropdown-menu"; // Ajustado para @zap_client
 
+// ... (interfaces permanecem as mesmas) ...
 interface MessageTemplate {
   id: string;
   name: string;
@@ -131,8 +125,8 @@ const defaultNewTemplateDataState: Partial<MessageTemplate> = {
 };
 
 export default function ZapTemplates() {
-  const [currentSearchTerm, setCurrentSearchTerm] = useState(''); // Renomeado de searchTerm
-  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false); // Corrigido: Era isModalOpen
+  const [currentSearchTerm, setCurrentSearchTerm] = useState('');
+  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false); // Corrigido
   const [editingTemplate, setEditingTemplate] = useState<MessageTemplate | null>(null);
   const [newTemplateData, setNewTemplateData] = useState<Partial<MessageTemplate>>(defaultNewTemplateDataState);
   
@@ -244,7 +238,7 @@ export default function ZapTemplates() {
   };
 
   const filteredTemplates = templates.filter(template =>
-    template.name.toLowerCase().includes(currentSearchTerm.toLowerCase()) // Corrigido
+    template.name.toLowerCase().includes(currentSearchTerm.toLowerCase())
   );
 
   const getStatusBadgeClass = (status: MessageTemplate['status']) => {
@@ -299,7 +293,7 @@ export default function ZapTemplates() {
         <Button 
           onClick={() => { 
             setEditingTemplate(null); 
-            setIsTemplateModalOpen(true);  // Corrigido
+            setIsTemplateModalOpen(true); // Corrigido
           }} 
           className="neu-button"
         >
@@ -314,8 +308,8 @@ export default function ZapTemplates() {
             <Search className="w-5 h-5 text-muted-foreground" />
             <Input
               placeholder="Buscar templates..."
-              value={currentSearchTerm} // Corrigido
-              onChange={(e: ChangeEvent<HTMLInputElement>) => setCurrentSearchTerm(e.target.value)} // Corrigido
+              value={currentSearchTerm}
+              onChange={(e: ChangeEvent<HTMLInputElement>) => setCurrentSearchTerm(e.target.value)}
               className="neu-input max-w-sm"
             />
           </div>
@@ -386,12 +380,12 @@ export default function ZapTemplates() {
               {editingTemplate ? `Modificando o template "${editingTemplate.name}".` : 'Os templates precisam ser aprovados pelo WhatsApp antes do uso.'}
             </DialogDescription>
           </DialogHeader>
-          <form id="template-form-id-zap" onSubmit={handleSubmit} className="flex-grow overflow-y-auto p-6 space-y-4 custom-scrollbar"> {/* ID do form alterado para unicidade */}
+          <form id="template-form-id-zap" onSubmit={handleSubmit} className="flex-grow overflow-y-auto p-6 space-y-4 custom-scrollbar">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-1.5">
-                    <Label htmlFor="template-modal-name-zap">Nome do Template*</Label> {/* ID alterado */}
+                    <Label htmlFor="template-modal-name-zap">Nome do Template*</Label>
                     <Input
-                        id="template-modal-name-zap" // ID alterado
+                        id="template-modal-name-zap"
                         name="name"
                         value={newTemplateData.name || ''}
                         onChange={handleInputChange}
@@ -402,13 +396,13 @@ export default function ZapTemplates() {
                     <p className="text-xs text-muted-foreground">Apenas letras minúsculas, números e underscores.</p>
                 </div>
                 <div className="space-y-1.5">
-                    <Label htmlFor="template-modal-category-zap">Categoria*</Label> {/* ID alterado */}
+                    <Label htmlFor="template-modal-category-zap">Categoria*</Label>
                     <Select
                         name="category"
                         value={newTemplateData.category || 'UTILITY'}
                         onValueChange={(value: string) => setNewTemplateData(prev => ({ ...prev, category: value as MessageTemplate['category'] }))}
                     >
-                        <SelectTrigger id="template-modal-category-zap" className="neu-input"><SelectValue /></SelectTrigger> {/* ID alterado */}
+                        <SelectTrigger id="template-modal-category-zap" className="neu-input"><SelectValue /></SelectTrigger>
                         <SelectContent>
                             <SelectItem value="MARKETING">Marketing</SelectItem>
                             <SelectItem value="UTILITY">Utilitário</SelectItem>
@@ -417,13 +411,13 @@ export default function ZapTemplates() {
                     </Select>
                 </div>
                 <div className="space-y-1.5">
-                    <Label htmlFor="template-modal-language-zap">Idioma*</Label> {/* ID alterado */}
+                    <Label htmlFor="template-modal-language-zap">Idioma*</Label>
                     <Select
                         name="language"
                         value={newTemplateData.language || 'pt_BR'}
                         onValueChange={(value: string) => setNewTemplateData(prev => ({ ...prev, language: value }))}
                     >
-                        <SelectTrigger id="template-modal-language-zap" className="neu-input"><SelectValue /></SelectTrigger> {/* ID alterado */}
+                        <SelectTrigger id="template-modal-language-zap" className="neu-input"><SelectValue /></SelectTrigger>
                         <SelectContent>
                             <SelectItem value="pt_BR">Português (Brasil)</SelectItem>
                             <SelectItem value="en_US">Inglês (EUA)</SelectItem>
