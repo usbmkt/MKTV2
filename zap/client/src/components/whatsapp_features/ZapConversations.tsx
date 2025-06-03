@@ -1,292 +1,265 @@
-// zap/client/src/components/whatsapp_features/ZapConversations.tsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@zap_client/components/ui/card';
-import { Button } from '@zap_client/components/ui/button';
-import { Input } from '@zap_client/components/ui/input';
-import { Badge } from '@zap_client/components/ui/badge';
-import { Avatar, AvatarFallback, AvatarImage } from '@zap_client/components/ui/avatar'; // Adicionado AvatarImage
 import { ScrollArea } from '@zap_client/components/ui/scroll-area';
-import { Textarea } from '@zap_client/components/ui/textarea';
-import {
-  MessageCircle, Send, Phone, Search, MoreVertical, Check, CheckCheck, Clock, Paperclip, Smile, UserPlus, Filter, Loader2, AlertTriangle
-} from 'lucide-react';
-import { useToast } from '@zap_client/hooks/use-toast'; // Verifique se os arquivos de toast estão no módulo zap
-import { ApiError } from '@zap_client/features/types/whatsapp_flow_types'; // Importado
-
-interface ChatMessage {
-  id: string;
-  senderId: string; // 'user' or contact's JID
-  contactName?: string; // Nome do contato para mensagens recebidas
-  text?: string;
-  mediaUrl?: string;
-  mediaType?: 'image' | 'video' | 'audio' | 'document';
-  timestamp: Date;
-  status?: 'PENDING' | 'SENT' | 'DELIVERED' | 'READ' | 'FAILED';
-  isOutgoing: boolean;
-}
-
-interface ChatContact {
-  id: string; // JID (ex: 5511999998888@c.us)
-  name?: string; // Nome do contato (pode ser o número se não houver nome)
-  profilePicUrl?: string;
-  lastMessage?: string;
-  lastMessageTimestamp?: Date;
-  unreadCount?: number;
-  isMuted?: boolean;
-  isArchived?: boolean;
-  isBotAssigned?: boolean;
-}
-
-// Mock API functions (substitua por chamadas reais)
-const fetchContacts = async (): Promise<ChatContact[]> => {
-  console.log("Fetching contacts (mocked)...");
-  await new Promise(resolve => setTimeout(resolve, 500));
-  return [
-    { id: '5511999998888@c.us', name: 'Alice Silva', lastMessage: 'Olá! Tudo bem?', lastMessageTimestamp: new Date(Date.now() - 60000 * 5), unreadCount: 2, profilePicUrl: '/placeholder-user.jpg' },
-    { id: '5511988887777@c.us', name: 'Roberto Santos', lastMessage: 'Sim, podemos marcar.', lastMessageTimestamp: new Date(Date.now() - 60000 * 30), profilePicUrl: '/placeholder-user.jpg' },
-    { id: '5521977776666@c.us', name: 'Carla Mendes', lastMessage: 'Obrigada!', lastMessageTimestamp: new Date(Date.now() - 60000 * 120), isBotAssigned: true },
-  ];
-};
-
-const fetchMessages = async (contactId: string): Promise<ChatMessage[]> => {
-  console.log(`Fetching messages for ${contactId} (mocked)...`);
-  await new Promise(resolve => setTimeout(resolve, 300));
-  const now = Date.now();
-  return [
-    { id: 'msg1', senderId: contactId, text: 'Olá! Tenho uma dúvida sobre o produto X.', timestamp: new Date(now - 60000 * 3), isOutgoing: false, status: 'READ' },
-    { id: 'msg2', senderId: 'user', text: 'Olá! Claro, qual seria sua dúvida?', timestamp: new Date(now - 60000 * 2.5), isOutgoing: true, status: 'DELIVERED' },
-    { id: 'msg3', senderId: contactId, text: 'Ele vem com garantia estendida?', timestamp: new Date(now - 60000 * 1), isOutgoing: false, status: 'DELIVERED' },
-  ];
-};
-
-const sendMessageApi = async (contactId: string, messageText: string): Promise<ChatMessage> => {
-    console.log(`Sending message to ${contactId}: ${messageText} (mocked)`);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    return {
-        id: `msg_${Date.now()}`,
-        senderId: 'user',
-        text: messageText,
-        timestamp: new Date(),
-        isOutgoing: true,
-        status: 'SENT'
-    };
-}
+import { Avatar, AvatarFallback, AvatarImage } from '@zap_client/components/ui/avatar';
+import { Input } from '@zap_client/components/ui/input';
+import { Button } from '@zap_client/components/ui/button';
+import { Paperclip, Send, Smile, Mic, Search } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@zap_client/components/ui/card';
+import { useToast } from '@zap_client/hooks/use-toast'; // Mantido conforme documentação
+import { getConversations, sendMessage, getMessagesForConversation, Conversation, Message } from '@zap_client/lib/api'; // Supondo que estas funções existam
+import { ApiError } from '@zap_client/features/types/whatsapp_flow_types';
 
 
-export default function ZapConversations() {
-  const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
+// Mock data - substitua por chamadas de API reais
+// const mockConversations: Conversation[] = [
+//   { id: '1', contactName: 'Alice Wonderland', lastMessage: 'Okay, see you then!', timestamp: '10:30 AM', unreadCount: 2, avatarUrl: '/placeholder-user.jpg' },
+//   { id: '2', contactName: 'Bob The Builder', lastMessage: 'Can you fix it?', timestamp: 'Yesterday', unreadCount: 0, avatarUrl: '/placeholder-user.jpg' },
+// ];
+
+// const mockMessages: { [key: string]: Message[] } = {
+//   '1': [
+//     { id: 'm1', text: 'Hey Alice!', timestamp: '10:25 AM', sender: 'me' },
+//     { id: 'm2', text: 'Hi! What\'s up?', timestamp: '10:26 AM', sender: 'contact' },
+//     { id: 'm3', text: 'Not much, just checking in. Are we still on for tomorrow?', timestamp: '10:28 AM', sender: 'me' },
+//     { id: 'm4', text: 'Yes, definitely! Looking forward to it.', timestamp: '10:29 AM', sender: 'contact' },
+//     { id: 'm5', text: 'Okay, see you then!', timestamp: '10:30 AM', sender: 'me' },
+//   ],
+//   '2': [
+//      { id: 'm6', text: 'Hello Bob', timestamp: 'Yesterday', sender: 'me' },
+//      { id: 'm7', text: 'Can you fix it?', timestamp: 'Yesterday', sender: 'contact' },
+//   ]
+// };
+
+
+const ZapConversations: React.FC = () => {
+  const { toast } = useToast();
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
-  
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const contactListRef = useRef<HTMLDivElement>(null); // Para scroll
-  const messageListRef = useRef<HTMLDivElement>(null); // Para scroll
+  const [isLoadingConversations, setIsLoadingConversations] = useState(false);
+  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
 
-  const { data: contacts = [], isLoading: isLoadingContacts, error: contactsError } = useQuery<ChatContact[], ApiError>({
-    queryKey: ['zapContacts'],
-    queryFn: fetchContacts,
-  });
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const contactListRef = useRef<HTMLDivElement | null>(null); // Corrigido: tipo HTMLDivElement
+  const viewportRef = useRef<HTMLDivElement | null>(null); // Adicionado para ScrollArea
 
-  const { data: messages = [], isLoading: isLoadingMessages, refetch: refetchMessages } = useQuery<ChatMessage[], ApiError>({
-    queryKey: ['zapMessages', selectedContactId],
-    queryFn: () => selectedContactId ? fetchMessages(selectedContactId) : Promise.resolve([]),
-    enabled: !!selectedContactId, // Só busca mensagens se um contato estiver selecionado
-  });
 
-  const sendMessageMutation = useMutation<ChatMessage, ApiError, { contactId: string; text: string }>({
-    mutationFn: (vars) => sendMessageApi(vars.contactId, vars.text),
-    onSuccess: (newMessageData) => {
-      queryClient.setQueryData<ChatMessage[]>(['zapMessages', selectedContactId], (oldMessages) => 
-        oldMessages ? [...oldMessages, newMessageData] : [newMessageData]
-      );
-      // Atualizar lastMessage no contato (idealmente, isso viria do backend ou de um evento de webhook)
-      queryClient.setQueryData<ChatContact[]>(['zapContacts'], (oldContacts) =>
-        oldContacts?.map(c => c.id === selectedContactId ? {...c, lastMessage: newMessageData.text, lastMessageTimestamp: newMessageData.timestamp } : c)
-      );
-      setNewMessage('');
-    },
-    onError: (error) => {
-        toast({ title: "Erro ao Enviar Mensagem", description: error.message, variant: "destructive" });
+  const fetchConversations = useCallback(async () => {
+    setIsLoadingConversations(true);
+    try {
+      const convs = await getConversations(); // Implementar em lib/api.ts
+      setConversations(convs);
+    } catch (error) {
+      const apiError = error as ApiError;
+      toast({
+        title: 'Erro ao Carregar Conversas',
+        description: apiError.message || 'Não foi possível buscar as conversas.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoadingConversations(false);
     }
-  });
+  }, [toast]);
+
+  const fetchMessages = useCallback(async (conversationId: string) => {
+    if (!conversationId) return;
+    setIsLoadingMessages(true);
+    try {
+      const msgs = await getMessagesForConversation(conversationId); // Implementar em lib/api.ts
+      setMessages(msgs);
+    } catch (error) {
+      const apiError = error as ApiError;
+      toast({
+        title: 'Erro ao Carregar Mensagens',
+        description: apiError.message || `Não foi possível buscar as mensagens para ${selectedConversation?.contactName}.`,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoadingMessages(false);
+    }
+  }, [toast, selectedConversation?.contactName]);
+
 
   useEffect(() => {
-    if (selectedContactId) {
-      refetchMessages();
-    }
-  }, [selectedContactId, refetchMessages]);
+    fetchConversations();
+  }, [fetchConversations]);
 
-  useEffect(() => { // Scroll para a última mensagem
-    if (messageListRef.current) {
-      messageListRef.current.scrollTop = messageListRef.current.scrollHeight;
+  useEffect(() => {
+    if (selectedConversation) {
+      fetchMessages(selectedConversation.id);
+    } else {
+      setMessages([]);
     }
+  }, [selectedConversation, fetchMessages]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleSendMessage = () => {
-    if (!newMessage.trim() || !selectedContactId) return;
-    sendMessageMutation.mutate({ contactId: selectedContactId, text: newMessage });
+  const handleSelectConversation = (conversation: Conversation) => {
+    setSelectedConversation(conversation);
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
+  const handleSendMessage = async () => {
+    if (!newMessage.trim() || !selectedConversation) return;
+    try {
+      const sentMessage = await sendMessage(selectedConversation.id, newMessage); // Implementar em lib/api.ts
+      setMessages(prevMessages => [...prevMessages, sentMessage]);
+      setNewMessage('');
+      // Atualizar a conversa na lista (lastMessage, timestamp)
+      setConversations(prevConvs => prevConvs.map(c =>
+        c.id === selectedConversation.id
+          ? { ...c, lastMessage: sentMessage.text, timestamp: sentMessage.timestamp }
+          : c
+      ).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
+
+    } catch (error) {
+      const apiError = error as ApiError;
+      toast({
+        title: 'Erro ao Enviar Mensagem',
+        description: apiError.message || 'Não foi possível enviar a sua mensagem.',
+        variant: 'destructive',
+      });
     }
   };
-  
-  const filteredContacts = contacts.filter(contact =>
-    contact.name?.toLowerCase().includes(searchTerm.toLowerCase())
+
+  const filteredConversations = conversations.filter(conversation =>
+    conversation.contactName.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const getInitials = (name?: string) => {
-    if (!name) return '?';
-    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-  };
-
-  const getMessageStatusIcon = (status?: ChatMessage['status']) => {
-    if (status === 'SENT') return <Clock className="w-3 h-3 text-muted-foreground" />;
-    if (status === 'DELIVERED') return <Check className="w-3 h-3 text-muted-foreground" />;
-    if (status === 'READ') return <CheckCheck className="w-3 h-3 text-blue-500" />;
-    return <Clock className="w-3 h-3 text-muted-foreground opacity-50" />; // PENDING or FAILED
-  };
-
-  if (isLoadingContacts) return <div className="p-4 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto" /> Carregando contatos...</div>;
-  if (contactsError) return <div className="p-4 text-center text-destructive"><AlertTriangle className="w-6 h-6 mx-auto mb-2"/>Erro: {contactsError.message}</div>;
-
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-[calc(100vh-200px)]"> {/* Ajuste a altura conforme necessário */}
-      {/* Lista de Contatos */}
-      <Card className="lg:col-span-1 neu-card flex flex-col">
-        <CardHeader className="pb-3 border-b">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-lg">Conversas</CardTitle>
-            <Button variant="ghost" size="sm" className="neu-button"><UserPlus className="w-4 h-4"/></Button>
+    <Card className="h-[calc(100vh-120px)] w-full flex flex-col shadow-lg">
+      <CardHeader>
+        <CardTitle className="text-lg">Conversas do WhatsApp</CardTitle>
+      </CardHeader>
+      <CardContent className="flex-grow flex p-0 overflow-hidden">
+        {/* Coluna de Contatos */}
+        <div className="w-1/3 border-r flex flex-col">
+          <div className="p-4 border-b">
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Input
+                placeholder="Buscar conversas..."
+                value={searchTerm}
+                onChange={(e: ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
+                className="pl-8"
+              />
+            </div>
           </div>
-          <div className="relative mt-2">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar ou iniciar nova conversa..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 neu-input"
-            />
-          </div>
-        </CardHeader>
-        <CardContent className="p-0 flex-grow">
-          <ScrollArea className="h-full" ref={contactListRef}> {/* Removido viewportRef */}
-            {filteredContacts.length === 0 && <p className="p-4 text-sm text-center text-muted-foreground">Nenhum contato encontrado.</p>}
-            {filteredContacts.map((contact) => (
+          <ScrollArea className="flex-grow" viewportRef={viewportRef} ref={contactListRef}> {/* Usando viewportRef e ref */}
+            {isLoadingConversations && <p className="p-4 text-sm text-gray-500">Carregando conversas...</p>}
+            {!isLoadingConversations && filteredConversations.length === 0 && (
+                <p className="p-4 text-sm text-gray-500">Nenhuma conversa encontrada.</p>
+            )}
+            {filteredConversations.map(conversation => (
               <div
-                key={contact.id}
-                className={`p-3 cursor-pointer border-b transition-colors hover:bg-muted/50 flex items-center space-x-3
-                            ${selectedContactId === contact.id ? 'bg-muted' : ''}`}
-                onClick={() => setSelectedContactId(contact.id)}
+                key={conversation.id}
+                className={`p-4 cursor-pointer hover:bg-gray-100 ${selectedConversation?.id === conversation.id ? 'bg-gray-100' : ''}`}
+                onClick={() => handleSelectConversation(conversation)}
               >
-                <Avatar className="w-10 h-10">
-                  <AvatarImage src={contact.profilePicUrl} alt={contact.name} />
-                  <AvatarFallback>{getInitials(contact.name)}</AvatarFallback>
-                </Avatar>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <p className="font-medium truncate text-sm">{contact.name || contact.id}</p>
-                    {contact.lastMessageTimestamp && (
-                        <span className="text-xs text-muted-foreground">
-                        {new Date(contact.lastMessageTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                <div className="flex items-center space-x-3">
+                  <Avatar>
+                    <AvatarImage src={conversation.avatarUrl || '/placeholder-user.jpg'} alt={conversation.contactName} />
+                    <AvatarFallback>{conversation.contactName.substring(0, 2).toUpperCase()}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex-grow overflow-hidden">
+                    <div className="flex justify-between items-center">
+                      <h3 className="font-semibold truncate">{conversation.contactName}</h3>
+                      <span className="text-xs text-gray-500">{conversation.timestamp}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <p className="text-sm text-gray-600 truncate">{conversation.lastMessage}</p>
+                      {conversation.unreadCount > 0 && (
+                        <span className="bg-blue-500 text-white text-xs rounded-full px-1.5 py-0.5">
+                          {conversation.unreadCount}
                         </span>
-                    )}
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs text-muted-foreground truncate">{contact.lastMessage || 'Nenhuma mensagem ainda.'}</p>
-                    {contact.unreadCount && contact.unreadCount > 0 && (
-                      <Badge className="bg-primary text-primary-foreground text-[10px] px-1.5 py-0.5">{contact.unreadCount}</Badge>
-                    )}
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
             ))}
           </ScrollArea>
-        </CardContent>
-      </Card>
+        </div>
 
-      {/* Área de Chat */}
-      <div className="lg:col-span-2 neu-card flex flex-col h-full">
-        {selectedContactId ? (
-          <>
-            <CardHeader className="pb-3 border-b">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <Avatar className="w-10 h-10">
-                     <AvatarImage src={contacts.find(c=>c.id === selectedContactId)?.profilePicUrl} />
-                    <AvatarFallback>{getInitials(contacts.find(c=>c.id === selectedContactId)?.name)}</AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <h3 className="font-semibold text-sm">{contacts.find(c=>c.id === selectedContactId)?.name || selectedContactId}</h3>
-                    {/* <p className="text-xs text-muted-foreground">Online</p> */}
-                  </div>
-                </div>
-                <div className="flex items-center space-x-1">
-                  <Button variant="ghost" size="icon" className="neu-button h-8 w-8"><Phone className="w-4 h-4" /></Button>
-                  <Button variant="ghost" size="icon" className="neu-button h-8 w-8"><MoreVertical className="w-4 h-4" /></Button>
+        {/* Coluna de Mensagens */}
+        <div className="w-2/3 flex flex-col bg-gray-50">
+          {selectedConversation ? (
+            <>
+              <div className="p-4 border-b bg-white flex items-center space-x-3">
+                <Avatar>
+                  <AvatarImage src={selectedConversation.avatarUrl || '/placeholder-user.jpg'} alt={selectedConversation.contactName} />
+                  <AvatarFallback>{selectedConversation.contactName.substring(0, 2).toUpperCase()}</AvatarFallback>
+                </Avatar>
+                <div>
+                  <h3 className="font-semibold">{selectedConversation.contactName}</h3>
+                  {/* <p className="text-xs text-gray-500">Online</p> TODO: Status online */}
                 </div>
               </div>
-            </CardHeader>
-            <CardContent className="flex-1 p-0">
-              <ScrollArea className="h-[calc(100%-70px)] p-4" ref={messageListRef}> {/* Altura ajustada, removido viewportRef */}
-                <div className="space-y-3">
-                  {isLoadingMessages && <Loader2 className="w-6 h-6 animate-spin mx-auto my-4" />}
-                  {messages.map((msg) => (
+              <ScrollArea className="flex-grow p-4 space-y-4">
+                {isLoadingMessages && <p className="text-sm text-gray-500">Carregando mensagens...</p>}
+                {!isLoadingMessages && messages.length === 0 && (
+                    <p className="text-sm text-gray-500 text-center py-10">Sem mensagens nesta conversa ainda.</p>
+                )}
+                {messages.map(message => (
+                  <div
+                    key={message.id}
+                    className={`flex ${message.sender === 'me' ? 'justify-end' : 'justify-start'}`}
+                  >
                     <div
-                      key={msg.id}
-                      className={`flex ${msg.isOutgoing ? 'justify-end' : 'justify-start'}`}
+                      className={`max-w-xs lg:max-w-md px-3 py-2 rounded-lg shadow ${
+                        message.sender === 'me' ? 'bg-blue-500 text-white' : 'bg-white text-gray-800'
+                      }`}
                     >
-                      <div
-                        className={`max-w-[70%] p-2.5 rounded-lg text-sm
-                                    ${msg.isOutgoing ? 'bg-primary text-primary-foreground rounded-br-none' 
-                                                     : 'bg-muted rounded-bl-none'}`}
-                      >
-                        {msg.text}
-                        <div className={`flex items-center mt-1 ${msg.isOutgoing ? 'justify-end' : 'justify-start'}`}>
-                          <span className="text-xs opacity-70 mr-1">
-                            {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                          {msg.isOutgoing && getMessageStatusIcon(msg.status)}
-                        </div>
-                      </div>
+                      <p className="text-sm">{message.text}</p>
+                      <p className={`text-xs mt-1 ${message.sender === 'me' ? 'text-blue-200' : 'text-gray-400'}`}>
+                        {message.timestamp}
+                      </p>
                     </div>
-                  ))}
-                </div>
+                  </div>
+                ))}
+                <div ref={messagesEndRef} />
               </ScrollArea>
-            </CardContent>
-            <div className="border-t p-3 bg-background">
+              <div className="p-4 border-t bg-white">
                 <div className="flex items-center space-x-2">
-                    <Button variant="ghost" size="icon" className="neu-button"><Smile className="w-5 h-5" /></Button>
-                    <Textarea
-                    placeholder="Digite sua mensagem..."
+                  <Button variant="ghost" size="icon" className="text-gray-500">
+                    <Smile className="w-5 h-5" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="text-gray-500">
+                    <Paperclip className="w-5 h-5" />
+                  </Button>
+                  <Input
+                    placeholder="Digite uma mensagem..."
                     value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    onKeyPress={handleKeyPress}
-                    className="neu-input flex-1 min-h-[40px] max-h-[120px] resize-none text-sm"
-                    rows={1}
-                    />
-                    <Button variant="ghost" size="icon" className="neu-button"><Paperclip className="w-5 h-5" /></Button>
-                    <Button onClick={handleSendMessage} disabled={!newMessage.trim() || sendMessageMutation.isPending} className="neu-button-primary">
-                    {sendMessageMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin"/> : <Send className="w-4 h-4" />}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) => setNewMessage(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                    className="flex-grow"
+                  />
+                  {newMessage ? (
+                    <Button size="icon" onClick={handleSendMessage}>
+                      <Send className="w-5 h-5" />
                     </Button>
+                  ) : (
+                    <Button variant="ghost" size="icon" className="text-gray-500">
+                      <Mic className="w-5 h-5" />
+                    </Button>
+                  )}
                 </div>
+              </div>
+            </>
+          ) : (
+            <div className="flex-grow flex flex-col items-center justify-center text-gray-500">
+              <ZapIcon className="w-24 h-24 text-gray-300 mb-4" />
+              <p className="text-lg">Selecione uma conversa para começar.</p>
+              <p className="text-sm">Ou inicie uma nova busca por um contato.</p>
             </div>
-          </>
-        ) : (
-          <div className="h-full flex flex-col items-center justify-center text-center p-4">
-            <MessageCircle className="w-16 h-16 text-muted-foreground opacity-50 mb-4" />
-            <h3 className="text-lg font-semibold">Selecione uma conversa</h3>
-            <p className="text-muted-foreground text-sm">
-              Escolha um contato na lista à esquerda para ver as mensagens ou iniciar uma nova conversa.
-            </p>
-          </div>
-        )}
-      </div>
-    </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
-}
+};
+
+export default ZapConversations;
