@@ -1,5 +1,5 @@
 // MKTV2/zap/client/src/components/ZapFlowBuilder.tsx
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef, ComponentType } from 'react'; // Adicionado ComponentType
 import {
   ReactFlow,
   Controls,
@@ -17,11 +17,10 @@ import {
   Panel,
   NodeProps,
   ReactFlowInstance,
-  NodeTypes // Importado NodeTypes
+  NodeTypes 
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-// Importe os componentes de nó
 import TextMessageNode from '@zap_client/components/flow_builder_nodes/TextMessageNode';
 import QuestionNode from '@zap_client/components/flow_builder_nodes/QuestionNode';
 import ConditionNode from '@zap_client/components/flow_builder_nodes/ConditionNode';
@@ -32,7 +31,7 @@ import EndNode from '@zap_client/components/flow_builder_nodes/EndNode';
 import ListMessageNode from '@zap_client/components/flow_builder_nodes/ListMessageNode';
 import ButtonsMessageNode from '@zap_client/components/flow_builder_nodes/ButtonsMessageNode';
 import MediaMessageNode from '@zap_client/components/flow_builder_nodes/MediaMessageNode';
-import GPTQueryNode from '@zap_client/components/flow_builder_nodes/GptQueryNode'; // Nome corrigido
+import GPTQueryNode from '@zap_client/components/flow_builder_nodes/GptQueryNode'; // Corrigido para GPTQueryNode
 import AiDecisionNode from '@zap_client/components/flow_builder_nodes/AiDecisionNode';
 import ClonedVoiceNode from '@zap_client/components/flow_builder_nodes/ClonedVoiceNode';
 import TagContactNode from '@zap_client/components/flow_builder_nodes/TagContactNode';
@@ -40,52 +39,52 @@ import SetVariableNode from '@zap_client/components/flow_builder_nodes/SetVariab
 import ExternalDataNode from '@zap_client/components/flow_builder_nodes/ExternalDataNode';
 import ApiCallNode from '@zap_client/components/flow_builder_nodes/ApiCallNode';
 
-// Importe os tipos de dados dos nós CORRETAMENTE
 import {
   TriggerNodeData, TextMessageNodeData, QuestionNodeData, ConditionNodeData,
-  ActionNodeData, DelayNodeData, EndNodeData, ListMessageNodeData, // Nome corrigido
-  ButtonsMessageNodeData, MediaMessageNodeData, GPTQueryNodeData, // Nome corrigido
+  ActionNodeData, DelayNodeData, EndNodeData, ListMessageNodeData, 
+  ButtonsMessageNodeData, MediaMessageNodeData, GPTQueryNodeData, // Corrigido para GPTQueryNodeData
   AiDecisionNodeData, ClonedVoiceNodeData, TagContactNodeData, SetVariableNodeData, 
-  ExternalDataFetchNodeData, // Nome corrigido
+  ExternalDataFetchNodeData, 
   ApiCallNodeData,
-  CustomNodeDataType // Importar a união para tipagem mais forte
+  CustomNodeDataType, // Importar a união
+  ZapFlowNode // Importar o tipo de nó customizado
 } from '@zap_client/features/types/whatsapp_flow_types';
 
 import { Button } from '@zap_client/components/ui/button';
-import { Input } from '@zap_client/components/ui/input';
-import { PlusCircle, Save, Trash2, Loader2 } from 'lucide-react';
-
+import { Input } from '@zap_client/components/ui/input'; 
+import { PlusCircle, Save, Trash2, Loader2 } from 'lucide-react'; 
 
 export interface ZapFlowBuilderProps {
   flowId: string;
-  initialNodes?: Node<CustomNodeDataType>[]; // Tipado com CustomNodeDataType
+  initialNodes?: ZapFlowNode[]; // Usar ZapFlowNode
   initialEdges?: Edge[];
   initialFlowName?: string | null;
-  onSaveFlow?: (flowId: string, nodes: Node<CustomNodeDataType>[], edges: Edge[], name?: string) => Promise<void>;
-  onLoadFlow?: (flowId: string) => Promise<{ nodes: Node<CustomNodeDataType>[], edges: Edge[], name?: string } | null>;
+  onSaveFlow?: (flowId: string, nodes: ZapFlowNode[], edges: Edge[], name?: string) => Promise<void>;
+  onLoadFlow?: (flowId: string) => Promise<{ nodes: ZapFlowNode[], edges: Edge[], name?: string } | null>;
   onCloseEditor?: () => void;
   onSaveSuccess?: (flowId: string, flowName: string) => void;
 }
 
 // Tipagem mais precisa para NodeTypes
+// O ReactFlow espera ComponentType<NodeProps<T>> onde T são os dados do nó.
 const nodeTypes: NodeTypes = {
-  trigger: TriggerNode as React.FC<NodeProps<TriggerNodeData>>,
-  textMessage: TextMessageNode as React.FC<NodeProps<TextMessageNodeData>>,
-  question: QuestionNode as React.FC<NodeProps<QuestionNodeData>>,
-  listMessage: ListMessageNode as React.FC<NodeProps<ListMessageNodeData>>,
-  buttonsMessage: ButtonsMessageNode as React.FC<NodeProps<ButtonsMessageNodeData>>,
-  mediaMessage: MediaMessageNode as React.FC<NodeProps<MediaMessageNodeData>>,
-  condition: ConditionNode as React.FC<NodeProps<ConditionNodeData>>,
-  delay: DelayNode as React.FC<NodeProps<DelayNodeData>>,
-  action: ActionNode as React.FC<NodeProps<ActionNodeData>>,
-  gptQuery: GPTQueryNode as React.FC<NodeProps<GPTQueryNodeData>>,
-  aiDecision: AiDecisionNode as React.FC<NodeProps<AiDecisionNodeData>>,
-  clonedVoice: ClonedVoiceNode as React.FC<NodeProps<ClonedVoiceNodeData>>,
-  tagContact: TagContactNode as React.FC<NodeProps<TagContactNodeData>>,
-  setVariable: SetVariableNode as React.FC<NodeProps<SetVariableNodeData>>,
-  externalData: ExternalDataNode as React.FC<NodeProps<ExternalDataFetchNodeData>>,
-  apiCall: ApiCallNode as React.FC<NodeProps<ApiCallNodeData>>,
-  end: EndNode as React.FC<NodeProps<EndNodeData>>,
+  trigger: TriggerNode as ComponentType<NodeProps<TriggerNodeData>>,
+  textMessage: TextMessageNode as ComponentType<NodeProps<TextMessageNodeData>>,
+  question: QuestionNode as ComponentType<NodeProps<QuestionNodeData>>,
+  listMessage: ListMessageNode as ComponentType<NodeProps<ListMessageNodeData>>,
+  buttonsMessage: ButtonsMessageNode as ComponentType<NodeProps<ButtonsMessageNodeData>>,
+  mediaMessage: MediaMessageNode as ComponentType<NodeProps<MediaMessageNodeData>>,
+  condition: ConditionNode as ComponentType<NodeProps<ConditionNodeData>>,
+  delay: DelayNode as ComponentType<NodeProps<DelayNodeData>>,
+  action: ActionNode as ComponentType<NodeProps<ActionNodeData>>,
+  gptQuery: GPTQueryNode as ComponentType<NodeProps<GPTQueryNodeData>>,
+  aiDecision: AiDecisionNode as ComponentType<NodeProps<AiDecisionNodeData>>,
+  clonedVoice: ClonedVoiceNode as ComponentType<NodeProps<ClonedVoiceNodeData>>,
+  tagContact: TagContactNode as ComponentType<NodeProps<TagContactNodeData>>,
+  setVariable: SetVariableNode as ComponentType<NodeProps<SetVariableNodeData>>,
+  externalData: ExternalDataNode as ComponentType<NodeProps<ExternalDataFetchNodeData>>,
+  apiCall: ApiCallNode as ComponentType<NodeProps<ApiCallNodeData>>,
+  end: EndNode as ComponentType<NodeProps<EndNodeData>>,
 };
 
 const defaultViewport = { x: 0, y: 0, zoom: 1 };
@@ -100,17 +99,23 @@ const ZapFlowBuilderWrapper: React.FC<ZapFlowBuilderProps> = ({
   onCloseEditor,
   onSaveSuccess,
 }) => {
-  const [nodes, setNodes] = useState<Node<CustomNodeDataType>[]>(initialNodesProp || []); // Tipado
+  const [nodes, setNodes] = useState<ZapFlowNode[]>(initialNodesProp || []); // Usar ZapFlowNode
   const [edges, setEdges] = useState<Edge[]>(initialEdgesProp || []);
   const [flowName, setFlowName] = useState(initialFlowName || `Fluxo ${flowId}`);
   const [isLoading, setIsLoading] = useState(true);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  const [rfInstance, setRfInstance] = useState<ReactFlowInstance<CustomNodeDataType, Edge> | null>(null); // Tipado
+  const [rfInstance, setRfInstance] = useState<ReactFlowInstance<CustomNodeDataType, Edge> | null>(null);
 
   useEffect(() => {
     const load = async () => {
       setIsLoading(true);
-      let defaultInitialNodes: Node<TriggerNodeData>[] = [{ id: 'trigger_0', type: 'trigger', position: { x: 250, y: 5 }, data: { label: 'Início do Fluxo' } }];
+      // Garantir que defaultInitialNodes use ZapFlowNode e TriggerNodeData
+      const defaultInitialNodes: ZapFlowNode[] = [{ 
+        id: 'trigger_0', 
+        type: 'trigger', 
+        position: { x: 250, y: 5 }, 
+        data: { label: 'Início do Fluxo' } as TriggerNodeData // Cast para o tipo de dados específico
+      }];
       
       if (onLoadFlow && flowId && flowId !== 'new') {
         try {
@@ -156,17 +161,16 @@ const ZapFlowBuilderWrapper: React.FC<ZapFlowBuilderProps> = ({
 
   const addNode = (type: keyof typeof nodeTypes) => {
     const newNodeId = `${type}_${nodes.length + Date.now()}`;
-    let initialData: Partial<CustomNodeDataType> = { label: `Novo ${type}` }; // Usar Partial para dados iniciais
-    // Defina dados iniciais mais específicos aqui se desejar, conforme o tipo
+    let initialData: Partial<CustomNodeDataType> = { label: `Novo ${type}` }; 
 
-    const newNode: Node<CustomNodeDataType> = { 
+    const newNode: ZapFlowNode = { 
       id: newNodeId,
       type,
       position: {
         x: Math.random() * (reactFlowWrapper.current?.clientWidth || 800) * 0.7,
         y: Math.random() * (reactFlowWrapper.current?.clientHeight || 600) * 0.7,
       },
-      data: initialData as CustomNodeDataType, // Cast se necessário, ou garantir que initialData satisfaça CustomNodeDataType
+      data: initialData as CustomNodeDataType, 
     };
     setNodes((nds) => nds.concat(newNode));
   };
@@ -178,13 +182,13 @@ const ZapFlowBuilderWrapper: React.FC<ZapFlowBuilderProps> = ({
         if (flowName) {
             await onSaveFlow(flowId, nodes, edges, flowName);
             if (onSaveSuccess) onSaveSuccess(flowId, flowName);
-            alert('Fluxo salvo com sucesso!');
+            alert('Fluxo salvo com sucesso!'); // Substituir por toast
         } else {
-            alert('Nome do fluxo é necessário para salvar.');
+            alert('Nome do fluxo é necessário para salvar.'); // Substituir por toast
         }
       } catch (error) {
         console.error("Erro ao salvar fluxo:", error);
-        alert('Falha ao salvar o fluxo.');
+        alert('Falha ao salvar o fluxo.'); // Substituir por toast
       }
       setIsLoading(false);
     }
@@ -193,8 +197,7 @@ const ZapFlowBuilderWrapper: React.FC<ZapFlowBuilderProps> = ({
   const handleDeleteFlow = () => {
     if (window.confirm(`Tem certeza que deseja excluir o fluxo "${flowName}"?`)) {
       console.log("Excluir fluxo:", flowId);
-      // Aqui você chamaria a API para deletar o fluxo
-      if (onCloseEditor) onCloseEditor(); // Apenas fecha o editor, não deleta de fato
+      if (onCloseEditor) onCloseEditor();
     }
   };
 
@@ -213,7 +216,7 @@ const ZapFlowBuilderWrapper: React.FC<ZapFlowBuilderProps> = ({
         nodeTypes={nodeTypes} 
         defaultViewport={defaultViewport}
         fitView
-        onInit={setRfInstance as (instance: ReactFlowInstance<any, any>) => void} // Cast para any temporariamente se rfInstance tipado causar problemas
+        onInit={setRfInstance as (instance: ReactFlowInstance<any, any>) => void}
         attributionPosition="bottom-left"
         proOptions={{ hideAttribution: true }}
       >
@@ -229,7 +232,6 @@ const ZapFlowBuilderWrapper: React.FC<ZapFlowBuilderProps> = ({
             />
         </Panel>
         <Panel position="top-right" className="p-2 space-x-1 flex bg-background/80 rounded-md shadow">
-          {/* Exemplo de botões para adicionar nós */}
           <Button onClick={() => addNode('trigger')} size="sm" variant="outline" className="neu-button text-xs">Trigger</Button>
           <Button onClick={() => addNode('textMessage')} size="sm" variant="outline" className="neu-button text-xs">Texto</Button>
           <Button onClick={() => addNode('condition')} size="sm" variant="outline" className="neu-button text-xs">Condição</Button>
