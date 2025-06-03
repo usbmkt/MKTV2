@@ -2,21 +2,29 @@
 import React, { memo } from 'react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import { Card, CardContent, CardHeader, CardTitle } from '@zap_client/components/ui/card';
-import { Button } from '@zap_client/components/ui/button'; // Exemplo se usar botão
-import { Input } from '@zap_client/components/ui/input';   // Exemplo se usar input
-import { Label } from '@zap_client/components/ui/label';   // Exemplo se usar label
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@zap_client/components/ui/select'; // Exemplo
+import { Input } from '@zap_client/components/ui/input';
+import { Label } from '@zap_client/components/ui/label';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@zap_client/components/ui/select';
 import { Bot, Tag, User, GitBranch, Mail, Edit3 } from 'lucide-react'; // Ícones importados
-import { ActionNodeData } from '@zap_client/features/types/whatsapp_flow_types'; // Importe seu tipo de dados
+import { ActionNodeData } from '@zap_client/features/types/whatsapp_flow_types'; // Importe o tipo de dados
 
-const ActionNode: React.FC<NodeProps<ActionNodeData>> = ({ data, selected, id }) => {
-  const { label = 'Ação', actionType = 'add_tag', tagName, agentId, emailTemplateId, contactPropertyName, contactPropertyValue } = data;
+// Esta função de update é apenas um exemplo, você precisará conectá-la ao seu estado ReactFlow (onNodesChange)
+const handleDataChange = (id: string, field: keyof ActionNodeData, value: any, onNodesChange: any) => {
+  onNodesChange([{ id, type: 'data', data: { [field]: value } }]);
+};
 
-  // Função para atualizar os dados do nó (exemplo, você precisará de um onNodesChange)
-  // const updateNodeData = (newData: Partial<ActionNodeData>) => {
-  //   // Chamar uma função passada por props ou usar um estado global para atualizar o nó
-  //   console.log('Updating node data:', id, newData);
-  // };
+
+const ActionNode: React.FC<NodeProps<ActionNodeData>> = ({ data, selected, id /*, onNodesChange - você precisaria passar isso */ }) => {
+  // Forneça valores padrão para todas as propriedades desestruturadas de `data`
+  const { 
+    label = 'Ação', 
+    actionType = 'add_tag', // Valor padrão
+    tagName = '', 
+    agentId = '', 
+    emailTemplateId = '', 
+    contactPropertyName = '', 
+    contactPropertyValue = '' 
+  } = data;
 
   const getIcon = () => {
     switch (actionType) {
@@ -34,9 +42,14 @@ const ActionNode: React.FC<NodeProps<ActionNodeData>> = ({ data, selected, id })
     }
   };
 
+  // Exemplo de handler para Select (precisaria ser adaptado para sua lógica de estado)
+  // const onActionTypeChange = (newActionType: ActionNodeData['actionType']) => {
+  //   // handleDataChange(id, 'actionType', newActionType, onNodesChange);
+  // };
+
   return (
-    <Card className={`text-xs shadow-md w-64 ${selected ? 'ring-2 ring-blue-500' : 'border-gray-300'} bg-card`}>
-      <CardHeader className="bg-gray-100 dark:bg-gray-800 p-2 rounded-t-lg">
+    <Card className={`text-xs shadow-md w-64 ${selected ? 'ring-2 ring-primary' : 'border-border'} bg-card`}>
+      <CardHeader className="bg-muted/50 p-2 rounded-t-lg">
         <CardTitle className="text-xs font-semibold flex items-center">
           {getIcon()}
           <span className="ml-2">{label || `Ação: ${actionType}`}</span>
@@ -44,10 +57,10 @@ const ActionNode: React.FC<NodeProps<ActionNodeData>> = ({ data, selected, id })
       </CardHeader>
       <CardContent className="p-3 space-y-2">
         <div>
-          <Label htmlFor={`actionType-${id}`} className="text-xs">Tipo de Ação</Label>
+          <Label htmlFor={`actionType-${id}`} className="text-xs font-medium">Tipo de Ação</Label>
           <Select 
             value={actionType} 
-            // onValueChange={(value) => updateNodeData({ actionType: value as ActionNodeData['actionType'] })}
+            // onValueChange={onActionTypeChange} // Conecte ao seu manipulador de estado
           >
             <SelectTrigger id={`actionType-${id}`} className="w-full h-8 text-xs">
               <SelectValue placeholder="Selecione o tipo" />
@@ -64,51 +77,52 @@ const ActionNode: React.FC<NodeProps<ActionNodeData>> = ({ data, selected, id })
 
         {(actionType === 'add_tag' || actionType === 'remove_tag') && (
           <div>
-            <Label htmlFor={`tagName-${id}`} className="text-xs">Nome da Tag</Label>
+            <Label htmlFor={`tagName-${id}`} className="text-xs font-medium">Nome da Tag</Label>
             <Input 
               id={`tagName-${id}`} 
               type="text" 
-              value={tagName || ''} 
-              // onChange={(e) => updateNodeData({ tagName: e.target.value })} 
+              value={tagName} 
+              // onChange={(e) => handleDataChange(id, 'tagName', e.target.value, onNodesChange)} 
               className="w-full h-8 text-xs"
             />
           </div>
         )}
-         {/* Adicionar mais campos conforme o actionType */}
         {actionType === 'assign_agent' && (
              <div>
-                <Label htmlFor={`agentId-${id}`} className="text-xs">ID do Agente</Label>
-                <Input id={`agentId-${id}`} value={agentId || ''} /*onChange={...}*/ className="w-full h-8 text-xs" />
+                <Label htmlFor={`agentId-${id}`} className="text-xs font-medium">ID do Agente</Label>
+                <Input id={`agentId-${id}`} value={agentId} 
+                // onChange={(e) => handleDataChange(id, 'agentId', e.target.value, onNodesChange)} 
+                className="w-full h-8 text-xs" />
             </div>
         )}
         {actionType === 'send_email' && (
              <div>
-                <Label htmlFor={`emailTemplateId-${id}`} className="text-xs">ID do Template de Email</Label>
-                <Input id={`emailTemplateId-${id}`} value={emailTemplateId || ''} /*onChange={...}*/ className="w-full h-8 text-xs" />
+                <Label htmlFor={`emailTemplateId-${id}`} className="text-xs font-medium">ID do Template de Email</Label>
+                <Input id={`emailTemplateId-${id}`} value={emailTemplateId} 
+                // onChange={(e) => handleDataChange(id, 'emailTemplateId', e.target.value, onNodesChange)} 
+                className="w-full h-8 text-xs" />
             </div>
         )}
         {actionType === 'update_contact_prop' && (
             <>
                  <div>
-                    <Label htmlFor={`propName-${id}`} className="text-xs">Nome da Propriedade</Label>
-                    <Input id={`propName-${id}`} value={contactPropertyName || ''} /*onChange={...}*/ className="w-full h-8 text-xs" />
+                    <Label htmlFor={`propName-${id}`} className="text-xs font-medium">Nome da Propriedade</Label>
+                    <Input id={`propName-${id}`} value={contactPropertyName} 
+                    // onChange={(e) => handleDataChange(id, 'contactPropertyName', e.target.value, onNodesChange)} 
+                    className="w-full h-8 text-xs" />
                 </div>
                  <div>
-                    <Label htmlFor={`propValue-${id}`} className="text-xs">Valor da Propriedade</Label>
-                    <Input id={`propValue-${id}`} value={contactPropertyValue || ''} /*onChange={...}*/ className="w-full h-8 text-xs" />
+                    <Label htmlFor={`propValue-${id}`} className="text-xs font-medium">Valor da Propriedade</Label>
+                    <Input id={`propValue-${id}`} value={String(contactPropertyValue)}  // Converta para string se puder ser outros tipos
+                    // onChange={(e) => handleDataChange(id, 'contactPropertyValue', e.target.value, onNodesChange)} 
+                    className="w-full h-8 text-xs" />
                 </div>
             </>
         )}
-
-
-        <p className="text-gray-500 dark:text-gray-400 text-[10px] truncate">
-          {actionType === 'add_tag' && `Adiciona tag: ${tagName || '...'}`}
-          {actionType === 'remove_tag' && `Remove tag: ${tagName || '...'}`}
-          {/* ... outras descrições ... */}
-        </p>
+        {/* Adicione mais inputs para outras actionTypes aqui */}
       </CardContent>
-      <Handle type="target" position={Position.Left} className="!bg-gray-400 w-2.5 h-2.5" />
-      <Handle type="source" position={Position.Right} className="!bg-green-500 w-2.5 h-2.5" />
+      <Handle type="target" position={Position.Left} className="!bg-muted-foreground w-2.5 h-2.5" />
+      <Handle type="source" position={Position.Right} className="!bg-primary w-2.5 h-2.5" />
     </Card>
   );
 };
