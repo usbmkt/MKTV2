@@ -1,279 +1,237 @@
-// zap/client/src/components/whatsapp_features/ZapFlowsList.tsx
-import React, { useState, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@zap_client/components/ui/card';
+import React, { useState, useEffect, useCallback, ChangeEvent } from 'react'; // Adicionado ChangeEvent
+import { PlusCircle, Edit3, Trash2, Search, Filter, Eye, Play, Pause, Copy } from 'lucide-react';
 import { Button } from '@zap_client/components/ui/button';
-import { Badge } from '@zap_client/components/ui/badge';
 import { Input } from '@zap_client/components/ui/input';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from '@zap_client/components/ui/dialog';
-import { Label } from '@zap_client/components/ui/label';
-import { Textarea } from '@zap_client/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@zap_client/components/ui/select';
-import { PlusCircle, Edit, Trash2, Search, Bot, Play, Settings, Loader2, AlertTriangle } from 'lucide-react';
-import { useToast } from '@zap_client/hooks/use-toast'; // Certifique-se que os arquivos de toast estão em zap/client/...
-import { ApiError, FlowElementData } from '@zap_client/features/types/whatsapp_flow_types'; // Importado
+import { Card, CardContent, CardHeader, CardTitle } from '@zap_client/components/ui/card';
+import { ScrollArea } from '@zap_client/components/ui/scroll-area';
+import { Badge } from '@zap_client/components/ui/badge';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@zap_client/components/ui/table';
+import { useToast } from '@zap_client/hooks/use-toast'; // Mantido
+import { getFlows, deleteFlow, duplicateFlow, updateFlowStatus, FlowResponse } from '@zap_client/lib/api'; // Supondo que existam
+import { ApiError, FlowElementData } from '@zap_client/features/types/whatsapp_flow_types'; // Importado FlowElementData
 
-// Interface para as props do componente
 export interface ZapFlowsListProps {
-  onSelectFlow: (flowId: string, flowName: string) => void;
-  onEditFlow: (flowId: string, flowName: string) => void; // Para editar metadados ou abrir no editor
+  onSelectFlow: (flowId: string) => void; // Para abrir no editor
+  onEditFlow: (flow: FlowElementData) => void; // Para edição de metadados ou abrir no editor
+  // Adicione mais props conforme necessário, ex: para criar novo fluxo
+  onLaunchNewFlowEditor: () => void;
 }
 
-// Funções da API (simuladas - substitua por chamadas reais)
-const fetchFlows = async (): Promise<FlowElementData[]> => {
-  console.log("Fetching flows (mocked)...");
-  await new Promise(resolve => setTimeout(resolve, 700));
-  // Exemplo de dados mockados
-  return [
-    { id: 'flow_1', name: 'Boas Vindas Cliente', description: 'Fluxo inicial para novos clientes.', triggerType: 'keyword', status: 'active', lastEdited: '2024-05-28' },
-    { id: 'flow_2', name: 'Recuperação de Carrinho', description: 'Envia lembretes para carrinhos abandonados.', triggerType: 'webhook', status: 'inactive', lastEdited: '2024-05-25' },
-    { id: 'flow_3', name: 'Suporte Nível 1', description: 'Primeiro atendimento para dúvidas comuns.', triggerType: 'manual', status: 'draft', lastEdited: '2024-05-29' },
-  ];
-};
-
-const createFlow = async (flowData: Omit<FlowElementData, 'id' | 'lastEdited'>): Promise<FlowElementData> => {
-  console.log("Creating flow (mocked):", flowData);
-  await new Promise(resolve => setTimeout(resolve, 500));
-  return { ...flowData, id: `flow_${Date.now()}`, lastEdited: new Date().toISOString(), status: flowData.status || 'draft' };
-};
-
-const updateFlow = async (flowId: string, flowData: Partial<Omit<FlowElementData, 'id' | 'lastEdited'>>): Promise<FlowElementData> => {
-    console.log("Updating flow (mocked):", flowId, flowData);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    // Simula a atualização
-    const updatedFlow = { 
-        id: flowId, 
-        name: flowData.name || "Nome Antigo",
-        description: flowData.description,
-        triggerType: flowData.triggerType,
-        status: flowData.status,
-        lastEdited: new Date().toISOString() 
-    };
-    return updatedFlow as FlowElementData;
-};
-
-const deleteFlowApi = async (flowId: string): Promise<void> => {
-  console.log("Deleting flow (mocked):", flowId);
-  await new Promise(resolve => setTimeout(resolve, 500));
-};
-
-
-const ZapFlowsList: React.FC<ZapFlowsListProps> = ({ onSelectFlow, onEditFlow }) => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingFlow, setEditingFlow] = useState<FlowElementData | null>(null);
-  const [newFlowData, setNewFlowData] = useState<Partial<Omit<FlowElementData, 'id' | 'lastEdited'>>>({
-    name: '', description: '', triggerType: 'manual', status: 'draft'
-  });
-
+const ZapFlowsList: React.FC<ZapFlowsListProps> = ({ onSelectFlow, onEditFlow, onLaunchNewFlowEditor }) => {
   const { toast } = useToast();
-  const queryClient = useQueryClient();
+  const [flows, setFlows] = useState<FlowElementData[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all'); // 'all', 'active', 'draft', 'inactive'
+  const [isLoading, setIsLoading] = useState(false);
 
-  const { data: flows = [], isLoading, error } = useQuery<FlowElementData[], ApiError>({
-    queryKey: ['zapFlows'],
-    queryFn: fetchFlows,
-  });
-
-  const mutationConfig = {
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['zapFlows'] });
-      setIsModalOpen(false);
-      setEditingFlow(null);
-      setNewFlowData({ name: '', description: '', triggerType: 'manual', status: 'draft' });
-    },
-    onError: (err: ApiError) => {
-      toast({ title: "Erro", description: err.message || "Ocorreu um erro inesperado.", variant: "destructive" });
+  const fetchFlowsList = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      // A função getFlows em api.ts deve retornar FlowElementData[]
+      const flowsData: FlowElementData[] = await getFlows({ searchTerm, status: statusFilter });
+      setFlows(flowsData);
+    } catch (error) {
+      const apiError = error as ApiError;
+      toast({
+        title: 'Erro ao Carregar Fluxos',
+        description: apiError.message || 'Não foi possível buscar a lista de fluxos.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
     }
-  };
+  }, [toast, searchTerm, statusFilter]);
 
-  const createFlowMutation = useMutation<FlowElementData, ApiError, Omit<FlowElementData, 'id' | 'lastEdited'>>({
-    mutationFn: createFlow,
-    ...mutationConfig,
-    onSuccess: (...args) => {
-        mutationConfig.onSuccess();
-        toast({ title: "Fluxo criado com sucesso!", variant: "default" });
-    }
-  });
+  useEffect(() => {
+    fetchFlowsList();
+  }, [fetchFlowsList]);
 
-  const updateFlowMutation = useMutation<FlowElementData, ApiError, { flowId: string; data: Partial<Omit<FlowElementData, 'id' | 'lastEdited'>> }>({
-    mutationFn: (variables) => updateFlow(variables.flowId, variables.data),
-    ...mutationConfig,
-     onSuccess: (...args) => {
-        mutationConfig.onSuccess();
-        toast({ title: "Fluxo atualizado com sucesso!", variant: "default" });
-    }
-  });
-  
-  const deleteFlowMutation = useMutation<void, ApiError, string>({
-    mutationFn: deleteFlowApi,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['zapFlows'] });
-      toast({ title: "Fluxo excluído!", variant: "default" });
-    },
-    onError: (err: ApiError) => {
-      toast({ title: "Erro ao excluir fluxo", description: err.message, variant: "destructive" });
-    }
-  });
-
-  const handleInputChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setNewFlowData(prev => ({ ...prev, [name]: value }));
-  };
-  
-  const handleSelectChange = (name: string, value: string) => {
-    setNewFlowData(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!newFlowData.name?.trim()) {
-      toast({ title: "Erro de Validação", description: "O nome do fluxo é obrigatório.", variant: "destructive" });
+  const handleDeleteFlow = async (flowId: string) => {
+    if (!window.confirm('Tem certeza que deseja excluir este fluxo? Esta ação não pode ser desfeita.')) {
       return;
     }
-    if (editingFlow) {
-      updateFlowMutation.mutate({ flowId: editingFlow.id, data: newFlowData });
-    } else {
-      createFlowMutation.mutate(newFlowData as Omit<FlowElementData, 'id' | 'lastEdited'>);
+    try {
+      await deleteFlow(flowId); // Implementar em lib/api.ts
+      toast({
+        title: 'Fluxo Excluído',
+        description: 'O fluxo foi excluído com sucesso.',
+      });
+      fetchFlowsList(); // Recarrega a lista
+    } catch (error) {
+      const apiError = error as ApiError;
+      toast({
+        title: 'Erro ao Excluir Fluxo',
+        description: apiError.message || 'Não foi possível excluir o fluxo.',
+        variant: 'destructive',
+      });
     }
   };
 
-  const openModalToEdit = (flow: FlowElementData) => {
-    setEditingFlow(flow);
-    setNewFlowData({
-        name: flow.name,
-        description: flow.description,
-        triggerType: flow.triggerType,
-        status: flow.status
-    });
-    setIsModalOpen(true);
+  const handleDuplicateFlow = async (flowId: string) => {
+    try {
+      await duplicateFlow(flowId); // Implementar em lib/api.ts
+      toast({
+        title: 'Fluxo Duplicado',
+        description: 'O fluxo foi duplicado com sucesso.',
+      });
+      fetchFlowsList();
+    } catch (error) {
+      const apiError = error as ApiError;
+      toast({
+        title: 'Erro ao Duplicar Fluxo',
+        description: apiError.message || 'Não foi possível duplicar o fluxo.',
+        variant: 'destructive',
+      });
+    }
   };
 
-  const openModalToCreate = () => {
-    setEditingFlow(null);
-    setNewFlowData({ name: '', description: '', triggerType: 'manual', status: 'draft' });
-    setIsModalOpen(true);
+  const handleChangeStatus = async (flowId: string, newStatus: FlowElementData['status']) => {
+     try {
+      await updateFlowStatus(flowId, newStatus); // Implementar em lib/api.ts
+      toast({
+        title: 'Status do Fluxo Atualizado',
+        description: `O fluxo agora está ${newStatus === 'active' ? 'ativo' : newStatus === 'draft' ? 'em rascunho' : 'inativo'}.`,
+      });
+      fetchFlowsList();
+    } catch (error) {
+      const apiError = error as ApiError;
+      toast({
+        title: 'Erro ao Atualizar Status',
+        description: apiError.message || 'Não foi possível atualizar o status do fluxo.',
+        variant: 'destructive',
+      });
+    }
   };
 
 
-  const filteredFlows = flows.filter(flow =>
-    flow.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    flow.description?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  if (isLoading) return <div className="p-4 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto" /> Carregando fluxos...</div>;
-  if (error) return <div className="p-4 text-center text-destructive"><AlertTriangle className="w-6 h-6 mx-auto mb-2"/>Erro ao carregar fluxos: {error.message}</div>;
+  const getStatusBadgeVariant = (status: FlowElementData['status']): "default" | "secondary" | "destructive" | "outline" => {
+    switch (status) {
+      case 'active': return 'default'; // Geralmente verde/azul
+      case 'draft': return 'secondary'; // Geralmente cinza/amarelo
+      case 'inactive': return 'outline'; // Geralmente cinza claro
+      case 'archived': return 'destructive'; // Pode ser usado para arquivado
+      default: return 'secondary';
+    }
+  };
 
   return (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <h2 className="text-xl font-semibold">Meus Fluxos de Automação</h2>
-        <Button onClick={openModalToCreate} className="neu-button">
-          <PlusCircle className="w-4 h-4 mr-2" /> Criar Novo Fluxo
-        </Button>
-      </div>
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          placeholder="Buscar fluxos por nome ou descrição..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="pl-10 neu-input"
-        />
-      </div>
-
-      {filteredFlows.length === 0 ? (
-        <div className="text-center py-10 text-muted-foreground">
-          <Bot className="w-16 h-16 mx-auto mb-3 opacity-50" />
-          <p>Nenhum fluxo encontrado. Que tal criar um novo?</p>
+    <Card className="h-full flex flex-col shadow-lg">
+      <CardHeader className="border-b">
+        <div className="flex justify-between items-center">
+          <CardTitle className="text-lg">Fluxos de Automação</CardTitle>
+          <Button onClick={onLaunchNewFlowEditor} size="sm">
+            <PlusCircle className="w-4 h-4 mr-2" />
+            Novo Fluxo
+          </Button>
         </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredFlows.map((flow) => (
-            <Card key={flow.id} className="neu-card hover:shadow-lg transition-shadow">
-              <CardHeader>
-                <div className="flex justify-between items-start">
-                  <CardTitle className="text-base font-semibold truncate">{flow.name}</CardTitle>
-                  <Badge variant={flow.status === 'active' ? 'default' : 'outline'} className={flow.status === 'active' ? 'bg-green-500 text-white' : ''}>
-                    {flow.status}
-                  </Badge>
-                </div>
-                <CardDescription className="text-xs truncate">{flow.description || 'Sem descrição.'}</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-2 text-xs">
-                <p><strong>Gatilho:</strong> <span className="text-muted-foreground">{flow.triggerType || 'N/A'}</span></p>
-                <p><strong>Última Edição:</strong> <span className="text-muted-foreground">{flow.lastEdited ? new Date(flow.lastEdited).toLocaleDateString() : 'N/A'}</span></p>
-                <div className="flex space-x-2 mt-3 pt-3 border-t">
-                  <Button variant="outline" size="sm" className="text-xs flex-1 neu-button" onClick={() => onSelectFlow(flow.id, flow.name)}>
-                    <Play className="w-3 h-3 mr-1.5" /> Abrir no Editor
-                  </Button>
-                  <Button variant="ghost" size="sm" className="text-xs px-2 neu-button" onClick={() => openModalToEdit(flow)}>
-                    <Settings className="w-3 h-3 mr-1.5" /> Config
-                  </Button>
-                  <Button variant="ghost" size="sm" className="text-xs px-2 text-destructive hover:bg-destructive/10 neu-button" onClick={() => deleteFlowMutation.mutate(flow.id)} disabled={deleteFlowMutation.isPending}>
-                    <Trash2 className="w-3 h-3 mr-1.5" />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+        <div className="mt-4 flex space-x-2">
+          <div className="relative flex-grow">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <Input
+              placeholder="Buscar fluxos por nome..."
+              value={searchTerm}
+              onChange={(e: ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)} // Corrigido
+              className="pl-8"
+            />
+          </div>
+          {/* TODO: Adicionar filtro por status se necessário */}
+          {/* <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-[180px]">
+              <Filter className="w-4 h-4 mr-2" />
+              <SelectValue placeholder="Filtrar por status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos</SelectItem>
+              <SelectItem value="active">Ativos</SelectItem>
+              <SelectItem value="draft">Rascunhos</SelectItem>
+              <SelectItem value="inactive">Inativos</SelectItem>
+            </SelectContent>
+          </Select> */}
         </div>
-      )}
-
-      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{editingFlow ? 'Editar Fluxo' : 'Criar Novo Fluxo'}</DialogTitle>
-            <DialogDescription>
-              {editingFlow ? `Modificando o fluxo "${editingFlow.name}".` : 'Preencha os detalhes para criar um novo fluxo de automação.'}
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4 pt-2">
-            <div className="space-y-1">
-              <Label htmlFor="flow-name">Nome do Fluxo*</Label>
-              <Input id="flow-name" name="name" value={newFlowData.name || ''} onChange={handleInputChange} placeholder="Ex: Boas-vindas Automático" className="neu-input" required />
+      </CardHeader>
+      <CardContent className="flex-grow p-0 overflow-hidden">
+        <ScrollArea className="h-full">
+          {isLoading && <p className="p-6 text-center text-gray-500">Carregando fluxos...</p>}
+          {!isLoading && flows.length === 0 && (
+            <div className="p-6 text-center text-gray-500">
+              <ZapIcon className="w-16 h-16 mx-auto text-gray-300 mb-2" />
+              <p className="font-semibold">Nenhum fluxo encontrado.</p>
+              <p className="text-sm">Crie um novo fluxo para começar a automatizar.</p>
             </div>
-            <div className="space-y-1">
-              <Label htmlFor="flow-description">Descrição</Label>
-              <Textarea id="flow-description" name="description" value={newFlowData.description || ''} onChange={handleInputChange} placeholder="Descreva o objetivo deste fluxo..." className="neu-input" rows={3}/>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                <Label htmlFor="flow-triggerType">Tipo de Gatilho</Label>
-                <Select name="triggerType" value={newFlowData.triggerType || 'manual'} onValueChange={(value) => handleSelectChange('triggerType', value)}>
-                    <SelectTrigger id="flow-triggerType" className="neu-input"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                    <SelectItem value="manual">Manual</SelectItem>
-                    <SelectItem value="keyword">Palavra-chave</SelectItem>
-                    <SelectItem value="webhook">Webhook</SelectItem>
-                    {/* Adicione mais tipos de gatilho */}
-                    </SelectContent>
-                </Select>
-                </div>
-                <div className="space-y-1">
-                <Label htmlFor="flow-status">Status</Label>
-                <Select name="status" value={newFlowData.status || 'draft'} onValueChange={(value) => handleSelectChange('status', value as FlowElementData['status'])}>
-                    <SelectTrigger id="flow-status" className="neu-input"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                    <SelectItem value="draft">Rascunho</SelectItem>
-                    <SelectItem value="active">Ativo</SelectItem>
-                    <SelectItem value="inactive">Inativo</SelectItem>
-                    </SelectContent>
-                </Select>
-                </div>
-            </div>
-            <DialogFooter className="pt-4">
-              <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)} disabled={createFlowMutation.isPending || updateFlowMutation.isPending}>
-                Cancelar
-              </Button>
-              <Button type="submit" className="neu-button-primary" disabled={createFlowMutation.isPending || updateFlowMutation.isPending}>
-                {(createFlowMutation.isPending || updateFlowMutation.isPending) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {editingFlow ? 'Salvar Alterações' : 'Criar Fluxo'}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-    </div>
+          )}
+          {!isLoading && flows.length > 0 && (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[40%]">Nome do Fluxo</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Gatilho</TableHead>
+                  <TableHead>Última Modificação</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {flows.map((flow) => (
+                  <TableRow key={flow.id}>
+                    <TableCell className="font-medium">
+                        <span 
+                            onClick={() => onSelectFlow(flow.id)} 
+                            className="cursor-pointer hover:underline"
+                            title="Abrir no editor de fluxos"
+                        >
+                            {flow.name}
+                        </span>
+                        {flow.description && <p className="text-xs text-gray-500 truncate max-w-xs">{flow.description}</p>}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={getStatusBadgeVariant(flow.status)}>
+                        {flow.status === 'active' ? 'Ativo' :
+                         flow.status === 'draft' ? 'Rascunho' :
+                         flow.status === 'inactive' ? 'Inativo' :
+                         flow.status === 'archived' ? 'Arquivado' :
+                         flow.status.toString()}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-xs">{flow.triggerType || 'N/A'}</TableCell>
+                    <TableCell className="text-xs">{new Date(flow.updatedAt).toLocaleDateString()}</TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="icon" onClick={() => onSelectFlow(flow.id)} title="Visualizar/Editar Fluxo">
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                       {flow.status === 'active' ? (
+                        <Button variant="ghost" size="icon" onClick={() => handleChangeStatus(flow.id, 'inactive')} title="Pausar Fluxo">
+                            <Pause className="w-4 h-4" />
+                        </Button>
+                        ) : (
+                        <Button variant="ghost" size="icon" onClick={() => handleChangeStatus(flow.id, 'active')} title="Ativar Fluxo">
+                            <Play className="w-4 h-4" />
+                        </Button>
+                        )}
+                      <Button variant="ghost" size="icon" onClick={() => onEditFlow(flow)} title="Editar Detalhes">
+                        <Edit3 className="w-4 h-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => handleDuplicateFlow(flow.id)} title="Duplicar Fluxo">
+                        <Copy className="w-4 h-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => handleDeleteFlow(flow.id)} title="Excluir Fluxo">
+                        <Trash2 className="w-4 h-4 text-red-500" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </ScrollArea>
+      </CardContent>
+    </Card>
   );
 };
 
