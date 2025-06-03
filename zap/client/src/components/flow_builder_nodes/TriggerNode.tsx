@@ -1,44 +1,83 @@
 // zap/client/src/components/flow_builder_nodes/TriggerNode.tsx
-import React from 'react';
+import React, { memo } from 'react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
-import { Zap as ZapIcon, SlidersHorizontal } from 'lucide-react'; // Usar SlidersHorizontal para configuração de gatilho
-import { cn } from '@zap_client/lib/utils';
+import { Card, CardContent, CardHeader, CardTitle } from '@zap_client/components/ui/card';
+import { Label } from '@zap_client/components/ui/label';
+import { Input } from '@zap_client/components/ui/input';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@zap_client/components/ui/select';
+import { PlayCircle, Zap as ZapIcon, Keyboard, Webhook } from 'lucide-react'; // Ícones relevantes
+import { TriggerNodeData } from '@zap_client/features/types/whatsapp_flow_types';
 
-export interface TriggerNodeData {
-  label?: string;
-  triggerType?: 'keyword' | 'first_message' | 'api_call' | 'scheduled' | 'manual';
-  config?: Record<string, any>; // Ex: { keyword: "oi" }
-}
+const TriggerNode: React.FC<NodeProps<TriggerNodeData>> = ({ data, id, selected }) => {
+  const { 
+    label = 'Gatilho', 
+    triggerType = 'manual', 
+    keywords = [] 
+  } = data;
 
-const TriggerNode: React.FC<NodeProps<TriggerNodeData>> = ({ data, selected, id, type }) => {
-  const triggerLabel = data.triggerType ? data.triggerType.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'Manual';
+  // Lógica para atualizar 'data'
+  // const updateData = (field: keyof TriggerNodeData, value: any) => { /* ... */ };
+  // const handleKeywordsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  //   const kw = e.target.value.split(',').map(k => k.trim()).filter(k => k);
+  //   updateData('keywords', kw);
+  // };
+
+  const getIcon = () => {
+    switch (triggerType) {
+      case 'keyword': return <Keyboard className="w-4 h-4 text-indigo-500 mr-2" />;
+      case 'manual': return <PlayCircle className="w-4 h-4 text-green-500 mr-2" />;
+      case 'webhook': return <Webhook className="w-4 h-4 text-purple-500 mr-2" />;
+      // Adicione mais casos para 'form_submission', 'api_call' se necessário
+      default: return <ZapIcon className="w-4 h-4 text-gray-500 mr-2" />;
+    }
+  };
+
   return (
-    <div
-      className={cn(
-        "p-3 px-4 rounded-lg shadow-md bg-green-50 border border-green-600/70 w-64", // Cor verde para início
-        selected && "ring-2 ring-green-700 ring-offset-2 ring-offset-background"
-      )}
-    >
-      {/* Nenhum Handle de entrada para o nó inicial */}
-      <div className="flex items-center mb-1">
-        <ZapIcon className="w-4 h-4 mr-2 text-green-700" />
-        <div className="text-sm font-semibold text-green-800">{data.label || 'Início do Fluxo'}</div>
-      </div>
-      <div className="text-xs text-green-700/80">
-        <p>Gatilho: <span className="font-medium">{triggerLabel}</span></p>
-        {data.triggerType === 'keyword' && data.config?.keyword && (
-            <p className="truncate" title={`Palavra-chave: ${data.config.keyword}`}>Palavra: <span className="font-mono text-xxs bg-green-100 px-1 rounded">{data.config.keyword}</span></p>
+    <Card className={`text-xs shadow-md w-64 ${selected ? 'ring-2 ring-green-500' : 'border-border'} bg-card`}>
+      <CardHeader className="bg-muted/50 p-2 rounded-t-lg">
+        <CardTitle className="text-xs font-semibold flex items-center">
+          {getIcon()}
+          {label || `Gatilho: ${triggerType}`}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-3 space-y-2">
+        <div>
+          <Label htmlFor={`triggerType-${id}`} className="text-xs font-medium">Tipo de Gatilho</Label>
+          <Select
+            value={triggerType}
+            // onValueChange={(value) => updateData('triggerType', value as TriggerNodeData['triggerType'])}
+          >
+            <SelectTrigger id={`triggerType-${id}`} className="w-full h-8 text-xs">
+              <SelectValue placeholder="Selecione o tipo" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="manual">Manual</SelectItem>
+              <SelectItem value="keyword">Palavra-chave</SelectItem>
+              <SelectItem value="webhook">Webhook</SelectItem>
+              <SelectItem value="form_submission">Envio de Formulário</SelectItem>
+              <SelectItem value="api_call">Chamada de API</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        {triggerType === 'keyword' && (
+          <div>
+            <Label htmlFor={`keywords-${id}`} className="text-xs font-medium">Palavras-chave (separadas por vírgula)</Label>
+            <Input
+              id={`keywords-${id}`}
+              type="text"
+              placeholder="Ex: olá, ajuda, suporte"
+              value={(keywords || []).join(', ')}
+              // onChange={handleKeywordsChange}
+              className="w-full h-8 text-xs"
+            />
+          </div>
         )}
-      </div>
-      <Handle 
-        type="source" 
-        position={Position.Right} 
-        id={`${id}-source`} 
-        className="!bg-green-600 w-3 h-3" 
-        title="Próximo passo"
-      />
-    </div>
+        {/* Adicionar campos para outros triggerTypes conforme necessário */}
+      </CardContent>
+      {/* TriggerNode geralmente só tem handle de saída */}
+      <Handle type="source" position={Position.Right} className="!bg-primary w-2.5 h-2.5" />
+    </Card>
   );
 };
 
-export default TriggerNode; 
+export default memo(TriggerNode);
