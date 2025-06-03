@@ -1,4 +1,4 @@
-import React, { memo, useState, useEffect, useCallback, ChangeEvent } from 'react';
+import React, { memo, useState, useEffect, useCallback, ChangeEvent, KeyboardEvent } from 'react'; // Adicionado KeyboardEvent
 import { Handle, Position, useReactFlow, NodeToolbar, NodeProps as ReactFlowNodeProps } from '@xyflow/react';
 import { TriggerNodeData, FlowNodeType, HandleData } from '@zap_client/features/types/whatsapp_flow_types';
 import { Card, CardContent, CardHeader, CardTitle } from '@zap_client/components/ui/card';
@@ -25,18 +25,20 @@ const TriggerNodeComponent: React.FC<ReactFlowNodeProps<TriggerNodeData>> = ({ i
   const [isEditingLabel, setIsEditingLabel] = useState<boolean>(false);
 
   useEffect(() => {
+    // Sincronizar estado interno se `data` prop mudar externamente
     setTriggerType(data.triggerType || 'keyword');
     setKeywords(data.keywords?.join(', ') || '');
     setPattern(data.pattern || '');
     setLabel(data.label || 'Gatilho');
   }, [data]);
 
-  const updateNodeData = useCallback(
+  const updateNodeDataCallback = useCallback( // Renomeado para evitar conflito de nome se houver outro updateNodeData no escopo
     (newData: Partial<TriggerNodeData>) => {
       setNodes((nds) =>
         nds.map((node) => {
           if (node.id === id) {
-            const currentData = node.data as TriggerNodeData; // Cast para o tipo específico
+            // Assegura que o data seja do tipo correto antes de espalhar
+            const currentData = node.data as TriggerNodeData;
             return { ...node, data: { ...currentData, ...newData } };
           }
           return node;
@@ -46,12 +48,12 @@ const TriggerNodeComponent: React.FC<ReactFlowNodeProps<TriggerNodeData>> = ({ i
     [id, setNodes] 
   );
 
-  const handleLabelChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLabelChange = (e: ChangeEvent<HTMLInputElement>) => {
     setLabel(e.target.value);
   };
 
   const handleLabelSave = () => {
-    updateNodeData({ label });
+    updateNodeDataCallback({ label });
     setIsEditingLabel(false);
   };
 
@@ -60,23 +62,23 @@ const TriggerNodeComponent: React.FC<ReactFlowNodeProps<TriggerNodeData>> = ({ i
     setTriggerType(newType);
     const currentKeywordsArray = keywords.split(',').map((k: string) => k.trim()).filter((k: string) => k);
     const currentPattern = pattern;
-    updateNodeData({ 
+    updateNodeDataCallback({ 
         triggerType: newType, 
         keywords: (newType === 'keyword' || newType === 'exact_match') ? currentKeywordsArray : undefined, 
         pattern: newType === 'pattern' ? currentPattern : undefined 
     });
   };
 
-  const handleKeywordsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleKeywordsChange = (e: ChangeEvent<HTMLInputElement>) => {
     const newKeywords = e.target.value;
     setKeywords(newKeywords);
-    updateNodeData({ keywords: newKeywords.split(',').map((k: string) => k.trim()).filter((k: string) => k) });
+    updateNodeDataCallback({ keywords: newKeywords.split(',').map((k: string) => k.trim()).filter((k: string) => k) });
   };
 
-  const handlePatternChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+  const handlePatternChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
     const newPattern = e.target.value;
     setPattern(newPattern);
-    updateNodeData({ pattern: newPattern });
+    updateNodeDataCallback({ pattern: newPattern });
   };
 
   const handleDeleteNode = () => {
@@ -99,7 +101,7 @@ const TriggerNodeComponent: React.FC<ReactFlowNodeProps<TriggerNodeData>> = ({ i
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 pt-3 px-4 bg-green-500/10 dark:bg-green-700/20 rounded-t-lg">
         {isEditingLabel ? (
           <div className="flex items-center gap-2">
-            <Input value={label} onChange={handleLabelChange} className="text-sm h-7" autoFocus onBlur={handleLabelSave} onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => e.key === 'Enter' && handleLabelSave()}/>
+            <Input value={label} onChange={handleLabelChange} className="text-sm h-7" autoFocus onBlur={handleLabelSave} onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => e.key === 'Enter' && handleLabelSave()}/>
             <Button size="sm" onClick={handleLabelSave} className="h-7">Salvar</Button>
           </div>
         ) : (
