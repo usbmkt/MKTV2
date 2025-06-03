@@ -1,10 +1,10 @@
 // zap/client/src/components/flow_builder_nodes/TextMessageNode.tsx
-import React, { memo } from 'react';
+import React, { memo, ChangeEvent } from 'react'; // Adicionado ChangeEvent
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import { Card, CardContent, CardHeader, CardTitle } from '@zap_client/components/ui/card';
 import { Textarea } from '@zap_client/components/ui/textarea';
 import { Label } from '@zap_client/components/ui/label';
-import { MessageSquareText } from 'lucide-react'; // Ícone para mensagem de texto
+import { MessageSquareText } from 'lucide-react';
 import { TextMessageNodeData } from '@zap_client/features/types/whatsapp_flow_types';
 
 const TextMessageNode: React.FC<NodeProps<TextMessageNodeData>> = ({ data, id, selected }) => {
@@ -13,9 +13,9 @@ const TextMessageNode: React.FC<NodeProps<TextMessageNodeData>> = ({ data, id, s
     message = '' 
   } = data;
 
-  // Lógica para atualizar 'data' (ex: via onNodesChange passada como prop ou contexto)
+  // Lógica para atualizar 'data'
   // const updateMessage = (newMessage: string) => {
-  //   // onNodesChange([{ id, type: 'data', data: { ...data, message: newMessage } }]);
+  //   // onNodesChange([{ id, type: 'dataUpdate', data: { ...data, message: newMessage } }]);
   // };
 
   return (
@@ -28,11 +28,11 @@ const TextMessageNode: React.FC<NodeProps<TextMessageNodeData>> = ({ data, id, s
       </CardHeader>
       <CardContent className="p-3">
         <div>
-          <Label htmlFor={`message-${id}`} className="text-xs font-medium">Conteúdo da Mensagem</Label>
+          <Label htmlFor={`message-${id}`} className="text-xs font-medium">Conteúdo da Mensagem*</Label>
           <Textarea
             id={`message-${id}`}
             value={message}
-            // onChange={(e) => updateMessage(e.target.value)}
+            // onChange={(e: ChangeEvent<HTMLTextAreaElement>) => updateMessage(e.target.value)}
             placeholder="Digite sua mensagem aqui... Use {{variavel}} para variáveis."
             rows={4}
             className="w-full text-xs mt-1"
