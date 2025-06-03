@@ -30,6 +30,7 @@
     "@radix-ui/react-switch": "^1.1.0",
     "@radix-ui/react-tabs": "^1.1.0",
     "@tanstack/react-query": "^5.51.1",
+    "@xyflow/react": "^12.0.3", 
     "axios": "^1.7.2",
     "bcrypt": "^5.1.1",
     "cors": "^2.8.5",
@@ -44,16 +45,14 @@
     "pg": "^8.12.0",
     "pino": "^9.3.2",
     "pino-pretty": "^11.2.1",
-    "qrcode": "^1.5.3",
+    "qrcode.react": "^3.1.0", 
     "qrcode-terminal": "^0.12.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-hook-form": "^7.52.1",
     "recharts": "^2.12.7",
     "wouter": "^3.3.1",
-    "zod": "^3.23.8",
-    "reactflow": "^11.11.4",  
-    "qrcode.react": "^3.1.0" 
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@hookform/resolvers": "^3.9.0",

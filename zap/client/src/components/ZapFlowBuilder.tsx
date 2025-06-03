@@ -1,253 +1,237 @@
 // zap/client/src/components/ZapFlowBuilder.tsx
-import React, { useState, useCallback, useRef, useEffect } from 'react';
-import ReactFlow, {
-  ReactFlowProvider,
-  addEdge,
-  useNodesState,
-  useEdgesState,
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import {
+  ReactFlow,
   Controls,
   Background,
-  MiniMap,
+  addEdge,
+  applyNodeChanges,
+  applyEdgeChanges,
   Node,
   Edge,
   Connection,
-  MarkerType,
-  NodeTypes,
-  useReactFlow,
+  NodeChange,
+  EdgeChange,
+  MiniMap,
+  BackgroundVariant,
   Panel,
-} from 'reactflow';
-import 'reactflow/dist/style.css';
+} from '@xyflow/react'; // Alterado para @xyflow/react
+import '@xyflow/react/dist/style.css';
 
-import { Button } from '@/components/ui/button'; // Ajuste se o caminho estiver incorreto
-import {
-  MessageSquare,
-  HelpCircle,
-  GitBranch,
-  Clock,
-  Zap as ZapIconLucide, // Renomeado para evitar conflito com o nome do módulo
-  Play,
-  Save,
-  Eye,
-  Plus,
-  Edit2,
-  Trash2,
-  Settings,
-  MousePointer,
-  Share2,
-  Terminal,
-  Brain,
-  RadioTower,
-  Languages,
-  Bot,
-  Voicemail,
-  FileText,
-  ImageIcon as ImageIconLucide,
-  VideoIcon,
-  ListIcon,
-  ToggleLeft,
-  SlidersHorizontal,
-  Webhook,
-  Database,
-  Tags,
-} from 'lucide-react';
+import TextMessageNode from '@zap_client/components/flow_builder_nodes/TextMessageNode';
+import QuestionNode from '@zap_client/components/flow_builder_nodes/QuestionNode';
+import ConditionNode from '@zap_client/components/flow_builder_nodes/ConditionNode';
+import ActionNode from '@zap_client/components/flow_builder_nodes/ActionNode';
+import DelayNode from '@zap_client/components/flow_builder_nodes/DelayNode';
+import TriggerNode from '@zap_client/components/flow_builder_nodes/TriggerNode';
+import EndNode from '@zap_client/components/flow_builder_nodes/EndNode';
+import ListMessageNode from '@zap_client/components/flow_builder_nodes/ListMessageNode';
+import ButtonsMessageNode from '@zap_client/components/flow_builder_nodes/ButtonsMessageNode';
+import MediaMessageNode from '@zap_client/components/flow_builder_nodes/MediaMessageNode';
+import GptQueryNode from '@zap_client/components/flow_builder_nodes/GptQueryNode';
+import AiDecisionNode from '@zap_client/components/flow_builder_nodes/AiDecisionNode';
+import ClonedVoiceNode from '@zap_client/components/flow_builder_nodes/ClonedVoiceNode';
+import TagContactNode from '@zap_client/components/flow_builder_nodes/TagContactNode';
+import SetVariableNode from '@zap_client/components/flow_builder_nodes/SetVariableNode';
+import ExternalDataNode from '@zap_client/components/flow_builder_nodes/ExternalDataNode';
+import ApiCallNode from '@zap_client/components/flow_builder_nodes/ApiCallNode';
 
-// Importando os nós customizados
-import TriggerNode from './flow_builder_nodes/TriggerNode';
-import TextMessageNode from './flow_builder_nodes/TextMessageNode';
-import ButtonsMessageNode from './flow_builder_nodes/ButtonsMessageNode';
-import ListMessageNode from './flow_builder_nodes/ListMessageNode';
-import MediaMessageNode from './flow_builder_nodes/MediaMessageNode';
-import QuestionNode from './flow_builder_nodes/QuestionNode';
-import ConditionNode from './flow_builder_nodes/ConditionNode';
-import DelayNode from './flow_builder_nodes/DelayNode';
-import ActionNode from './flow_builder_nodes/ActionNode';
-import GptQueryNode from './flow_builder_nodes/GptQueryNode';
-import AiDecisionNode from './flow_builder_nodes/AiDecisionNode';
-import ClonedVoiceNode from './flow_builder_nodes/ClonedVoiceNode';
-import SetVariableNode from './flow_builder_nodes/SetVariableNode';
-import ApiCallNode from './flow_builder_nodes/ApiCallNode';
-import ExternalDataNode from './flow_builder_nodes/ExternalDataNode';
-import TagContactNode from './flow_builder_nodes/TagContactNode';
-import EndNode from './flow_builder_nodes/EndNode';
+import { Button } from '@zap_client/components/ui/button'; // Corrigido para @zap_client
+import { PlusCircle, Save, Trash2, Zap } from 'lucide-react';
 
-// Tipos de Nós Customizados
-const nodeTypes: NodeTypes = {
+// Defina ZapFlowBuilderProps aqui ou importe se estiver em outro lugar
+export interface ZapFlowBuilderProps {
+  flowId: string;
+  initialNodes?: Node[];
+  initialEdges?: Edge[];
+  initialFlowName?: string | null; // Adicionado
+  onSaveFlow?: (flowId: string, nodes: Node[], edges: Edge[], name?: string) => Promise<void>;
+  onLoadFlow?: (flowId: string) => Promise<{ nodes: Node[], edges: Edge[], name?: string } | null>;
+  onCloseEditor?: () => void;
+  onSaveSuccess?: (flowId: string, flowName: string) => void;
+}
+
+const nodeTypes = {
   trigger: TriggerNode,
   textMessage: TextMessageNode,
-  buttonsMessage: ButtonsMessageNode,
-  listMessage: ListMessageNode,
-  mediaMessage: MediaMessageNode,
   question: QuestionNode,
+  listMessage: ListMessageNode,
+  buttonsMessage: ButtonsMessageNode,
+  mediaMessage: MediaMessageNode,
   condition: ConditionNode,
   delay: DelayNode,
   action: ActionNode,
   gptQuery: GptQueryNode,
   aiDecision: AiDecisionNode,
   clonedVoice: ClonedVoiceNode,
-  setVariable: SetVariableNode,
-  apiCall: ApiCallNode,
-  externalData: ExternalDataNode,
   tagContact: TagContactNode,
+  setVariable: SetVariableNode,
+  externalData: ExternalDataNode,
+  apiCall: ApiCallNode,
   end: EndNode,
 };
 
-const initialNodes: Node[] = [
-  {
-    id: 'start-node',
-    type: 'trigger',
-    position: { x: 100, y: 150 },
-    data: { label: 'Início do Fluxo' },
-  },
-];
+const defaultViewport = { x: 0, y: 0, zoom: 1 };
 
-interface ZapFlowBuilderProps {
-  flowId?: string; // Para carregar um fluxo existente
-  initialNodesData?: Node[];
-  initialEdgesData?: Edge[];
-  onSaveFlow?: (nodes: Node[], edges: Edge[]) => void;
-}
-
-const ZapFlowBuilderComponent: React.FC<ZapFlowBuilderProps> = ({
+const ZapFlowBuilderWrapper: React.FC<ZapFlowBuilderProps> = ({
   flowId,
-  initialNodesData,
-  initialEdgesData,
+  initialNodes: initialNodesProp,
+  initialEdges: initialEdgesProp,
+  initialFlowName,
   onSaveFlow,
+  onLoadFlow,
+  onCloseEditor,
+  onSaveSuccess,
 }) => {
+  const [nodes, setNodes] = useState<Node[]>(initialNodesProp || []);
+  const [edges, setEdges] = useState<Edge[]>(initialEdgesProp || []);
+  const [flowName, setFlowName] = useState(initialFlowName || `Fluxo ${flowId}`);
+  const [isLoading, setIsLoading] = useState(true);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodesData || initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdgesData || []);
-  const [reactFlowInstance, setReactFlowInstance] = useState<any>(null); // Usar 'any' se o tipo exato for complexo
 
+  useEffect(() => {
+    const load = async () => {
+      setIsLoading(true);
+      if (onLoadFlow && flowId !== 'new') {
+        try {
+          const loadedData = await onLoadFlow(flowId);
+          if (loadedData) {
+            setNodes(loadedData.nodes || []);
+            setEdges(loadedData.edges || []);
+            if(loadedData.name) setFlowName(loadedData.name);
+          } else {
+            // Fluxo não encontrado ou novo, começar com nó Trigger
+            setNodes([{ id: 'trigger_0', type: 'trigger', position: { x: 250, y: 5 }, data: { label: 'Início do Fluxo' } }]);
+            setEdges([]);
+            setFlowName(`Novo Fluxo ${new Date().toLocaleTimeString()}`);
+          }
+        } catch (error) {
+          console.error("Erro ao carregar fluxo:", error);
+           setNodes([{ id: 'trigger_0', type: 'trigger', position: { x: 250, y: 5 }, data: { label: 'Início do Fluxo (Erro ao Carregar)' } }]);
+        }
+      } else {
+         setNodes([{ id: 'trigger_0', type: 'trigger', position: { x: 250, y: 5 }, data: { label: 'Novo Fluxo' } }]);
+         setEdges([]);
+         setFlowName(initialFlowName || `Novo Fluxo`);
+      }
+      setIsLoading(false);
+    };
+    load();
+  }, [flowId, onLoadFlow, initialFlowName]);
+
+  const onNodesChange = useCallback(
+    (changes: NodeChange[]) => setNodes((nds) => applyNodeChanges(changes, nds)),
+    [setNodes]
+  );
+  const onEdgesChange = useCallback(
+    (changes: EdgeChange[]) => setEdges((eds) => applyEdgeChanges(changes, eds)),
+    [setEdges]
+  );
   const onConnect = useCallback(
-    (params: Connection | Edge) =>
-      setEdges((eds) => addEdge({ ...params, markerEnd: { type: MarkerType.ArrowClosed } }, eds)),
+    (connection: Connection) => setEdges((eds) => addEdge(connection, eds)),
     [setEdges]
   );
 
-  const onDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
-  }, []);
+  const addNode = (type: string) => {
+    const newNodeId = `${type}_${nodes.length + 1}`;
+    const newNode: Node = {
+      id: newNodeId,
+      type,
+      position: {
+        x: Math.random() * (reactFlowWrapper.current?.clientWidth || 800) * 0.7,
+        y: Math.random() * (reactFlowWrapper.current?.clientHeight || 600) * 0.7,
+      },
+      data: { label: `Novo ${type}` },
+    };
+    setNodes((nds) => nds.concat(newNode));
+  };
 
-  const onDrop = useCallback(
-    (event: React.DragEvent<HTMLDivElement>) => {
-      event.preventDefault();
-
-      if (!reactFlowWrapper.current || !reactFlowInstance) {
-        return;
-      }
-
-      const type = event.dataTransfer.getData('application/reactflow');
-      if (typeof type === 'undefined' || !type) {
-        return;
-      }
-
-      const position = reactFlowInstance.screenToFlowPosition({
-        x: event.clientX,
-        y: event.clientY,
-      });
-      const newNodeId = `node_${Date.now()}`;
-      const newNode: Node = {
-        id: newNodeId,
-        type,
-        position,
-        data: { label: `${type.charAt(0).toUpperCase() + type.slice(1)} Node` },
-      };
-
-      setNodes((nds) => nds.concat(newNode));
-    },
-    [reactFlowInstance, setNodes]
-  );
-
-  const onSave = () => {
+  const handleSave = async () => {
     if (onSaveFlow) {
-      onSaveFlow(nodes, edges);
-    } else {
-      console.log('Fluxo para salvar:', { nodes, edges });
-      alert('Fluxo salvo no console!');
+      setIsLoading(true);
+      try {
+        const currentFlowName = prompt("Nome do Fluxo:", flowName);
+        if (currentFlowName) {
+            setFlowName(currentFlowName);
+            await onSaveFlow(flowId, nodes, edges, currentFlowName);
+            if (onSaveSuccess) onSaveSuccess(flowId, currentFlowName);
+            alert('Fluxo salvo com sucesso!');
+        } else {
+            alert('Salvamento cancelado. Nome do fluxo é necessário.');
+        }
+      } catch (error) {
+        console.error("Erro ao salvar fluxo:", error);
+        alert('Falha ao salvar o fluxo.');
+      }
+      setIsLoading(false);
+    }
+  };
+  
+  const handleDeleteFlow = () => {
+    if (window.confirm(`Tem certeza que deseja excluir o fluxo "${flowName}"?`)) {
+      // Adicionar lógica para chamar API de exclusão
+      console.log("Excluir fluxo:", flowId);
+      if (onCloseEditor) onCloseEditor();
     }
   };
 
-  const onDragStart = (event: React.DragEvent<HTMLDivElement>, nodeType: string) => {
-    event.dataTransfer.setData('application/reactflow', nodeType);
-    event.dataTransfer.effectAllowed = 'move';
-  };
 
-  const sidebarNodeTypes = [
-    { type: 'trigger', label: 'Gatilho', icon: RadioTower, description: 'Inicia o fluxo baseado em um evento.' },
-    { type: 'textMessage', label: 'Texto', icon: MessageSquare, description: 'Envia uma mensagem de texto simples.' },
-    { type: 'buttonsMessage', label: 'Botões', icon: ToggleLeft, description: 'Envia mensagem com botões de resposta rápida.' },
-    { type: 'listMessage', label: 'Lista', icon: ListIcon, description: 'Envia uma mensagem com uma lista de opções.' },
-    { type: 'mediaMessage', label: 'Mídia', icon: ImageIconLucide, description: 'Envia imagem, vídeo, áudio ou documento.' },
-    { type: 'question', label: 'Pergunta', icon: HelpCircle, description: 'Faz uma pergunta e aguarda resposta do usuário.' },
-    { type: 'condition', label: 'Condição', icon: GitBranch, description: 'Desvia o fluxo baseado em condições.' },
-    { type: 'delay', label: 'Aguardar', icon: Clock, description: 'Pausa o fluxo por um tempo determinado.' },
-    { type: 'action', label: 'Ação Zap', icon: ZapIconLucide, description: 'Executa uma ação específica do WhatsApp (ex: ler msg).' },
-    { type: 'gptQuery', label: 'Consulta GPT', icon: Brain, description: 'Envia um prompt para o GPT e usa a resposta.' },
-    { type: 'aiDecision', label: 'Decisão IA', icon: Bot, description: 'Permite à IA tomar uma decisão de fluxo.' },
-    { type: 'clonedVoice', label: 'Voz Clonada', icon: Voicemail, description: 'Envia uma mensagem de voz usando TTS clonado.' },
-    { type: 'setVariable', label: 'Definir Variável', icon: SlidersHorizontal, description: 'Define ou atualiza uma variável de contato/fluxo.' },
-    { type: 'apiCall', label: 'Chamada API', icon: Webhook, description: 'Faz uma requisição para uma API externa.' },
-    { type: 'externalData', label: 'Dados Externos', icon: Database, description: 'Busca ou envia dados para sistemas externos (planilhas, CRM).' },
-    { type: 'tagContact', label: 'Etiquetar Contato', icon: Tags, description: 'Adiciona ou remove etiquetas do contato.' },
-    { type: 'end', label: 'Fim do Fluxo', icon: Play, description: 'Marca o final de um caminho do fluxo.' }, // Ícone Play invertido como Fim
-  ];
-
+  if (isLoading && flowId !== 'new') {
+    return <div className="flex items-center justify-center h-full"><Loader2 className="w-8 h-8 animate-spin text-primary" /> Carregando fluxo...</div>;
+  }
 
   return (
-    <div className="flex h-full w-full">
-      <aside className="w-64 p-4 border-r bg-card space-y-3 overflow-y-auto">
-        <h3 className="text-lg font-semibold mb-3">Blocos de Fluxo</h3>
-        {sidebarNodeTypes.map((node) => {
-          const Icon = node.icon;
-          return (
-            <div
-              key={node.type}
-              className="p-3 border rounded-md cursor-grab neu-card hover:shadow-lg transition-shadow flex items-start gap-3"
-              onDragStart={(event) => onDragStart(event, node.type)}
-              draggable
-            >
-              <Icon className="w-5 h-5 mt-0.5 text-primary flex-shrink-0" />
-              <div>
-                <div className="font-medium text-sm">{node.label}</div>
-                <p className="text-xs text-muted-foreground">{node.description}</p>
-              </div>
-            </div>
-          );
-        })}
-      </aside>
-      <div className="flex-1 h-full" ref={reactFlowWrapper}>
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          onInit={setReactFlowInstance}
-          onDrop={onDrop}
-          onDragOver={onDragOver}
-          nodeTypes={nodeTypes}
-          fitView
-          className="bg-background"
-        >
-          <Controls />
-          <MiniMap />
-          <Background gap={16} color="hsl(var(--border))" />
-          <Panel position="top-right">
-            <Button onClick={onSave} size="sm" className="neu-button m-2">
-              <Save className="mr-2 h-4 w-4" /> Salvar Fluxo
+    <div className="h-[calc(100vh-250px)] md:h-[calc(100vh-200px)] w-full border rounded-lg shadow-md neu-card overflow-hidden" ref={reactFlowWrapper}>
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onConnect={onConnect}
+        nodeTypes={nodeTypes}
+        defaultViewport={defaultViewport}
+        fitView
+        attributionPosition="bottom-left"
+        proOptions={{ hideAttribution: true }}
+      >
+        <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
+        <Controls />
+        <MiniMap nodeStrokeWidth={3} zoomable pannable />
+        <Panel position="top-left" className="p-2 space-x-2 flex">
+            <Input 
+                value={flowName} 
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFlowName(e.target.value)} 
+                placeholder="Nome do Fluxo"
+                className="bg-background/80 border-border w-auto text-xs h-8"
+            />
+        </Panel>
+        <Panel position="top-right" className="p-2 space-x-2 flex">
+          <Button onClick={() => addNode('textMessage')} size="sm" variant="outline" className="neu-button text-xs">
+            <PlusCircle className="mr-1.5 h-3.5 w-3.5" /> Msg Texto
+          </Button>
+          <Button onClick={() => addNode('question')} size="sm" variant="outline" className="neu-button text-xs">
+             <PlusCircle className="mr-1.5 h-3.5 w-3.5" /> Pergunta
+          </Button>
+           <Button onClick={() => addNode('condition')} size="sm" variant="outline" className="neu-button text-xs">
+             <PlusCircle className="mr-1.5 h-3.5 w-3.5" /> Condição
+          </Button>
+          <Button onClick={handleSave} size="sm" variant="default" className="neu-button-primary text-xs" disabled={isLoading}>
+            {isLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />} Salvar
+          </Button>
+          {flowId !== 'new' && (
+            <Button onClick={handleDeleteFlow} size="sm" variant="destructive" className="text-xs">
+              <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Excluir
             </Button>
-          </Panel>
-        </ReactFlow>
-      </div>
+          )}
+           {onCloseEditor && (
+             <Button onClick={onCloseEditor} size="sm" variant="outline" className="neu-button text-xs">
+                Fechar Editor
+             </Button>
+           )}
+        </Panel>
+      </ReactFlow>
     </div>
   );
 };
 
-const FlowBuilderWrapper: React.FC<ZapFlowBuilderProps> = (props) => (
-  <ReactFlowProvider>
-    <ZapFlowBuilderComponent {...props} />
-  </ReactFlowProvider>
-);
-
-export default FlowBuilderWrapper;
+export default ZapFlowBuilderWrapper;
