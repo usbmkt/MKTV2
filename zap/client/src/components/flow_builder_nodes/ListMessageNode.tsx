@@ -1,63 +1,142 @@
 // zap/client/src/components/flow_builder_nodes/ListMessageNode.tsx
-import React from 'react';
+import React, { memo } from 'react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
-import { ListChecks } from 'lucide-react';
-import { cn } from '@zap_client/lib/utils';
-import { type ListMessageNodeDataFE, type ListSectionData, type ListItemData } from '@zap_client/features/types/whatsapp_flow_types'; // Importar tipos
+import { Card, CardContent, CardHeader, CardTitle } from '@zap_client/components/ui/card';
+import { Button } from '@zap_client/components/ui/button';
+import { Input } from '@zap_client/components/ui/input';
+import { Label } from '@zap_client/components/ui/label';
+import { Textarea } from '@zap_client/components/ui/textarea';
+import { ListChecks, PlusCircle, Trash2 } from 'lucide-react';
+import { ListMessageNodeDataFE, ListSectionData, ListItemData } from '@zap_client/features/types/whatsapp_flow_types';
 
-const ListMessageNode: React.FC<NodeProps<ListMessageNodeDataFE>> = ({ data, selected, id }) => {
-  const sections = data.sections || [];
-  const totalItems = sections.reduce((acc, section) => acc + (section.rows?.length || 0), 0);
-  const baseHandleTop = 70; // Ajustar conforme o layout do nó
-  const handleSpacing = 20;
+const ListMessageNode: React.FC<NodeProps<ListMessageNodeDataFE>> = ({ data, id, selected }) => {
+  const {
+    label = 'Mensagem de Lista',
+    headerText = '',
+    bodyText = '',
+    footerText = '',
+    buttonText = 'Ver Opções',
+    sections = [{ title: 'Seção 1', rows: [{ id: 'item1', title: 'Item 1', description: '' }] }]
+  } = data;
+
+  // Lógica para atualizar 'data' (ex: via onNodesChange)
+  // const updateData = (field: keyof ListMessageNodeDataFE, value: any) => { /* ... */ };
+  // const addSection = () => { /* ... */ };
+  // const updateSectionTitle = (sectionIndex: number, title: string) => { /* ... */ };
+  // const removeSection = (sectionIndex: number) => { /* ... */ };
+  // const addItemToSection = (sectionIndex: number) => { /* ... */ };
+  // const updateItem = (sectionIndex: number, itemIndex: number, field: keyof ListItemData, value: string) => { /* ... */ };
+  // const removeItem = (sectionIndex: number, itemIndex: number) => { /* ... */ };
 
   return (
-    <div
-      className={cn(
-        "p-3 rounded-md shadow-md bg-card border border-indigo-500/70 w-72",
-        selected && "ring-2 ring-indigo-600 ring-offset-2 ring-offset-background"
-      )}
-    >
-      <Handle type="target" position={Position.Left} id={`${id}-target`} className="!bg-slate-400 w-2.5 h-2.5" />
-      <div className="flex items-center mb-2">
-        <ListChecks className="w-4 h-4 mr-2 text-indigo-600" />
-        <div className="text-sm font-semibold text-foreground">{data.label || 'Mensagem com Lista'}</div>
-      </div>
-      <p className="text-xs text-muted-foreground line-clamp-1 break-words mb-1" title={data.messageText}>
-        {data.messageText || 'Configure o texto principal...'}
-      </p>
-      <p className="text-xs text-muted-foreground line-clamp-1 break-words mb-1" title={data.buttonText}>
-        Botão Lista: {data.buttonText || 'Ver Opções'}
-      </p>
-      <p className="text-xxs text-indigo-700 dark:text-indigo-400 mb-2">
-        {sections.length} seção(ões), {totalItems} item(ns).
-      </p>
-      
-      {/* Saídas dinâmicas para cada item da lista (simplificado) */}
-      {/* Em um sistema real, a resposta do usuário com o 'rowId' do item clicado seria processada pelo FlowEngine */}
-      {/* Aqui, apenas simbolizamos que pode haver múltiplas saídas baseadas nas opções da lista */}
-      {sections.flatMap(sec => sec.rows).slice(0, 3).map((item, index) => ( // Mostrar até 3 handles de exemplo
-         <div key={item.id || `item-out-${index}`} className="text-xs text-muted-foreground flex justify-end items-center relative h-5">
-            <span className="truncate mr-2 text-xxs" title={item.title}>{item.title}</span>
-            <Handle
-                type="source"
-                position={Position.Right}
-                id={item.id} // O ID do handle DEVE ser o ID/valor do item da lista
-                className="!bg-indigo-500 w-2.5 h-2.5 !mr-[-11px]"
-                style={{ top: `${baseHandleTop + (index * handleSpacing)}px` }}
-            />
+    <Card className={`text-xs shadow-md w-80 ${selected ? 'ring-2 ring-green-500' : 'border-border'} bg-card`}>
+      <CardHeader className="bg-muted/50 p-2 rounded-t-lg">
+        <CardTitle className="text-xs font-semibold flex items-center">
+          <ListChecks className="w-4 h-4 text-green-500 mr-2" />
+          {label || 'Mensagem de Lista Interativa'}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-3 space-y-2 max-h-96 overflow-y-auto">
+        <div>
+          <Label htmlFor={`headerText-${id}`} className="text-xs font-medium">Texto do Cabeçalho (Opcional)</Label>
+          <Input
+            id={`headerText-${id}`}
+            type="text"
+            placeholder="Título principal da lista"
+            value={headerText}
+            // onChange={(e) => updateData('headerText', e.target.value)}
+            className="w-full h-8 text-xs"
+          />
         </div>
-      ))}
-      {totalItems > 3 && <p className="text-xxs text-muted-foreground text-right">... e mais saídas</p>}
+        <div>
+          <Label htmlFor={`bodyText-${id}`} className="text-xs font-medium">Texto do Corpo*</Label>
+          <Textarea
+            id={`bodyText-${id}`}
+            placeholder="Corpo da mensagem da lista"
+            value={bodyText}
+            // onChange={(e) => updateData('bodyText', e.target.value)}
+            rows={2}
+            className="w-full text-xs"
+          />
+        </div>
+        <div>
+          <Label htmlFor={`footerText-${id}`} className="text-xs font-medium">Texto do Rodapé (Opcional)</Label>
+          <Input
+            id={`footerText-${id}`}
+            type="text"
+            placeholder="Rodapé da lista"
+            value={footerText}
+            // onChange={(e) => updateData('footerText', e.target.value)}
+            className="w-full h-8 text-xs"
+          />
+        </div>
+        <div>
+          <Label htmlFor={`buttonText-${id}`} className="text-xs font-medium">Texto do Botão de Abertura*</Label>
+          <Input
+            id={`buttonText-${id}`}
+            type="text"
+            placeholder="Ex: Ver Opções"
+            value={buttonText}
+            // onChange={(e) => updateData('buttonText', e.target.value)}
+            className="w-full h-8 text-xs"
+          />
+        </div>
 
-
-      {data.footerText && (
-        <p className="mt-1 pt-1 border-t text-xxs text-muted-foreground/80 truncate">{data.footerText}</p>
-      )}
-      {/* Handle de saída padrão/fallback se nenhum item for clicado (ou para fluxos sem espera) */}
-       <Handle type="source" position={Position.Right} id={`${id}-source-default`} title="Saída padrão" className="!bg-slate-500 w-2.5 h-2.5" style={{bottom: '10px'}}/>
-    </div>
+        {(sections || []).map((section, sectionIndex) => (
+          <div key={`section-${sectionIndex}`} className="mt-2 p-2 border rounded border-dashed">
+            <div className="flex justify-between items-center mb-1">
+              <Input
+                type="text"
+                placeholder={`Título Seção ${sectionIndex + 1}`}
+                value={section.title}
+                // onChange={(e) => updateSectionTitle(sectionIndex, e.target.value)}
+                className="w-full h-7 text-xs font-semibold"
+              />
+              {/* <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => removeSection(sectionIndex)}>
+                <Trash2 className="w-3 h-3 text-destructive" />
+              </Button> */}
+            </div>
+            {(section.rows || []).map((item, itemIndex) => (
+              <div key={item.id || `item-${sectionIndex}-${itemIndex}`} className="ml-2 mt-1 space-y-1">
+                <Input
+                  type="text"
+                  placeholder={`Título Item ${itemIndex + 1}`}
+                  value={item.title}
+                  // onChange={(e) => updateItem(sectionIndex, itemIndex, 'title', e.target.value)}
+                  className="w-full h-7 text-xs"
+                />
+                <Input
+                  type="text"
+                  placeholder="Descrição (Opcional)"
+                  value={item.description || ''}
+                  // onChange={(e) => updateItem(sectionIndex, itemIndex, 'description', e.target.value)}
+                  className="w-full h-7 text-xs"
+                />
+                <Handle
+                    type="source"
+                    position={Position.Right}
+                    id={`${id}-section-${sectionIndex}-item-${item.id || itemIndex}`}
+                    style={{ top: 'auto', bottom: 'auto', background: '#555' }} // Ajustar posicionamento conforme necessário
+                    className="w-2 h-2"
+                />
+                 {/* <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => removeItem(sectionIndex, itemIndex)}>
+                    <Trash2 className="w-3 h-3 text-destructive" />
+                 </Button> */}
+              </div>
+            ))}
+            {/* <Button variant="outline" size="xs" className="text-xs mt-1 w-full h-6" onClick={() => addItemToSection(sectionIndex)}>
+              <PlusCircle className="w-3 h-3 mr-1" /> Adicionar Item à Seção
+            </Button> */}
+          </div>
+        ))}
+        {/* <Button variant="outline" size="sm" className="text-xs mt-2 w-full h-7" onClick={addSection}>
+          <PlusCircle className="w-3.5 h-3.5 mr-1" /> Adicionar Seção
+        </Button> */}
+      </CardContent>
+      <Handle type="target" position={Position.Left} className="!bg-muted-foreground w-2.5 h-2.5" />
+      {/* Os handles de saída são por item da lista */}
+    </Card>
   );
 };
 
-export default ListMessageNode; 
+export default memo(ListMessageNode);
