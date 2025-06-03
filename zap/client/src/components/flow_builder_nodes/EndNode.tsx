@@ -13,7 +13,7 @@ import { Badge } from '@zap_client/components/ui/badge';
 
 const defaultHandles: HandleData[] = [
   { id: 'input', type: 'target', position: Position.Left, label: 'Entrada', style: {top: '50%'} },
-  // Nó final geralmente não tem saída, mas pode ser configurável
+  // Nó final geralmente não tem saída explícita no componente, mas pode ser configurado no HandleData se necessário.
 ];
 
 // CORRIGIDO: Tipagem explícita das props
@@ -68,7 +68,7 @@ const EndNodeComponent: React.FC<ReactFlowNodeProps<EndNodeData>> = ({ id, data,
     setNodes((nds) => nds.filter(node => node.id !== id));
   };
 
-  const handlesToRender = data.handles || defaultHandles;
+  const handlesToRender = data.handles || defaultHandles.filter(h => h.type === 'target'); // Nó final só tem entrada
 
   return (
     <Card className={cn("w-64 shadow-md neu-card", selected && "ring-2 ring-slate-500 ring-offset-2")}>
@@ -109,14 +109,14 @@ const EndNodeComponent: React.FC<ReactFlowNodeProps<EndNodeData>> = ({ id, data,
         </div>
       </CardContent>
 
-      {handlesToRender.filter(h => h.type === 'target').map((handleItem: HandleData) => ( // Nó final geralmente não tem saída
+      {handlesToRender.map((handleItem: HandleData) => ( 
         <Handle
           key={handleItem.id}
           id={handleItem.id}
           type={handleItem.type}
           position={handleItem.position}
           isConnectable={true}
-          style={{ ...handleItem.style, background: '#64748b', width: '10px', height: '10px' }} // Cor Slate
+          style={{ ...handleItem.style, background: '#64748b', width: '10px', height: '10px' }} 
           aria-label={handleItem.label}
         />
       ))}
