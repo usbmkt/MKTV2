@@ -1,6 +1,6 @@
 import React, { memo, useState, useEffect, useCallback, ChangeEvent, KeyboardEvent } from 'react';
 import { Handle, Position, useReactFlow, NodeToolbar, NodeProps as ReactFlowNodeProps } from '@xyflow/react';
-// CORRIGIDO: Path Aliases
+// Path Aliases devem usar @zap_client/ para módulos dentro de zap/client/src
 import { ExternalDataNodeData, FlowNodeType, HandleData, ApiResponseMapping } from '@zap_client/features/types/whatsapp_flow_types';
 import { Card, CardContent, CardHeader, CardTitle } from '@zap_client/components/ui/card';
 import { Input } from '@zap_client/components/ui/input';
@@ -53,6 +53,8 @@ const ExternalDataNodeComponent: React.FC<ReactFlowNodeProps<ExternalDataNodeDat
                      processedNewData.requestPayload = JSON.stringify(newData.requestPayload, null, 2);
                  } catch (e) {
                      console.error("Erro ao serializar payload para JSON:", e);
+                     // Considerar manter a string original se o parse falhar ou mostrar erro
+                     processedNewData.requestPayload = typeof newData.requestPayload === 'object' ? '{}' : String(newData.requestPayload);
                  }
              }
             return { ...node, data: { ...currentData, ...processedNewData } };
@@ -61,7 +63,7 @@ const ExternalDataNodeComponent: React.FC<ReactFlowNodeProps<ExternalDataNodeDat
         })
       );
     },
-    [id, setNodes]
+    [id, setNodes] 
   );
   
   const handleLabelChange = (e: ChangeEvent<HTMLInputElement>) => setLabel(e.target.value);
@@ -84,16 +86,13 @@ const ExternalDataNodeComponent: React.FC<ReactFlowNodeProps<ExternalDataNodeDat
   const handlePayloadChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
     const payloadString = e.target.value;
     setRequestPayload(payloadString);
-    try {
-        updateNodePartialData({ requestPayload: JSON.parse(payloadString) });
-    } catch (error) {
-        updateNodePartialData({ requestPayload: payloadString });
-    }
+    // A atualização do nó é feita com a string, o backend que lida com o parse
+    updateNodePartialData({ requestPayload: payloadString });
   };
   
   const handleMappingChange = (index: number, field: keyof ApiResponseMapping, value: string) => {
     const newMappings = [...responseMapping];
-    (newMappings[index] as any)[field] = value;
+    (newMappings[index] as any)[field] = value; // Simples para string fields
     setResponseMapping(newMappings);
     updateNodePartialData({ responseMapping: newMappings });
   };
@@ -157,14 +156,13 @@ const ExternalDataNodeComponent: React.FC<ReactFlowNodeProps<ExternalDataNodeDat
              <div className="space-y-1 border-t pt-2 mt-2">
                 <div className="flex justify-between items-center"><Label className="text-xs">Mapeamento da Resposta para Variáveis</Label><Button variant="link" size="xs" onClick={addMapping}><PlusCircle className="h-3 w-3 mr-1"/>Add Mapeamento</Button></div>
                 {responseMapping.map((mapItem: ApiResponseMapping, index: number) => (
-                    // CORRIGIDO: Fechamento da tag Card
-                    <Card key={mapItem.id || index} className="p-2 neu-card-inset space-y-1">
+                    <Card key={mapItem.id || index} className="p-2 neu-card-inset space-y-1"> {/* Esta é a Card interna que causava o erro */}
                         <div className="flex items-center gap-1">
                             <Input value={mapItem.sourcePath} onChange={(e: ChangeEvent<HTMLInputElement>) => handleMappingChange(index, 'sourcePath', e.target.value)} placeholder="Caminho JSON (Ex: $.user.id)" className="neu-input text-xs h-7"/>
                             <Input value={mapItem.targetVariable} onChange={(e: ChangeEvent<HTMLInputElement>) => handleMappingChange(index, 'targetVariable', e.target.value)} placeholder="Nome Variável (Ex: id_usuario_api)" className="neu-input text-xs h-7"/>
                             <Button variant="ghost" size="icon" onClick={() => removeMapping(index)} className="h-7 w-7 text-destructive"><XCircle className="h-3 w-3"/></Button>
                         </div>
-                    </Card> 
+                    </Card> {/* CORRIGIDO: Tag de fechamento </Card> adicionada aqui */}
                 ))}
             </div>
         </ScrollArea>
