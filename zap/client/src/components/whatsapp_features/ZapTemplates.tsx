@@ -8,26 +8,40 @@ import { Badge } from '@zap_client/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@zap_client/components/ui/select';
 import { Label } from '@zap_client/components/ui/label';
 import { Textarea } from '@zap_client/components/ui/textarea';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription, DialogTrigger as ShadDialogTrigger } from '@zap_client/components/ui/dialog'; // Renomeado DialogTrigger
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@zap_client/components/ui/dialog';
+import { ScrollArea } from '@zap_client/components/ui/scroll-area'; // Importado
 import { 
   DropdownMenu, 
   DropdownMenuTrigger, 
   DropdownMenuContent, 
   DropdownMenuItem 
 } from '@zap_client/components/ui/dropdown-menu';
-import { Alert, AlertDescription as UIAlertDescription } from '@zap_client/components/ui/alert'; // Renomeado AlertDescription
-import { Plus, Edit2, Trash2, Search, MessageSquare, Loader2, AlertTriangle, XCircle, Info } from 'lucide-react';
-import { useToast } from '@zap_client/hooks/use-toast'; // Importante: Copie use-toast.ts para zap/client/src/hooks/
+import { Alert, AlertDescription as UIAlertDescription } from '@zap_client/components/ui/alert';
+import { Plus, Edit2, Trash2, Search, MessageSquare, Loader2, AlertTriangle, XCircle, Info, PlusCircle } from 'lucide-react'; // PlusCircle Importado
+import { useToast } from '@zap_client/hooks/use-toast'; // Assumindo que use-toast.ts foi copiado para zap/client/src/hooks
+import { ApiError } from '@zap_client/features/types/whatsapp_flow_types'; // Importado
 
-// ... (Restante do seu código ZapTemplates.tsx que você já tem e que corrigimos antes) ...
-// Assegure-se que todas as interfaces MessageTemplate, TemplateComponent, TemplateButton estão aqui
-// e as funções mockApiCall, defaultNewTemplateDataState, etc.
-
-// Cole o restante do seu código ZapTemplates.tsx aqui,
-// mantendo os imports acima ajustados.
-
-// Exemplo de como o final do arquivo seria (apenas para estrutura):
-
+// Defina suas interfaces MessageTemplate, TemplateComponent, TemplateButton aqui ou importe-as
+// Exemplo (mantenha as suas definições se já as tiver):
+interface TemplateButton {
+  type: 'QUICK_REPLY' | 'URL' | 'PHONE_NUMBER' | 'COPY_CODE' | 'CATALOG';
+  text: string;
+  url?: string;
+  phoneNumber?: string;
+  example?: string[];
+  couponCode?: string;
+}
+interface TemplateComponent {
+  type: 'HEADER' | 'BODY' | 'FOOTER' | 'BUTTONS';
+  format?: 'TEXT' | 'IMAGE' | 'VIDEO' | 'DOCUMENT' | 'LOCATION';
+  text?: string;
+  example?: {
+    header_text?: string[];
+    header_handle?: string[];
+    body_text?: string[][];
+  };
+  buttons?: TemplateButton[];
+}
 interface MessageTemplate {
   id: string;
   name: string;
@@ -43,95 +57,72 @@ interface MessageTemplate {
   updatedAt?: string;
 }
 
-interface TemplateComponent {
-  type: 'HEADER' | 'BODY' | 'FOOTER' | 'BUTTONS';
-  format?: 'TEXT' | 'IMAGE' | 'VIDEO' | 'DOCUMENT' | 'LOCATION';
-  text?: string;
-  example?: {
-    header_text?: string[];
-    header_handle?: string[];
-    body_text?: string[][];
-  };
-  buttons?: TemplateButton[];
-}
+// Mock data e funções (substitua por chamadas reais à API)
+const initialTemplatesFromMock: MessageTemplate[] = [
+  {
+    id: 'welcome_message_123', name: 'welcome_message_123', category: 'UTILITY', language: 'pt_BR', status: 'APPROVED',
+    components: [ { type: 'BODY', text: 'Olá {{1}}!' } ], qualityScore: { score: 'GREEN' }
+  }
+];
+const fetchTemplates = async (): Promise<MessageTemplate[]> => { console.log("Fetching templates (mocked)"); await new Promise(r => setTimeout(r, 500)); return JSON.parse(JSON.stringify(initialTemplatesFromMock)); };
+const createTemplateAPI = async (data: Omit<MessageTemplate, 'id'|'status'|'qualityScore'|'createdAt'|'updatedAt'>): Promise<MessageTemplate> => { console.log("Creating template (mocked)", data); await new Promise(r => setTimeout(r,500)); const newTpl = {...data, id: `tpl_${Date.now()}`, status: 'PENDING' as const, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()}; initialTemplatesFromMock.push(newTpl); return newTpl;};
+const deleteTemplateAPI = async (id: string): Promise<void> => { console.log("Deleting template (mocked)", id); await new Promise(r => setTimeout(r,500)); const idx = initialTemplatesFromMock.findIndex(t => t.id === id); if(idx > -1) initialTemplatesFromMock.splice(idx, 1); };
 
-interface TemplateButton {
-  type: 'QUICK_REPLY' | 'URL' | 'PHONE_NUMBER' | 'COPY_CODE' | 'CATALOG';
-  text: string;
-  url?: string;
-  phoneNumber?: string;
-  example?: string[];
-  couponCode?: string;
-}
-
-const initialTemplatesFromMock: MessageTemplate[] = [ /* ... seu mock ... */ ];
-const fetchTemplates = async (): Promise<MessageTemplate[]> => { /* ... sua função ... */ return initialTemplatesFromMock; };
-const createTemplate = async (templateData: Omit<MessageTemplate, 'id' | 'status' | 'qualityScore' | 'createdAt' | 'updatedAt'>): Promise<MessageTemplate> => { /* ... sua função ... */ 
-    const newTemplate: MessageTemplate = {
-    ...templateData,
-    id: `template_${Date.now()}`,
-    status: 'PENDING',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-  return newTemplate;
+const defaultNewTemplateDataState: Partial<MessageTemplate> = {
+  name: '', category: 'UTILITY', language: 'pt_BR',
+  components: [{ type: 'BODY', text: '' }]
 };
-const deleteTemplateApi = async (templateId: string): Promise<void> => { /* ... sua função ... */ };
-const defaultNewTemplateDataState: Partial<MessageTemplate> = { /* ... seu estado ... */ };
-
 
 export default function ZapTemplates() {
-  const [currentSearchTerm, setCurrentSearchTerm] = useState(''); // Renomeado de searchTerm
-  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false); 
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<MessageTemplate | null>(null);
-  const [newTemplateData, setNewTemplateData] = useState<Partial<MessageTemplate>>(defaultNewTemplateDataState);
+  const [newTemplateData, setNewTemplateData] = useState<Partial<MessageTemplate>>(
+    JSON.parse(JSON.stringify(defaultNewTemplateDataState))
+  );
   
-  const { toast } = useToast(); // Depende dos arquivos de toast copiados
+  const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: templates = [], isLoading, error } = useQuery<MessageTemplate[], ApiError>({ // Usando ApiError
+  const { data: templates = [], isLoading, error } = useQuery<MessageTemplate[], ApiError>({
     queryKey: ['zapTemplates'],
     queryFn: fetchTemplates,
   });
 
   const createMutation = useMutation<MessageTemplate, ApiError, Omit<MessageTemplate, 'id' | 'status' | 'qualityScore' | 'createdAt' | 'updatedAt'>>({
-    mutationFn: createTemplate,
+    mutationFn: createTemplateAPI,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['zapTemplates'] });
       toast({ title: "Template enviado para aprovação!", variant: "default" });
-      setIsTemplateModalOpen(false);
+      setIsModalOpen(false);
     },
-    onError: (err: ApiError) => {
+    onError: (err) => {
       toast({ title: "Erro ao criar template", description: err.message, variant: "destructive" });
     }
   });
 
   const deleteMutation = useMutation<void, ApiError, string>({
-    mutationFn: deleteTemplateApi,
+    mutationFn: deleteTemplateAPI,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['zapTemplates'] });
       toast({ title: "Template excluído!", variant: "default" });
     },
-    onError: (err: ApiError) => {
+    onError: (err) => {
       toast({ title: "Erro ao excluir template", description: err.message, variant: "destructive" });
     }
   });
 
-  const handleInputChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+  const handleInputChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => { // Select é tratado por onValueChange
     const { name, value } = e.target;
-    if (name === "category" || name === "language") {
-        setNewTemplateData(prev => ({ ...prev, [name]: value as MessageTemplate['category'] | MessageTemplate['language'] }));
-    } else {
-        setNewTemplateData(prev => ({ ...prev, [name]: value }));
-    }
+    setNewTemplateData(prev => ({ ...prev, [name]: value }));
   };
   
-  const handleComponentChange = (index: number, field: keyof TemplateComponent, value: any) => {
+  const handleComponentChange = (compIndex: number, field: keyof TemplateComponent, value: any) => {
     setNewTemplateData(prev => {
-      const components = JSON.parse(JSON.stringify(prev.components || [])); // Deep copy
-      const targetComponent = { ...components[index] }; 
+      const components = JSON.parse(JSON.stringify(prev.components || []));
+      const targetComponent = { ...components[compIndex] }; 
       (targetComponent as any)[field] = value; 
-      components[index] = targetComponent; 
+      components[compIndex] = targetComponent; 
       return { ...prev, components };
     });
   };
@@ -140,15 +131,32 @@ export default function ZapTemplates() {
     let newComponent: TemplateComponent;
     switch(type) {
       case 'HEADER': newComponent = { type: 'HEADER', format: 'TEXT', text: ''}; break;
-      case 'BODY': newComponent = { type: 'BODY', text: ''}; break; // BODY é obrigatório
+      case 'BODY': 
+        if (newTemplateData.components?.find(c => c.type === 'BODY')) {
+            toast({ title: "Erro", description: "O componente BODY já existe.", variant: "destructive" });
+            return;
+        }
+        newComponent = { type: 'BODY', text: ''}; 
+        break;
       case 'FOOTER': newComponent = { type: 'FOOTER', text: ''}; break;
-      case 'BUTTONS': newComponent = { type: 'BUTTONS', buttons: [{type: 'QUICK_REPLY', text: 'Resposta Rápida'}]}; break;
+      case 'BUTTONS': 
+         if (newTemplateData.components?.find(c => c.type === 'BUTTONS')) {
+            toast({ title: "Erro", description: "O componente BUTTONS já existe.", variant: "destructive" });
+            return;
+        }
+        newComponent = { type: 'BUTTONS', buttons: [{type: 'QUICK_REPLY', text: 'Resposta Rápida'}]}; 
+        break;
       default: return;
     }
     setNewTemplateData(prev => ({...prev, components: [...(prev.components || []), newComponent]}));
   };
   
   const removeComponent = (index: number) => {
+    const componentToRemove = newTemplateData.components?.[index];
+    if (componentToRemove?.type === 'BODY' && newTemplateData.components?.filter(c => c.type === 'BODY').length === 1) {
+        toast({ title: "Erro", description: "O componente BODY é obrigatório e não pode ser removido.", variant: "destructive" });
+        return;
+    }
     setNewTemplateData(prev => ({...prev, components: prev.components?.filter((_, i) => i !== index)}));
   };
 
@@ -157,7 +165,7 @@ export default function ZapTemplates() {
       const components = JSON.parse(JSON.stringify(prev.components || [])); 
       if (components[compIndex]?.buttons) {
         (components[compIndex].buttons[btnIndex] as any)[field] = value;
-         if (field === 'type') { // Resetar campos específicos do tipo de botão anterior
+         if (field === 'type') {
             const buttonType = value as TemplateButton['type'];
             if (buttonType !== 'URL') delete components[compIndex].buttons[btnIndex].url;
             if (buttonType !== 'PHONE_NUMBER') delete components[compIndex].buttons[btnIndex].phoneNumber;
@@ -175,10 +183,13 @@ export default function ZapTemplates() {
         if (!components[compIndex].buttons) {
           components[compIndex].buttons = [];
         }
-        if ((components[compIndex].buttons?.length || 0) < 3) { // Limite de botões
+        // WhatsApp limita o número de botões (geralmente 3 para respostas rápidas, mais para outros tipos)
+        // Aqui estou usando um limite genérico, ajuste conforme necessário.
+        const maxButtons = newTemplateData.category === 'MARKETING' ? 10 : 3; // Exemplo de limite
+        if ((components[compIndex].buttons?.length || 0) < maxButtons) {
             components[compIndex].buttons.push({ type: 'QUICK_REPLY', text: 'Nova Resposta' });
         } else {
-            toast({ title: "Limite de botões atingido", description: "Máximo de 3 botões por template.", variant: "destructive" });
+            toast({ title: "Limite de botões atingido", description: `Máximo de ${maxButtons} botões permitidos.`, variant: "destructive" });
         }
       }
       return { ...prev, components };
@@ -197,16 +208,19 @@ export default function ZapTemplates() {
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (!newTemplateData.name?.match(/^[a-z0-9_]+$/)) {
+        toast({ title: "Nome inválido", description: "Nome do template deve conter apenas letras minúsculas, números e underscores.", variant: "destructive" });
+        return;
+    }
     if (!newTemplateData.name || !newTemplateData.category || !newTemplateData.language || !newTemplateData.components?.find(c => c.type === 'BODY')?.text?.trim()) {
       toast({ title: "Campos obrigatórios", description: "Nome, categoria, idioma e corpo da mensagem são obrigatórios.", variant: "destructive" });
       return;
     }
-    // Adicionar validações adicionais conforme as regras do WhatsApp
     createMutation.mutate(newTemplateData as Omit<MessageTemplate, 'id' | 'status' | 'qualityScore' | 'createdAt' | 'updatedAt'>);
   };
 
   const filteredTemplates = templates.filter(template =>
-    template.name.toLowerCase().includes(currentSearchTerm.toLowerCase())
+    template.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const getStatusBadgeClass = (status: MessageTemplate['status']) => {
@@ -229,28 +243,38 @@ export default function ZapTemplates() {
   };
 
   const handleModalOpenChange = (isOpen: boolean) => {
-    setIsTemplateModalOpen(isOpen);
+    setIsModalOpen(isOpen);
     if (!isOpen) {
       setEditingTemplate(null); 
-      setNewTemplateData(defaultNewTemplateDataState); 
+      setNewTemplateData(JSON.parse(JSON.stringify(defaultNewTemplateDataState))); 
     }
   };
 
   useEffect(() => {
-    if (isTemplateModalOpen) { 
+    if (isModalOpen) { 
       if (editingTemplate) {
-        setNewTemplateData(JSON.parse(JSON.stringify(editingTemplate))); // Deep copy para edição
+        setNewTemplateData(JSON.parse(JSON.stringify(editingTemplate)));
       } else {
-        setNewTemplateData(JSON.parse(JSON.stringify(defaultNewTemplateDataState))); // Deep copy
+        // Garante que o componente BODY sempre exista ao criar novo template
+        const defaultDataWithBody = JSON.parse(JSON.stringify(defaultNewTemplateDataState));
+        if (!defaultDataWithBody.components?.find((c: TemplateComponent) => c.type === 'BODY')) {
+            defaultDataWithBody.components = [{ type: 'BODY', text: '' }, ...(defaultDataWithBody.components || [])];
+        }
+        setNewTemplateData(defaultDataWithBody);
       }
-    } else {
-        // setNewTemplateData(JSON.parse(JSON.stringify(defaultNewTemplateDataState))); // Reset no fechamento já é feito em handleModalOpenChange
     }
-  }, [editingTemplate, isTemplateModalOpen]);
+  }, [editingTemplate, isModalOpen]);
 
 
   if (isLoading) return <div className="p-4 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto" /> Carregando templates...</div>;
   if (error) return <div className="p-4 text-center text-destructive"><AlertTriangle className="w-6 h-6 mx-auto mb-2"/>Erro ao carregar templates: {error.message}</div>;
+
+  // ... (Restante do seu JSX, assegure-se de que ScrollArea e PlusCircle são usados corretamente se importados)
+  // Exemplo de uso do ScrollArea, se necessário:
+  // <ScrollArea className="h-[calc(100vh-400px)]">
+  //   {/* ... seu grid de templates ... */}
+  // </ScrollArea>
+  // O PlusCircle já está sendo usado no botão "Adicionar Botão"
 
   return (
     <div className="space-y-6">
@@ -262,8 +286,12 @@ export default function ZapTemplates() {
         <Button 
           onClick={() => { 
             setEditingTemplate(null); 
-            setNewTemplateData(JSON.parse(JSON.stringify(defaultNewTemplateDataState)));
-            setIsTemplateModalOpen(true); 
+            const defaultDataWithBody = JSON.parse(JSON.stringify(defaultNewTemplateDataState));
+            if (!defaultDataWithBody.components?.find((c: TemplateComponent) => c.type === 'BODY')) {
+                 defaultDataWithBody.components = [{ type: 'BODY', text: '' }, ...(defaultDataWithBody.components || [])];
+            }
+            setNewTemplateData(defaultDataWithBody);
+            setIsModalOpen(true); 
           }} 
           className="neu-button"
         >
@@ -278,8 +306,8 @@ export default function ZapTemplates() {
             <Search className="w-5 h-5 text-muted-foreground" />
             <Input
               placeholder="Buscar templates..."
-              value={currentSearchTerm}
-              onChange={(e: ChangeEvent<HTMLInputElement>) => setCurrentSearchTerm(e.target.value)}
+              value={searchTerm}
+              onChange={(e: ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
               className="neu-input max-w-sm"
             />
           </div>
@@ -291,7 +319,7 @@ export default function ZapTemplates() {
               <p>Nenhum template encontrado.</p>
             </div>
           ) : (
-            <ScrollArea className="h-[calc(100vh-400px)]"> {/* Ajuste a altura conforme necessário */}
+            <ScrollArea className="h-[calc(100vh-400px)]"> {/* Uso de ScrollArea */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pr-4">
                 {filteredTemplates.map((template) => (
                     <Card key={template.id} className="neu-card hover:shadow-lg transition-shadow">
@@ -307,12 +335,16 @@ export default function ZapTemplates() {
                             <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={() => {
                                 setEditingTemplate(template); 
-                                setNewTemplateData(JSON.parse(JSON.stringify(template))); // Carrega dados para edição
-                                setIsTemplateModalOpen(true); 
+                                setNewTemplateData(JSON.parse(JSON.stringify(template)));
+                                setIsModalOpen(true); 
                             }}>
                                 <Edit2 className="mr-2 h-3.5 w-3.5" /> Editar
                             </DropdownMenuItem>
-                            <DropdownMenuItem className="text-destructive hover:!bg-destructive/10" onClick={() => deleteMutation.mutate(template.id)} disabled={deleteMutation.isPending && deleteMutation.variables === template.id}>
+                            <DropdownMenuItem 
+                                className="text-destructive hover:!text-destructive-foreground hover:!bg-destructive/90"  // Melhorado estilo hover
+                                onClick={() => deleteMutation.mutate(template.id)} 
+                                disabled={deleteMutation.isPending && deleteMutation.variables === template.id}
+                            >
                                 <Trash2 className="mr-2 h-3.5 w-3.5" /> Excluir
                             </DropdownMenuItem>
                             </DropdownMenuContent>
@@ -345,38 +377,31 @@ export default function ZapTemplates() {
         </CardContent>
       </Card>
 
-      <Dialog open={isTemplateModalOpen} onOpenChange={handleModalOpenChange}>
+      <Dialog open={isModalOpen} onOpenChange={handleModalOpenChange}>
         <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
           <DialogHeader className="p-6 pb-4 border-b">
             <DialogTitle>{editingTemplate ? 'Editar Template' : 'Criar Novo Template de Mensagem'}</DialogTitle>
             <DialogDescription>
-              {editingTemplate ? `Modificando o template "${editingTemplate.name}".` : 'Os templates precisam ser aprovados pelo WhatsApp antes do uso.'}
+              {editingTemplate ? `Modificando o template "${editingTemplate.name}". Somente o conteúdo dos componentes pode ser alterado.` : 'Os templates precisam ser aprovados pelo WhatsApp antes do uso.'}
             </DialogDescription>
           </DialogHeader>
           <form id="template-form-id-zap" onSubmit={handleSubmit} className="flex-grow overflow-y-auto p-6 space-y-4 custom-scrollbar">
+            {/* ... (campos nome, categoria, idioma - mantidos desabilitados na edição) ... */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-1.5">
                     <Label htmlFor="template-modal-name-zap">Nome do Template*</Label>
                     <Input
-                        id="template-modal-name-zap"
-                        name="name"
-                        value={newTemplateData.name || ''}
-                        onChange={handleInputChange}
-                        placeholder="Ex: promocao_natal_2024"
-                        className="neu-input"
-                        required
-                        disabled={!!editingTemplate} // Não permitir editar nome após criação (regra do WhatsApp)
+                        id="template-modal-name-zap" name="name" value={newTemplateData.name || ''}
+                        onChange={handleInputChange} placeholder="Ex: promocao_natal_2024"
+                        className="neu-input" required disabled={!!editingTemplate}
                     />
-                    <p className="text-xs text-muted-foreground">Apenas minúsculas, números e underscores. Não pode ser alterado após a criação.</p>
+                     <p className="text-xs text-muted-foreground">Minúsculas, números, underscores. Não pode ser alterado.</p>
                 </div>
                 <div className="space-y-1.5">
                     <Label htmlFor="template-modal-category-zap">Categoria*</Label>
-                    <Select
-                        name="category"
-                        value={newTemplateData.category || 'UTILITY'}
-                        onValueChange={(value: string) => setNewTemplateData(prev => ({ ...prev, category: value as MessageTemplate['category'] }))}
-                        disabled={!!editingTemplate} // Não permitir editar categoria após criação
-                    >
+                    <Select name="category" value={newTemplateData.category || 'UTILITY'}
+                        onValueChange={(value) => setNewTemplateData(prev => ({ ...prev, category: value as MessageTemplate['category'] })) }
+                        disabled={!!editingTemplate} >
                         <SelectTrigger id="template-modal-category-zap" className="neu-input"><SelectValue /></SelectTrigger>
                         <SelectContent>
                             <SelectItem value="MARKETING">Marketing</SelectItem>
@@ -384,16 +409,13 @@ export default function ZapTemplates() {
                             <SelectItem value="AUTHENTICATION">Autenticação</SelectItem>
                         </SelectContent>
                     </Select>
-                     <p className="text-xs text-muted-foreground">Não pode ser alterada após a criação.</p>
+                    <p className="text-xs text-muted-foreground">Não pode ser alterada.</p>
                 </div>
                 <div className="space-y-1.5">
                     <Label htmlFor="template-modal-language-zap">Idioma*</Label>
-                    <Select
-                        name="language"
-                        value={newTemplateData.language || 'pt_BR'}
-                        onValueChange={(value: string) => setNewTemplateData(prev => ({ ...prev, language: value }))}
-                         disabled={!!editingTemplate} // Não permitir editar idioma após criação
-                    >
+                    <Select name="language" value={newTemplateData.language || 'pt_BR'}
+                        onValueChange={(value) => setNewTemplateData(prev => ({ ...prev, language: value }))}
+                        disabled={!!editingTemplate} >
                         <SelectTrigger id="template-modal-language-zap" className="neu-input"><SelectValue /></SelectTrigger>
                         <SelectContent>
                             <SelectItem value="pt_BR">Português (Brasil)</SelectItem>
@@ -401,7 +423,7 @@ export default function ZapTemplates() {
                             <SelectItem value="es_ES">Espanhol (Espanha)</SelectItem>
                         </SelectContent>
                     </Select>
-                     <p className="text-xs text-muted-foreground">Não pode ser alterada após a criação.</p>
+                     <p className="text-xs text-muted-foreground">Não pode ser alterada.</p>
                 </div>
             </div>
             
@@ -417,16 +439,10 @@ export default function ZapTemplates() {
                     <div key={`comp-${compIndex}-${comp.type}`} className="p-3 border rounded bg-card space-y-2">
                       <div className="flex justify-between items-center">
                         <Badge variant="secondary">{comp.type}</Badge>
-                        {/* BODY é obrigatório e não pode ser removido se for o único. Botões também têm tratamento especial. */}
-                        {comp.type !== 'BODY' && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
+                        {comp.type !== 'BODY' && !editingTemplate && ( // Não permitir remover componentes na edição
+                          <Button type="button" variant="ghost" size="sm"
                             className="h-6 p-1 text-destructive hover:bg-destructive/5"
-                            onClick={() => removeComponent(compIndex)}
-                            disabled={editingTemplate && (comp.type === 'HEADER' || comp.type === 'FOOTER' || comp.type === 'BUTTONS')} // Componentes não podem ser removidos na edição
-                          >
+                            onClick={() => removeComponent(compIndex)} >
                             <XCircle className="w-3.5 h-3.5"/>
                           </Button>
                         )}
@@ -435,7 +451,7 @@ export default function ZapTemplates() {
                         <Select
                           value={comp.format || 'TEXT'}
                           onValueChange={(value: string) => handleComponentChange(compIndex, 'format', value as TemplateComponent['format'])}
-                          disabled={!!editingTemplate} // Formato do Header não pode ser alterado após criação
+                          disabled={!!editingTemplate}
                         >
                             <SelectTrigger className="text-xs neu-input h-8"><SelectValue/></SelectTrigger>
                             <SelectContent>
@@ -443,13 +459,12 @@ export default function ZapTemplates() {
                                 <SelectItem value="IMAGE">Imagem</SelectItem>
                                 <SelectItem value="VIDEO">Vídeo</SelectItem>
                                 <SelectItem value="DOCUMENT">Documento</SelectItem>
-                                {/* LOCATION não é comum para templates de notificação */}
                             </SelectContent>
                         </Select>
                       )}
                       {((comp.type === 'HEADER' && comp.format === 'TEXT') || comp.type === 'BODY' || comp.type === 'FOOTER') && (
                         <Textarea
-                          placeholder={`Conteúdo para ${comp.type.toLowerCase()}${comp.type === 'BODY' ? '*' : ''}. Use {{1}}, {{2}} para variáveis.`}
+                          placeholder={`Conteúdo para ${comp.type.toLowerCase()}${comp.type === 'BODY' ? '*' : ''}. Use {{1}} para variáveis.`}
                           value={comp.text || ''}
                           onChange={(e: ChangeEvent<HTMLTextAreaElement>) => handleComponentChange(compIndex, 'text', e.target.value)}
                           rows={comp.type === 'BODY' ? 4 : 2}
@@ -460,14 +475,12 @@ export default function ZapTemplates() {
                       {comp.type === 'HEADER' && (comp.format === 'IMAGE' || comp.format === 'VIDEO' || comp.format === 'DOCUMENT') && (
                         <div className="text-xs text-muted-foreground p-2 border border-dashed rounded bg-muted/50">
                           <Info className="w-3 h-3 inline mr-1"/>
-                          Para mídia no Header, você fornecerá um exemplo (handle) ou o link direto ao enviar a mensagem via API, não na criação do template.
-                          <Input
-                            type="text"
-                            placeholder="Link de exemplo de mídia (opcional)"
+                          Para mídia no Header, você fornecerá um exemplo (handle) ou o link direto ao enviar a mensagem via API.
+                          <Input type="text" placeholder="Link de exemplo de mídia (opcional)"
                             value={(comp.example?.header_handle || [])[0] || ''}
                             onChange={(e: ChangeEvent<HTMLInputElement>) => handleComponentChange(compIndex, 'example', { ...comp.example, header_handle: [e.target.value] })}
                             className="text-xs mt-1 neu-input h-7"
-                            disabled={!!editingTemplate}
+                            disabled={!!editingTemplate && comp.format !== 'TEXT'} // Permitir editar handle se TEXTO
                           />
                         </div>
                       )}
@@ -485,60 +498,37 @@ export default function ZapTemplates() {
                                         <SelectItem value="QUICK_REPLY">Resposta Rápida</SelectItem>
                                         <SelectItem value="URL">Link (URL)</SelectItem>
                                         <SelectItem value="PHONE_NUMBER">Ligar</SelectItem>
-                                        <SelectItem value="COPY_CODE">Copiar Código (Marketing)</SelectItem>
+                                        {newTemplateData.category === 'MARKETING' && <SelectItem value="COPY_CODE">Copiar Código</SelectItem>}
                                     </SelectContent>
                                 </Select>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-6 w-6 p-0 text-destructive hover:bg-destructive/5"
-                                  onClick={() => removeTemplateButton(compIndex, btnIndex)}
-                                >
+                                <Button type="button" variant="ghost" size="icon" className="h-6 w-6 p-0 text-destructive hover:bg-destructive/5"
+                                  onClick={() => removeTemplateButton(compIndex, btnIndex)} >
                                   <Trash2 className="w-3 h-3"/>
                                 </Button>
                               </div>
-                              <Input
-                                placeholder="Texto do Botão (máx 25 chars)"
-                                value={btn.text}
+                              <Input placeholder="Texto do Botão (máx 25 chars)" value={btn.text}
                                 onChange={(e: ChangeEvent<HTMLInputElement>) => handleButtonChange(compIndex, btnIndex, 'text', e.target.value)}
-                                className="text-xs neu-input h-8"
-                                maxLength={25}
-                              />
+                                className="text-xs neu-input h-8" maxLength={25} />
                               {btn.type === 'URL' && (
-                                <Input
-                                  placeholder="https://exemplo.com/{{1}}"
-                                  value={btn.url || ''}
+                                <Input placeholder="https://exemplo.com/{{1}}" value={btn.url || ''}
                                   onChange={(e: ChangeEvent<HTMLInputElement>) => handleButtonChange(compIndex, btnIndex, 'url', e.target.value)}
-                                  className="text-xs neu-input h-8"
-                                />
+                                  className="text-xs neu-input h-8" />
                               )}
                               {btn.type === 'PHONE_NUMBER' && (
-                                <Input
-                                  placeholder="+5511999999999"
-                                  value={btn.phoneNumber || ''}
+                                <Input placeholder="+5511999999999" value={btn.phoneNumber || ''}
                                   onChange={(e: ChangeEvent<HTMLInputElement>) => handleButtonChange(compIndex, btnIndex, 'phoneNumber', e.target.value)}
-                                  className="text-xs neu-input h-8"
-                                />
+                                  className="text-xs neu-input h-8" />
                               )}
                               {btn.type === 'COPY_CODE' && newTemplateData.category === 'MARKETING' && (
-                                <Input
-                                  placeholder="CUPOMXYZ"
-                                  value={btn.couponCode || ''}
+                                <Input placeholder="CUPOMXYZ" value={btn.couponCode || ''}
                                   onChange={(e: ChangeEvent<HTMLInputElement>) => handleButtonChange(compIndex, btnIndex, 'couponCode', e.target.value)}
-                                  className="text-xs neu-input h-8"
-                                />
+                                  className="text-xs neu-input h-8" />
                               )}
                             </div>
                           ))}
-                          {(comp.buttons?.length || 0) < (newTemplateData.category === 'MARKETING' ? 10 : 3) && ( // Limite de botões
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => addTemplateButton(compIndex)}
-                              className="text-xs h-7 w-full"
-                            >
+                          {(comp.buttons?.length || 0) < (newTemplateData.category === 'MARKETING' ? 10 : 3) && (
+                            <Button type="button" variant="outline" size="sm" onClick={() => addTemplateButton(compIndex)}
+                              className="text-xs h-7 w-full" >
                               <PlusCircle className="w-3.5 h-3.5 mr-1"/> Adicionar Botão
                             </Button>
                           )}
@@ -551,11 +541,10 @@ export default function ZapTemplates() {
                   {!(newTemplateData.components || []).find(c => c.type === 'HEADER') && !editingTemplate && (
                     <Button type="button" variant="outline" size="sm" onClick={() => addComponent('HEADER')} className="text-xs h-7">Header</Button>
                   )}
-                   {/* BODY é sempre presente e não pode ser adicionado/removido manualmente aqui */}
                   {!(newTemplateData.components || []).find(c => c.type === 'FOOTER') && !editingTemplate && (
                     <Button type="button" variant="outline" size="sm" onClick={() => addComponent('FOOTER')} className="text-xs h-7">Rodapé</Button>
                   )}
-                  {!(newTemplateData.components || []).find(c => c.type === 'BUTTONS') && (
+                  {!(newTemplateData.components || []).find(c => c.type === 'BUTTONS') && ( // Permitir adicionar botões na edição se não existirem
                     <Button type="button" variant="outline" size="sm" onClick={() => addComponent('BUTTONS')} className="text-xs h-7">Botões</Button>
                   )}
                 </div>
@@ -564,9 +553,9 @@ export default function ZapTemplates() {
             <Alert variant="default" className="bg-amber-50 border-amber-200 text-amber-700">
               <Info className="h-4 w-4 !text-amber-600" />
               <UIAlertDescription className="text-xs">
-                <strong>Atenção:</strong> Todas as variáveis devem ser no formato <code>{'{{1}}'}</code>, <code>{'{{2}}'}</code>, etc.
+                <strong>Atenção:</strong> Todas as variáveis devem ser no formato <code>{'{{1}}'}</code>.
                 O conteúdo do template deve seguir as <a href="https://developers.facebook.com/docs/whatsapp/message-templates/guidelines" target="_blank" rel="noopener noreferrer" className="underline hover:text-amber-800">diretrizes do WhatsApp</a>.
-                A aprovação pode levar de alguns minutos a algumas horas. Nome, categoria e idioma não podem ser alterados após a criação do template.
+                Aprovação pode levar de minutos a horas. Nome, categoria e idioma não podem ser alterados após a criação.
               </UIAlertDescription>
             </Alert>
           </form>
@@ -575,13 +564,11 @@ export default function ZapTemplates() {
               Cancelar
             </Button>
             <Button
-              type="submit"
-              form="template-form-id-zap"
+              type="submit" form="template-form-id-zap"
               disabled={createMutation.isPending}
-              className="neu-button-primary"
-            >
+              className="neu-button-primary" >
               {createMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {editingTemplate ? 'Salvar Alterações (Apenas Conteúdo)' : 'Enviar para Aprovação'}
+              {editingTemplate ? 'Salvar Alterações' : 'Enviar para Aprovação'}
             </Button>
           </DialogFooter>
         </DialogContent>
