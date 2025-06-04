@@ -7,9 +7,6 @@ import { relations } from 'drizzle-orm';
 // --- Enums ---
 export const campaignStatusEnum = pgEnum('campaign_status', ['active', 'paused', 'completed', 'draft']);
 export const chatSenderEnum = pgEnum('chat_sender', ['user', 'agent']);
-// Adicionar flowStatusEnum se ainda não existir e for necessário para Flows (não Funnels)
-// export const flowStatusEnum = pgEnum('flow_status', ['active', 'inactive', 'draft']);
-
 
 // --- Tabelas e Relações ---
 export const users = pgTable("users", {
@@ -21,6 +18,153 @@ export const users = pgTable("users", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+export const campaigns = pgTable("campaigns", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name: text("name").notNull(),
+  description: text("description"),
+  status: campaignStatusEnum("status").default("draft").notNull(),
+  platforms: jsonb("platforms").$type<string[]>().default([]).notNull(),
+  objectives: jsonb("objectives").$type<string[]>().default([]),
+  budget: decimal("budget", { precision: 10, scale: 2 }),
+  dailyBudget: decimal("daily_budget", { precision: 10, scale: 2 }),
+  startDate: timestamp("start_date", { withTimezone: true }),
+  endDate: timestamp("end_date", { withTimezone: true }),
+  targetAudience: text("target_audience"),
+  industry: text("industry"),
+  avgTicket: decimal("avg_ticket", { precision: 10, scale: 2 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const creatives = pgTable("creatives", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  campaignId: integer("campaign_id").references(() => campaigns.id, { onDelete: 'set null' }),
+  name: text("name").notNull(),
+  type: text("type", { enum: ["image", "video", "text", "carousel"] }).notNull(),
+  fileUrl: text("file_url"),
+  content: text("content"),
+  status: text("status", { enum: ["approved", "pending", "rejected"] }).default("pending").notNull(),
+  platforms: jsonb("platforms").$type<string[]>().default([]).notNull(),
+  thumbnailUrl: text("thumbnail_url"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const metrics = pgTable("metrics", {
+  id: serial("id").primaryKey(),
+  campaignId: integer("campaign_id").notNull().references(() => campaigns.id, { onDelete: 'cascade' }),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  date: timestamp("date", { withTimezone: true }).notNull(),
+  impressions: integer("impressions").default(0).notNull(),
+  clicks: integer("clicks").default(0).notNull(),
+  conversions: integer("conversions").default(0).notNull(),
+  cost: decimal("cost", { precision: 10, scale: 2 }).default("0").notNull(),
+  revenue: decimal("revenue", { precision: 10, scale: 2 }).default("0").notNull(),
+  leads: integer("leads").default(0).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const whatsappMessages = pgTable("whatsapp_messages", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  contactNumber: text("contact_number").notNull(),
+  contactName: text("contact_name"),
+  message: text("message").notNull(),
+  direction: text("direction", { enum: ["incoming", "outgoing"] }).notNull(),
+  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow().notNull(),
+  isRead: boolean("is_read").default(false).notNull(),
+});
+
+export const copies = pgTable("copies", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  campaignId: integer("campaign_id").references(() => campaigns.id, { onDelete: 'set null' }),
+  title: text("title").notNull(),
+  content: text("content").notNull(),
+  type: text("type", { enum: ["headline", "body", "cta", "description"] }).notNull(),
+  platform: text("platform"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const alerts = pgTable("alerts", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  campaignId: integer("campaign_id").references(() => campaigns.id, { onDelete: 'set null' }),
+  type: text("type", { enum: ["budget", "performance", "approval", "system"] }).notNull(),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  isRead: boolean("is_read").default(false).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const budgets = pgTable("budgets", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  campaignId: integer("campaign_id").references(() => campaigns.id, { onDelete: 'cascade' }),
+  totalBudget: decimal("total_budget", { precision: 10, scale: 2 }).notNull(),
+  spentAmount: decimal("spent_amount", { precision: 10, scale: 2 }).default("0").notNull(),
+  period: text("period", { enum: ["daily", "weekly", "monthly", "total"] }).notNull(),
+  startDate: timestamp("start_date", { withTimezone: true }).notNull(),
+  endDate: timestamp("end_date", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const landingPages = pgTable("landing_pages", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name: text("name").notNull(),
+  studioProjectId: varchar("studio_project_id", { length: 255 }).unique(),
+  slug: varchar("slug", { length: 255 }).notNull().unique(),
+  description: text("description"),
+  grapesJsData: jsonb("grapes_js_data"),
+  status: text("status", { enum: ["draft", "published", "archived"] }).default("draft").notNull(),
+  publicUrl: text("public_url"),
+  publishedAt: timestamp("published_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const chatSessions = pgTable('chat_sessions', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  title: text('title').notNull().default('Nova Conversa'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const chatMessages = pgTable('chat_messages', {
+  id: serial('id').primaryKey(),
+  sessionId: integer('session_id').notNull().references(() => chatSessions.id, { onDelete: 'cascade' }),
+  sender: chatSenderEnum('sender').notNull(),
+  text: text('text').notNull(),
+  attachmentUrl: text('attachment_url'),
+  timestamp: timestamp('timestamp', { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const funnels = pgTable("funnels", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  campaignId: integer("campaign_id").references(() => campaigns.id, { onDelete: 'set null' }),
+  name: text("name").notNull(),
+  description: text("description"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const funnelStages = pgTable("funnel_stages", {
+  id: serial("id").primaryKey(),
+  funnelId: integer("funnel_id").notNull().references(() => funnels.id, { onDelete: 'cascade' }),
+  name: text("name").notNull(),
+  description: text("description"),
+  order: integer("order").notNull().default(0),
+  config: jsonb("config").$type<Record<string, any>>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// --- Relações ---
 export const userRelations = relations(users, ({ many }) => ({
   campaigns: many(campaigns),
   creatives: many(creatives),
@@ -31,27 +175,8 @@ export const userRelations = relations(users, ({ many }) => ({
   budgets: many(budgets),
   landingPages: many(landingPages),
   chatSessions: many(chatSessions),
-  funnels: many(funnels), // Adicionando relação para funnels
+  funnels: many(funnels),
 }));
-
-export const campaigns = pgTable("campaigns", {
-  id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
-  name: text("name").notNull(),
-  description: text("description"),
-  status: campaignStatusEnum("status").default("draft").notNull(),
-  platforms: jsonb("platforms").$type<string[]>().default([]).notNull(),
-  objectives: jsonb("objectives").$type<string[]>().default([]),
-  budget: text("budget"),
-  dailyBudget: text("daily_budget"),
-  startDate: timestamp("start_date", { withTimezone: true }),
-  endDate: timestamp("end_date", { withTimezone: true }),
-  targetAudience: text("target_audience"),
-  industry: text("industry"),
-  avgTicket: text("avg_ticket"),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-});
 
 export const campaignRelations = relations(campaigns, ({ one, many }) => ({
   user: one(users, { fields: [campaigns.userId], references: [users.id] }),
@@ -60,39 +185,50 @@ export const campaignRelations = relations(campaigns, ({ one, many }) => ({
   copies: many(copies),
   alerts: many(alerts),
   budgets: many(budgets),
-  funnels: many(funnels), // Adicionando relação para funnels
+  funnels: many(funnels),
 }));
 
-export const creatives = pgTable("creatives", { /* ...definição existente... */ });
-export const creativeRelations = relations(creatives, ({ one }) => ({ /* ...definição existente... */ }));
-export const metrics = pgTable("metrics", { /* ...definição existente... */ });
-export const metricRelations = relations(metrics, ({ one }) => ({ /* ...definição existente... */ }));
-export const whatsappMessages = pgTable("whatsapp_messages", { /* ...definição existente... */ });
-export const whatsappMessageRelations = relations(whatsappMessages, ({ one }) => ({ /* ...definição existente... */ }));
-export const copies = pgTable("copies", { /* ...definição existente... */ });
-export const copyRelations = relations(copies, ({ one }) => ({ /* ...definição existente... */ }));
-export const alerts = pgTable("alerts", { /* ...definição existente... */ });
-export const alertRelations = relations(alerts, ({ one }) => ({ /* ...definição existente... */ }));
-export const budgets = pgTable("budgets", { /* ...definição existente... */ });
-export const budgetRelations = relations(budgets, ({ one }) => ({ /* ...definição existente... */ }));
-export const landingPages = pgTable("landing_pages", { /* ...definição existente... */ });
-export const landingPageRelations = relations(landingPages, ({ one }) => ({ /* ...definição existente... */ }));
-export const chatSessions = pgTable('chat_sessions', { /* ...definição existente... */ });
-export const chatSessionRelations = relations(chatSessions, ({ one, many }) => ({ /* ...definição existente... */ }));
-export const chatMessages = pgTable('chat_messages', { /* ...definição existente... */ });
-export const chatMessageRelations = relations(chatMessages, ({ one }) => ({ /* ...definição existente... */ }));
+export const creativeRelations = relations(creatives, ({ one }) => ({
+  user: one(users, { fields: [creatives.userId], references: [users.id] }),
+  campaign: one(campaigns, { fields: [creatives.campaignId], references: [campaigns.id] }),
+}));
 
+export const metricRelations = relations(metrics, ({ one }) => ({
+  campaign: one(campaigns, { fields: [metrics.campaignId], references: [campaigns.id] }),
+  user: one(users, { fields: [metrics.userId], references: [users.id] }),
+}));
 
-// --- Novas definições para Funis ---
-export const funnels = pgTable("funnels", {
-  id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
-  campaignId: integer("campaign_id").references(() => campaigns.id, { onDelete: 'set null' }), // Pode ser nulo ou associado a uma campanha
-  name: text("name").notNull(),
-  description: text("description"),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-});
+export const whatsappMessageRelations = relations(whatsappMessages, ({ one }) => ({
+  user: one(users, { fields: [whatsappMessages.userId], references: [users.id] }),
+}));
+
+export const copyRelations = relations(copies, ({ one }) => ({
+  user: one(users, { fields: [copies.userId], references: [users.id] }),
+  campaign: one(campaigns, { fields: [copies.campaignId], references: [campaigns.id] }),
+}));
+
+export const alertRelations = relations(alerts, ({ one }) => ({
+  user: one(users, { fields: [alerts.userId], references: [users.id] }),
+  campaign: one(campaigns, { fields: [alerts.campaignId], references: [campaigns.id] }),
+}));
+
+export const budgetRelations = relations(budgets, ({ one }) => ({
+  user: one(users, { fields: [budgets.userId], references: [users.id] }),
+  campaign: one(campaigns, { fields: [budgets.campaignId], references: [campaigns.id] }),
+}));
+
+export const landingPageRelations = relations(landingPages, ({ one }) => ({
+  user: one(users, { fields: [landingPages.userId], references: [users.id] }),
+}));
+
+export const chatSessionRelations = relations(chatSessions, ({ one, many }) => ({
+  user: one(users, { fields: [chatSessions.userId], references: [users.id] }),
+  messages: many(chatMessages),
+}));
+
+export const chatMessageRelations = relations(chatMessages, ({ one }) => ({
+  session: one(chatSessions, { fields: [chatMessages.sessionId], references: [chatSessions.id] }),
+}));
 
 export const funnelRelations = relations(funnels, ({ one, many }) => ({
   user: one(users, { fields: [funnels.userId], references: [users.id] }),
@@ -100,54 +236,27 @@ export const funnelRelations = relations(funnels, ({ one, many }) => ({
   stages: many(funnelStages),
 }));
 
-export const funnelStages = pgTable("funnel_stages", {
-  id: serial("id").primaryKey(),
-  funnelId: integer("funnel_id").notNull().references(() => funnels.id, { onDelete: 'cascade' }),
-  name: text("name").notNull(),
-  description: text("description"),
-  order: integer("order").notNull().default(0), // Para definir a sequência das etapas
-  config: jsonb("config").$type<Record<string, any>>(), // Configurações específicas da etapa (ex: métricas alvo, tipo de conteúdo)
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-});
-
 export const funnelStageRelations = relations(funnelStages, ({ one }) => ({
   funnel: one(funnels, { fields: [funnelStages.funnelId], references: [funnels.id] }),
 }));
-// --- Fim das Novas definições para Funis ---
 
 
-// --- Schemas de Inserção e Tipos Zod ---
-export const insertUserSchema = createInsertSchema(users, { /* ...definição existente... */ }).omit({ id: true, createdAt: true, updatedAt: true });
-export const insertCampaignSchema = createInsertSchema(campaigns, { /* ...definição existente... */ }).omit({ id: true, createdAt: true, updatedAt: true });
-export const insertCreativeSchema = createInsertSchema(creatives, { /* ...definição existente... */ }).omit({ id: true, createdAt: true, updatedAt: true });
+// --- Schemas Zod para Inserção/Validação ---
+export const insertUserSchema = createInsertSchema(users, { /* ... */ }).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertCampaignSchema = createInsertSchema(campaigns, { /* ... */ }).omit({ id: true, userId:true, createdAt: true, updatedAt: true });
+export const insertCreativeSchema = createInsertSchema(creatives, { /* ... */ }).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertMetricSchema = createInsertSchema(metrics).omit({ id: true, createdAt: true });
-export const insertWhatsappMessageSchema = createInsertSchema(whatsappMessages, { /* ...definição existente... */ }).omit({ id: true, timestamp: true });
-export const insertCopySchema = createInsertSchema(copies, { /* ...definição existente... */ }).omit({ id: true, createdAt: true });
-export const insertAlertSchema = createInsertSchema(alerts, { /* ...definição existente... */ }).omit({ id: true, createdAt: true });
-export const insertBudgetSchema = createInsertSchema(budgets, { /* ...definição existente... */ }).omit({ id: true, createdAt: true });
-export const insertLandingPageSchema = createInsertSchema(landingPages, { /* ...definição existente... */ }).omit({ id: true, createdAt: true, updatedAt: true, publishedAt: true });
+export const insertWhatsappMessageSchema = createInsertSchema(whatsappMessages, { /* ... */ }).omit({ id: true, timestamp: true });
+export const insertCopySchema = createInsertSchema(copies, { /* ... */ }).omit({ id: true, createdAt: true });
+export const insertAlertSchema = createInsertSchema(alerts, { /* ... */ }).omit({ id: true, createdAt: true });
+export const insertBudgetSchema = createInsertSchema(budgets, { /* ... */ }).omit({ id: true, userId:true, createdAt: true });
+export const insertLandingPageSchema = createInsertSchema(landingPages, { /* ... */ }).omit({ id: true, createdAt: true, updatedAt: true, publishedAt: true });
 export const insertChatSessionSchema = createInsertSchema(chatSessions).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertChatMessageSchema = createInsertSchema(chatMessages).omit({ id: true, timestamp: true });
+export const insertFunnelSchema = createInsertSchema(funnels, { /* ... */ }).omit({ id: true, userId:true, createdAt: true, updatedAt: true });
+export const insertFunnelStageSchema = createInsertSchema(funnelStages, { /* ... */ }).omit({ id: true, funnelId:true, createdAt: true, updatedAt: true });
 
-// --- Novos Schemas Zod para Funis ---
-export const insertFunnelSchema = createInsertSchema(funnels, {
-  name: z.string().min(1, "Nome do funil é obrigatório."),
-  campaignId: z.preprocess( // Tratar string "null" ou vazia para null numérico
-    (val) => (val === "null" || val === "" ? null : typeof val === 'string' ? parseInt(val) : val),
-    z.number().nullable().optional()
-  ),
-}).omit({ id: true, userId: true, createdAt: true, updatedAt: true }); // userId será pego do token
-
-export const insertFunnelStageSchema = createInsertSchema(funnelStages, {
-  name: z.string().min(1, "Nome da etapa é obrigatório."),
-  order: z.number().int().min(0),
-  config: z.record(z.string(), z.any()).optional(), // Permite um JSONB flexível
-}).omit({ id: true, funnelId: true, createdAt: true, updatedAt: true }); // funnelId será fornecido no contexto
-// --- Fim dos Novos Schemas Zod para Funis ---
-
-
-// --- Tipos Drizzle e Zod ---
+// --- Tipos TypeScript Inferidos ---
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type Campaign = typeof campaigns.$inferSelect;
@@ -170,27 +279,9 @@ export type ChatSession = typeof chatSessions.$inferSelect;
 export type InsertChatSession = z.infer<typeof insertChatSessionSchema>;
 export type ChatMessage = typeof chatMessages.$inferSelect;
 export type InsertChatMessage = z.infer<typeof insertChatMessageSchema>;
-
-// --- Novos Tipos para Funis ---
 export type Funnel = typeof funnels.$inferSelect;
 export type InsertFunnel = z.infer<typeof insertFunnelSchema>;
 export type FunnelStage = typeof funnelStages.$inferSelect;
 export type InsertFunnelStage = z.infer<typeof insertFunnelStageSchema>;
-// --- Fim dos Novos Tipos para Funis ---
 
-
-// Exportação default agrupada (mantendo para o backend)
-const allSchemas = {
-  campaignStatusEnum, chatSenderEnum, // Adicionar flowStatusEnum se existir
-  users, userRelations, campaigns, campaignRelations, creatives, creativeRelations,
-  metrics, metricRelations, whatsappMessages, whatsappMessageRelations, copies, copyRelations,
-  alerts, alertRelations, budgets, budgetRelations, landingPages, landingPageRelations,
-  chatSessions, chatSessionRelations, chatMessages, chatMessageRelations,
-  funnels, funnelRelations, funnelStages, funnelStageRelations, // Adicionando funis aqui
-
-  insertUserSchema, insertCampaignSchema, insertCreativeSchema, insertMetricSchema,
-  insertWhatsappMessageSchema, insertCopySchema, insertAlertSchema, insertBudgetSchema,
-  insertLandingPageSchema, insertChatSessionSchema, insertChatMessageSchema,
-  insertFunnelSchema, insertFunnelStageSchema, // Adicionando schemas zod de funis aqui
-};
-export default allSchemas;
+// REMOVIDO: export default allSchemas;
