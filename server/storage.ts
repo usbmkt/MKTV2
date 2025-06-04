@@ -2,24 +2,24 @@
 import { eq, and, or, isNull, desc, InferSelectModel, InferInsertModel } from 'drizzle-orm';
 import { db } from './db';
 import {
-  users, // Corrigido: usersTable -> users
-  campaigns, // Corrigido: campaignsTable -> campaigns
-  creatives, // Corrigido: creativesTable -> creatives
-  metrics, // Corrigido: metricsTable -> metrics (se existir, senão remover)
-  budgets, // Corrigido: budgetsTable -> budgets
-  alerts, // Corrigido: alertsTable -> alerts (se existir, senão remover)
-  copies, // Corrigido: copiesTable -> copies
-  chatSessions, // Corrigido: chatSessionsTable -> chatSessions
-  chatMessages, // Corrigido: chatMessagesTable -> chatMessages
-  landingPages, // Corrigido: landingPagesTable -> landingPages
-  funnels, // Corrigido: funnelsTable -> funnels
-  funnelStages, // Corrigido: funnelStagesTable -> funnelStages
-  flows, // Corrigido: flowsTable -> flows
+  users,
+  campaigns,
+  creatives,
+  metrics,
+  budgets,
+  alerts,
+  copies,
+  chatSessions,
+  chatMessages,
+  landingPages,
+  funnels,
+  funnelStages,
+  flowsTable, // Corrigido: 'flows' para 'flowsTable' para corresponder à exportação em shared/schema.ts
   // Zod schemas são importados separadamente ou via * em routes.ts
 } from '../shared/schema';
 import bcrypt from 'bcrypt';
 
-// Tipos inferidos para Drizzle (usar diretamente ou como base para interfaces)
+// Tipos inferidos para Drizzle
 type User = InferSelectModel<typeof users>;
 type NewUser = InferInsertModel<typeof users>;
 
@@ -43,8 +43,8 @@ type NewChatMessage = InferInsertModel<typeof chatMessages>;
 type LandingPage = InferSelectModel<typeof landingPages>;
 type NewLandingPage = InferInsertModel<typeof landingPages>;
 
-type Flow = InferSelectModel<typeof flows>; // Usaremos este como FlowData
-type NewFlow = InferInsertModel<typeof flows>;
+type Flow = InferSelectModel<typeof flowsTable>; // Corrigido para flowsTable
+type NewFlow = InferInsertModel<typeof flowsTable>; // Corrigido para flowsTable
 
 
 interface IStorage {
@@ -127,7 +127,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async validatePassword(email: string, pass: string): Promise<User | null> {
-    const userRecord = await this.getUser(email); // Renomeado para userRecord para evitar conflito com a tabela 'users'
+    const userRecord = await this.getUser(email);
     if (!userRecord || !userRecord.password) return null;
     const isValid = await bcrypt.compare(pass, userRecord.password);
     return isValid ? userRecord : null;
@@ -135,48 +135,47 @@ export class DatabaseStorage implements IStorage {
 
   // --- Flow Methods ---
   async createFlow(userId: number, flowData: Omit<NewFlow, 'userId' | 'id' | 'createdAt' | 'updatedAt'>): Promise<Flow | null> {
-    const result = await db.insert(flows).values({ ...flowData, userId }).returning();
+    const result = await db.insert(flowsTable).values({ ...flowData, userId }).returning(); // Corrigido para flowsTable
     return result[0] || null;
   }
 
   async getFlows(userId: number, campaignIdParam?: string | null): Promise<Flow[]> {
-    const conditions = [eq(flows.userId, userId)];
+    const conditions = [eq(flowsTable.userId, userId)]; // Corrigido para flowsTable
     if (campaignIdParam) {
-      if (campaignIdParam === 'null' || campaignIdParam === '') { // Trata string 'null' ou vazia como ID de campanha nulo
-        conditions.push(isNull(flows.campaignId));
+      if (campaignIdParam === 'null' || campaignIdParam === '') {
+        conditions.push(isNull(flowsTable.campaignId)); // Corrigido para flowsTable
       } else {
         const numericCampaignId = parseInt(campaignIdParam, 10);
         if (!isNaN(numericCampaignId)) {
-          conditions.push(eq(flows.campaignId, numericCampaignId));
+          conditions.push(eq(flowsTable.campaignId, numericCampaignId)); // Corrigido para flowsTable
         }
-        // Se não for 'null' nem numérico, pode optar por ignorar ou lançar erro
       }
     }
-    return db.query.flows.findMany({
+    return db.query.flowsTable.findMany({ // Corrigido para flowsTable
       where: and(...conditions),
-      orderBy: [desc(flows.updatedAt)],
+      orderBy: [desc(flowsTable.updatedAt)], // Corrigido para flowsTable
     });
   }
 
   async getFlowById(userId: number, flowId: number): Promise<Flow | null> {
-    return await db.query.flows.findFirst({
-      where: and(eq(flows.id, flowId), eq(flows.userId, userId)),
+    return await db.query.flowsTable.findFirst({ // Corrigido para flowsTable
+      where: and(eq(flowsTable.id, flowId), eq(flowsTable.userId, userId)), // Corrigido para flowsTable
     }) || null;
   }
 
   async updateFlow(userId: number, flowId: number, flowData: Partial<Omit<NewFlow, 'userId' | 'id' | 'createdAt' | 'updatedAt'>>): Promise<Flow | null> {
     const dataToUpdate = { ...flowData, updatedAt: new Date() };
-    const result = await db.update(flows)
+    const result = await db.update(flowsTable) // Corrigido para flowsTable
       .set(dataToUpdate)
-      .where(and(eq(flows.id, flowId), eq(flows.userId, userId)))
+      .where(and(eq(flowsTable.id, flowId), eq(flowsTable.userId, userId))) // Corrigido para flowsTable
       .returning();
     return result[0] || null;
   }
 
   async deleteFlow(userId: number, flowId: number): Promise<{ success: boolean; message?: string }> {
-    const result = await db.delete(flows)
-      .where(and(eq(flows.id, flowId), eq(flows.userId, userId)))
-      .returning({ id: flows.id });
+    const result = await db.delete(flowsTable) // Corrigido para flowsTable
+      .where(and(eq(flowsTable.id, flowId), eq(flowsTable.userId, userId))) // Corrigido para flowsTable
+      .returning({ id: flowsTable.id }); // Corrigido para flowsTable
     if (result.length > 0) {
       return { success: true };
     }
@@ -190,18 +189,15 @@ export class DatabaseStorage implements IStorage {
       orderBy: [desc(campaigns.updatedAt)],
     });
   }
-
   async getCampaignById(userId: number, campaignId: number): Promise<Campaign | null> {
     return db.query.campaigns.findFirst({
       where: and(eq(campaigns.id, campaignId), eq(campaigns.userId, userId)),
     }) || null;
   }
-
   async createCampaign(userId: number, campaignData: Omit<NewCampaign, 'userId' | 'id' | 'createdAt' | 'updatedAt'>): Promise<Campaign | null> {
     const result = await db.insert(campaigns).values({ ...campaignData, userId }).returning();
     return result[0] || null;
   }
-
   async updateCampaign(userId: number, campaignId: number, campaignData: Partial<Omit<NewCampaign, 'userId' | 'id' | 'createdAt' | 'updatedAt'>>): Promise<Campaign | null> {
     const result = await db.update(campaigns)
       .set({ ...campaignData, updatedAt: new Date() })
@@ -209,7 +205,6 @@ export class DatabaseStorage implements IStorage {
       .returning();
     return result[0] || null;
   }
-
   async deleteCampaign(userId: number, campaignId: number): Promise<{ success: boolean }> {
     const result = await db.delete(campaigns)
       .where(and(eq(campaigns.id, campaignId), eq(campaigns.userId, userId)))
@@ -260,7 +255,7 @@ export class DatabaseStorage implements IStorage {
   }
   async updateBudget(userId: number, budgetId: number, budgetData: Partial<Omit<NewBudget, 'userId' | 'id' | 'createdAt' | 'updatedAt'>>): Promise<Budget | null> {
     const result = await db.update(budgets)
-      .set(budgetData) // updatedAt é opcional para orçamentos, pode ser atualizado explicitamente se necessário
+      .set(budgetData)
       .where(and(eq(budgets.id, budgetId), eq(budgets.userId, userId)))
       .returning();
     return result[0] || null;
@@ -286,7 +281,7 @@ export class DatabaseStorage implements IStorage {
   }
   async updateCopy(userId: number, copyId: number, copyData: Partial<Omit<NewCopy, 'userId' | 'id' | 'createdAt'>>): Promise<Copy | null> {
     const result = await db.update(copies)
-      .set(copyData) // Assumindo que 'updatedAt' não é gerenciado aqui, mas pelo DB ou schema
+      .set(copyData)
       .where(and(eq(copies.id, copyId), eq(copies.userId, userId)))
       .returning();
     return result[0] || null;
@@ -308,24 +303,9 @@ export class DatabaseStorage implements IStorage {
         orderBy: [desc(campaigns.createdAt)],
         limit: 5,
     });
-    // Adicionar mais lógicas de agregação conforme necessário
     return {
-      metrics: {
-        activeCampaigns: activeCampaignsResult.length,
-        totalSpent: 0, // TODO: Calcular
-        totalCostPeriod: 0, // TODO: Calcular
-        conversions: 0, // TODO: Calcular
-        avgROI: 0, // TODO: Calcular
-        impressions: 0, // TODO: Calcular
-        clicks: 0, // TODO: Calcular
-        ctr: 0, // TODO: Calcular
-        cpc: 0, // TODO: Calcular
-      },
-      recentCampaigns: recentCampaignsResult,
-      performanceChartData: { labels: [], datasets: [] }, 
-      channelDistributionData: { labels: [], datasets: [] },
-      conversionByMonthData: { labels: [], datasets: [] },
-      roiByPlatformData: { labels: [], datasets: [] },
+      metrics: { activeCampaigns: activeCampaignsResult.length, totalSpent: 0, totalCostPeriod: 0, conversions: 0, avgROI: 0, impressions: 0, clicks: 0, ctr: 0, cpc: 0, },
+      recentCampaigns: recentCampaignsResult, performanceChartData: { labels: [], datasets: [] }, channelDistributionData: { labels: [], datasets: [] }, conversionByMonthData: { labels: [], datasets: [] }, roiByPlatformData: { labels: [], datasets: [] },
     };
   }
   // --- Landing Page Methods ---
@@ -333,44 +313,24 @@ export class DatabaseStorage implements IStorage {
     const result = await db.insert(landingPages).values({ ...pageData, userId }).returning();
     return result[0] || null;
   }
-
   async getLandingPages(userId: number): Promise<LandingPage[]> {
-    return db.query.landingPages.findMany({
-      where: eq(landingPages.userId, userId),
-      orderBy: [desc(landingPages.updatedAt)],
-    });
+    return db.query.landingPages.findMany({ where: eq(landingPages.userId, userId), orderBy: [desc(landingPages.updatedAt)], });
   }
-
   async getLandingPageById(userId: number, pageId: number): Promise<LandingPage | null> {
-    return db.query.landingPages.findFirst({
-      where: and(eq(landingPages.id, pageId), eq(landingPages.userId, userId)),
-    }) || null;
+    return db.query.landingPages.findFirst({ where: and(eq(landingPages.id, pageId), eq(landingPages.userId, userId)), }) || null;
   }
-
   async getLandingPageBySlug(slug: string): Promise<LandingPage | null> {
-    return db.query.landingPages.findFirst({
-      where: eq(landingPages.slug, slug),
-    }) || null;
+    return db.query.landingPages.findFirst({ where: eq(landingPages.slug, slug), }) || null;
   }
-  
   async getLandingPageByStudioProjectId(studioProjectId: string): Promise<LandingPage | null> {
-    return db.query.landingPages.findFirst({
-        where: eq(landingPages.studioProjectId, studioProjectId),
-    }) || null;
+    return db.query.landingPages.findFirst({ where: eq(landingPages.studioProjectId, studioProjectId), }) || null;
   }
-
   async updateLandingPage(userId: number, pageId: number, pageData: Partial<Omit<NewLandingPage, 'userId' | 'id' | 'createdAt' | 'updatedAt'>>): Promise<LandingPage | null> {
-    const result = await db.update(landingPages)
-      .set({ ...pageData, updatedAt: new Date() })
-      .where(and(eq(landingPages.id, pageId), eq(landingPages.userId, userId)))
-      .returning();
+    const result = await db.update(landingPages).set({ ...pageData, updatedAt: new Date() }).where(and(eq(landingPages.id, pageId), eq(landingPages.userId, userId))).returning();
     return result[0] || null;
   }
-
   async deleteLandingPage(userId: number, pageId: number): Promise<{ success: boolean }> {
-    const result = await db.delete(landingPages)
-      .where(and(eq(landingPages.id, pageId), eq(landingPages.userId, userId)))
-      .returning({ id: landingPages.id });
+    const result = await db.delete(landingPages).where(and(eq(landingPages.id, pageId), eq(landingPages.userId, userId))).returning({ id: landingPages.id });
     return result.length > 0 ? { success: true } : { success: false };
   }
 
@@ -379,43 +339,23 @@ export class DatabaseStorage implements IStorage {
     const result = await db.insert(chatSessions).values({ userId, title }).returning();
     return result[0] || null;
   }
-
   async getChatSessions(userId: number): Promise<ChatSession[]> {
-    return db.query.chatSessions.findMany({
-      where: eq(chatSessions.userId, userId),
-      orderBy: [desc(chatSessions.updatedAt)],
-    });
+    return db.query.chatSessions.findMany({ where: eq(chatSessions.userId, userId), orderBy: [desc(chatSessions.updatedAt)], });
   }
-
   async getChatSessionById(userId: number, sessionId: number): Promise<ChatSession & { messages: ChatMessage[] } | null> {
-    return db.query.chatSessions.findFirst({
-      where: and(eq(chatSessions.id, sessionId), eq(chatSessions.userId, userId)),
-      with: {
-        messages: {
-          orderBy: (msgs, { asc }) => [asc(msgs.timestamp)], // Corrigido para 'msgs'
-        },
-      },
-    }) || null;
+    return db.query.chatSessions.findFirst({ where: and(eq(chatSessions.id, sessionId), eq(chatSessions.userId, userId)), with: { messages: { orderBy: (msgs, { asc }) => [asc(msgs.timestamp)], }, }, }) || null;
   }
-
   async addChatMessage(sessionId: number, sender: 'user' | 'mcp' | 'system', text: string, attachmentUrl?: string | null): Promise<ChatMessage | null> {
     const result = await db.insert(chatMessages).values({ sessionId, sender, text, attachmentUrl }).returning();
     await db.update(chatSessions).set({ updatedAt: new Date() }).where(eq(chatSessions.id, sessionId));
     return result[0] || null;
   }
-
   async updateChatSessionTitle(userId: number, sessionId: number, newTitle: string): Promise<ChatSession | null> {
-    const result = await db.update(chatSessions)
-      .set({ title: newTitle, updatedAt: new Date() })
-      .where(and(eq(chatSessions.id, sessionId), eq(chatSessions.userId, userId)))
-      .returning();
+    const result = await db.update(chatSessions).set({ title: newTitle, updatedAt: new Date() }).where(and(eq(chatSessions.id, sessionId), eq(chatSessions.userId, userId))).returning();
     return result[0] || null;
   }
-
   async deleteChatSession(userId: number, sessionId: number): Promise<{ success: boolean }> {
-    const result = await db.delete(chatSessions)
-      .where(and(eq(chatSessions.id, sessionId), eq(chatSessions.userId, userId)))
-      .returning({ id: chatSessions.id });
+    const result = await db.delete(chatSessions).where(and(eq(chatSessions.id, sessionId), eq(chatSessions.userId, userId))).returning({ id: chatSessions.id });
     return result.length > 0 ? { success: true } : { success: false };
   }
 }
