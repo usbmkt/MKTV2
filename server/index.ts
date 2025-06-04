@@ -1,51 +1,83 @@
 // server/index.ts
 import dotenv from "dotenv";
-dotenv.config();
+dotenv.config(); // Carrega variáveis de .env para process.env
 
-import express, { type Request, Response, NextFunction, type Express } from "express";
-import { createServer as createHttpServer, type Server as HttpServer } from "http";
-import { registerRoutes } from "./routes"; // <- Deve estar assim
-import { setupVite, configureStaticServing, log } from "./vite";
-import path from "path";
-import fs from "fs";
+import express, { type Request, Response, NextFunction } from "express";
+// Alteração: Importar RouterSetup nomeado
+import { RouterSetup } from "./routes"; 
+import { setupVite, serveStatic, log as serverLog } from "./vite"; // Renomeado 'log' para 'serverLog' para evitar conflito
 
-const app: Express = express();
-const httpServer: HttpServer = createHttpServer(app);
+const app = express();
+app.use(express.json()); 
+app.use(express.urlencoded({ extended: false })); 
 
-// ... (middlewares globais e logger como na versão anterior) ...
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-app.use((req, res, next) => { /* ... seu logger ... */ next(); });
+// Middleware de Logging
+app.use((req, res, next) => {
+  const start = Date.now();
+  const path = req.path;
+  let capturedJsonResponse: Record<string, any> | undefined = undefined;
 
+  const originalResJson = res.json;
+  res.json = function (bodyJson: any, ...args: any[]) { // Tipagem mais flexível para bodyJson
+    capturedJsonResponse = bodyJson;
+    return originalResJson.apply(this, [bodyJson, ...args as any]);
+  };
+
+  res.on("finish", () => {
+    const duration = Date.now() - start;
+    if (path.startsWith("/api")) {
+      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
+      if (capturedJsonResponse && Object.keys(capturedJsonResponse).length > 0) { // Verifica se não é objeto vazio
+        const summary = JSON.stringify(capturedJsonResponse).substring(0, 100);
+        logLine += ` :: ${summary}${summary.length === 100 ? '...' : ''}`;
+      }
+      if (logLine.length > 180) {
+        logLine = logLine.slice(0, 179) + "…";
+      }
+      serverLog(logLine, 'api-server');
+    }
+  });
+  next();
+});
 
 (async () => {
-  if (process.env.NODE_ENV === "development") {
-    log("Modo de Desenvolvimento Ativado", "server-index");
-    await registerRoutes(app); 
-    await setupVite(app, httpServer); 
-  } else { 
-    log("Modo de Produção Ativado", "server-index");
-    const uploadsPath = path.resolve(process.cwd(), "uploads");
-    if (fs.existsSync(uploadsPath)) {
-        app.use('/uploads', express.static(uploadsPath));
-        log(`[StaticServing] Rota /uploads configurada para ${uploadsPath}`, "server-index");
+  try {
+    // Alteração: Usar RouterSetup.registerRoutes
+    const server = await RouterSetup.registerRoutes(app); 
+
+    // Middleware de erro global (movido para depois do setup das rotas de API, mas antes de Vite/Static)
+    // Embora em 'routes.ts' já existam handlers, este pode pegar erros de middlewares globais anteriores.
+    app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+      console.error("[GLOBAL_ERROR_HANDLER] Erro capturado:", err);
+      const status = err.status || err.statusCode || 500;
+      const message = err.message || "Erro interno do servidor.";
+      if (!res.headersSent) { // Garante que não tentaremos enviar headers se já foram enviados
+        res.status(status).json({ error: message });
+      }
+    });
+
+    serverLog(`Environment: NODE_ENV=${process.env.NODE_ENV}, app.get("env")=${app.get("env")}`, 'server-init');
+    if (process.env.NODE_ENV === "development") {
+      serverLog(`[ViteDev] Configurando Vite em modo de desenvolvimento...`, 'server-init');
+      await setupVite(app, server);
+    } else {
+      serverLog(`[StaticServing] Configurando para servir arquivos estáticos em produção...`, 'server-init');
+      // Importante: O serveStatic deve ser o ÚLTIMO middleware para rotas não-API,
+      // pois ele tem um app.use("*", ...) para o fallback do SPA.
+      // As rotas da API já foram definidas por RouterSetup.registerRoutes.
+      serveStatic(app); 
     }
-    const publicDistPath = path.resolve(process.cwd(), "dist/public");
-    if (fs.existsSync(publicDistPath)) {
-        app.use(express.static(publicDistPath));
-        log(`[StaticServing] Servindo assets do frontend de: ${publicDistPath}`, "server-index");
-    }
-    await registerRoutes(app); // Rotas API depois de estáticos de /uploads e /dist/public
-    
-    app.get('*', (req, res, next) => { /* ... seu SPA fallback ... */ });
+
+    const port = process.env.PORT || 5000;
+    server.listen({
+      port,
+      host: "0.0.0.0",
+    }, () => {
+      serverLog(`Servidor HTTP iniciado e escutando na porta ${port} em modo ${process.env.NODE_ENV || 'development'}`, 'server-init');
+    });
+
+  } catch (error) {
+    console.error("Falha crítica ao iniciar o servidor:", error);
+    process.exit(1);
   }
-
-  app.use((err: any, req: Request, res: Response, next: NextFunction) => {
-    // ... seu error handler global ...
-  });
-
-  const port = process.env.PORT || 5000;
-  httpServer.listen(Number(port), "0.0.0.0", () => {
-    log(`Servidor escutando na porta ${port} em modo ${process.env.NODE_ENV}`, "server-index");
-  });
 })();
