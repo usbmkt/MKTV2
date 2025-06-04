@@ -3,7 +3,22 @@ import { Router, Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { storage } from './storage';
 import { JWT_SECRET, GEMINI_API_KEY } from './config';
-import { usersTable, insertUserSchema, insertCampaignSchema, insertCreativeSchema, insertBudgetSchema, insertCopySchema, insertLandingPageSchema, insertFlowSchema, FlowData } from '../shared/schema'; // Adicionado insertFlowSchema e FlowData
+import {
+    users, insertUserSchema,
+    campaigns, insertCampaignSchema,
+    creatives, insertCreativeSchema,
+    budgets, insertBudgetSchema, // Assumindo que você terá este schema
+    copies, insertCopySchema,
+    alerts, // Assumindo que você terá este schema
+    metrics, // Assumindo que você terá este schema
+    landingPages, insertLandingPageSchema,
+    funnels, insertFunnelSchema, // Para funis de marketing/vendas gerais
+    funnelStages, insertFunnelStageSchema, // Para etapas de funis gerais
+    flows, insertFlowSchema, // Para fluxos do WhatsApp (zapFlows)
+    chatSessions, insertChatSessionSchema,
+    chatMessages, insertChatMessageSchema,
+    // Outros schemas Zod para update podem ser criados como .partial()
+} from '../shared/schema';
 import { z, ZodError } from 'zod';
 import multer from 'multer';
 import path from 'path';
@@ -27,11 +42,10 @@ const authenticateToken = async (req: AuthenticatedRequest, res: Response, next:
 
   if (process.env.FORCE_AUTH_BYPASS === 'true') {
     console.warn('[AUTH_BYPASS] Autenticação FORÇADAMENTE IGNORADA via FORCE_AUTH_BYPASS=true');
-    const mockUser = await storage.getUser('admin@usbmkt.com'); // Usar um usuário mock ou o admin
+    const mockUser = await storage.getUser('admin@usbmkt.com');
     if (mockUser) {
         req.user = {id: mockUser.id, email: mockUser.email, username: mockUser.username! };
     } else {
-        // Se o admin não existir, crie um mock simples
         req.user = { id: 1, email: 'bypass@example.com', username: 'Bypass User' };
     }
     return next();
@@ -41,13 +55,12 @@ const authenticateToken = async (req: AuthenticatedRequest, res: Response, next:
 
   jwt.verify(token, JWT_SECRET!, async (err: any, decoded: any) => {
     if (err) return res.status(403).json({ error: 'Token inválido ou expirado' });
-    
     try {
-      const user = await storage.getUserById(decoded.id);
-      if (!user) {
+      const userRecord = await storage.getUserById(decoded.id);
+      if (!userRecord) {
         return res.status(404).json({ error: 'Usuário do token não encontrado' });
       }
-      req.user = { id: user.id, email: user.email, username: user.username! };
+      req.user = { id: userRecord.id, email: userRecord.email, username: userRecord.username! };
       next();
     } catch (error) {
       console.error("Erro ao buscar usuário do token:", error);
@@ -56,25 +69,28 @@ const authenticateToken = async (req: AuthenticatedRequest, res: Response, next:
   });
 };
 
-// Configuração do Multer para uploads
 const createUploadMiddleware = (destination: string, fieldName: string = 'file') => {
     const storageConfig = multer.diskStorage({
         destination: async (req, file, cb) => {
             const uploadPath = path.join(__dirname, '..', 'uploads', destination);
-            await fs.mkdir(uploadPath, { recursive: true });
-            cb(null, uploadPath);
+            try {
+                await fs.mkdir(uploadPath, { recursive: true });
+                cb(null, uploadPath);
+            } catch (error: any) {
+                console.error(`Falha ao criar diretório de upload ${uploadPath}:`, error);
+                cb(error, uploadPath);
+            }
         },
         filename: (req, file, cb) => {
             const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
             cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
         }
     });
-
     return multer({
         storage: storageConfig,
-        limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+        limits: { fileSize: 25 * 1024 * 1024 }, // Aumentado para 25MB para vídeos etc.
         fileFilter: (req, file, cb) => {
-            const allowedTypes = /jpeg|jpg|png|gif|mp4|mov|avi|pdf|txt|ogg|mp3|wav/;
+            const allowedTypes = /jpeg|jpg|png|gif|mp4|mov|avi|pdf|txt|ogg|mp3|wav|webp/;
             const mimetype = allowedTypes.test(file.mimetype);
             const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
             if (mimetype && extname) {
@@ -86,83 +102,74 @@ const createUploadMiddleware = (destination: string, fieldName: string = 'file')
 };
 
 const creativesUpload = createUploadMiddleware('creatives-assets');
-const lpAssetUpload = createUploadMiddleware('lp-assets'); // Para GrapesJS Studio
+const lpAssetUpload = createUploadMiddleware('lp-assets');
 const mcpAttachmentUpload = createUploadMiddleware('mcp-attachments');
-
 
 const router = Router();
 
-// Middleware para loggar todas as requisições
 router.use((req: Request, res: Response, next: NextFunction) => {
   const start = Date.now();
   res.on('finish', () => {
     const duration = Date.now() - start;
-    const userAgent = req.get('User-Agent') || 'N/A';
-    const userIp = req.ip || req.socket.remoteAddress || 'N/A';
     let logMessage = `${new Date().toLocaleTimeString()} [api-server] ${req.method} ${req.originalUrl} ${res.statusCode} in ${duration}ms`;
     if (res.locals.errorMessage) {
       logMessage += ` :: ${JSON.stringify(res.locals.errorMessage)}`;
     }
-    // Evitar log excessivo para health checks ou assets públicos em produção
-    if (process.env.NODE_ENV !== 'production' || (!req.originalUrl.startsWith('/assets/') && req.originalUrl !== '/api/health')) {
+    if (process.env.NODE_ENV !== 'production' || (!req.originalUrl.startsWith('/assets/') && req.originalUrl !== '/api/health' && !req.originalUrl.includes('/uploads/'))) {
         console.log(logMessage);
     }
   });
   next();
 });
 
-
-// Zod Error Handler
 const handleZodError = (err: ZodError, req: Request, res: Response, next: NextFunction) => {
   const errors = err.errors.map(e => ({ path: e.path.join('.'), message: e.message }));
-  res.status(400).json({ error: "Erro de validação", details: errors });
+  res.locals.errorMessage = { error: "Erro de validação", details: errors };
+  res.status(400).json(res.locals.errorMessage);
 };
 
-// --- Auth Routes ---
+// Auth Routes
 router.post('/api/auth/register', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userData = insertUserSchema.parse(req.body);
-    const user = await storage.createUser(userData);
-    if (!user) return res.status(500).json({ error: 'Falha ao criar usuário' });
-    
-    const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET!, { expiresIn: '7d' });
-    res.json({ user: { id: user.id, username: user.username, email: user.email }, token });
-  } catch (error) {
+    const userRecord = await storage.createUser(userData);
+    if (!userRecord) return res.status(500).json({ error: 'Falha ao criar usuário' });
+    const token = jwt.sign({ id: userRecord.id, email: userRecord.email }, JWT_SECRET!, { expiresIn: '7d' });
+    res.json({ user: { id: userRecord.id, username: userRecord.username, email: userRecord.email }, token });
+  } catch (error: any) {
     if (error instanceof ZodError) return handleZodError(error, req, res, next);
-    if (error instanceof Error && error.message.includes('UNIQUE constraint failed: users.email')) {
+    if (error.code === 'SQLITE_CONSTRAINT' && error.message.includes('UNIQUE constraint failed: users.email')) {
         return res.status(409).json({ error: "Este e-mail já está em uso." });
     }
-    if (error instanceof Error && error.message.includes('UNIQUE constraint failed: users.username')) {
+    if (error.code === 'SQLITE_CONSTRAINT' && error.message.includes('UNIQUE constraint failed: users.username')) {
         return res.status(409).json({ error: "Este nome de usuário já está em uso." });
     }
     next(error);
   }
 });
-
 router.post('/api/auth/login', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'Email e senha são obrigatórios' });
-    const user = await storage.validatePassword(email, password);
-    if (!user) {
-      res.locals.errorMessage = {error: "Credenciais inválidas."}; // Para log customizado
+    const userRecord = await storage.validatePassword(email, password);
+    if (!userRecord) {
+      res.locals.errorMessage = {error: "Credenciais inválidas."};
       return res.status(401).json({ error: 'Credenciais inválidas.' });
     }
-    const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET!, { expiresIn: '7d' });
-    res.json({ user: { id: user.id, username: user.username, email: user.email }, token });
+    const token = jwt.sign({ id: userRecord.id, email: userRecord.email }, JWT_SECRET!, { expiresIn: '7d' });
+    res.json({ user: { id: userRecord.id, username: userRecord.username, email: userRecord.email }, token });
   } catch (error) {
     next(error);
   }
 });
-
 router.get('/api/auth/me', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
     res.json({ user: req.user });
 });
 
-// --- Health Check ---
+// Health Check
 router.get('/api/health', (req, res) => res.status(200).send('OK'));
 
-// --- Dashboard Route ---
+// Dashboard Route
 router.get('/api/dashboard', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
         const data = await storage.getDashboardData(req.user.id);
@@ -172,10 +179,11 @@ router.get('/api/dashboard', authenticateToken, async (req: AuthenticatedRequest
     }
 });
 
-// --- Campaigns Routes ---
+// Campaigns Routes
+const partialCampaignSchema = insertCampaignSchema.partial().omit({ userId: true, id: true, createdAt: true });
 router.post('/api/campaigns', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    const campaignData = insertCampaignSchema.parse(req.body);
+    const campaignData = insertCampaignSchema.omit({ userId: true, id: true, createdAt: true, updatedAt: true }).parse(req.body);
     const campaign = await storage.createCampaign(req.user.id, campaignData);
     res.status(201).json(campaign);
   } catch (error) {
@@ -183,16 +191,14 @@ router.post('/api/campaigns', authenticateToken, async (req: AuthenticatedReques
     next(error);
   }
 });
-
 router.get('/api/campaigns', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    const campaigns = await storage.getCampaigns(req.user.id);
-    res.json(campaigns);
+    const campaignResults = await storage.getCampaigns(req.user.id);
+    res.json(campaignResults);
   } catch (error) {
     next(error);
   }
 });
-
 router.get('/api/campaigns/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const id = parseInt(req.params.id, 10);
@@ -204,12 +210,11 @@ router.get('/api/campaigns/:id', authenticateToken, async (req: AuthenticatedReq
     next(error);
   }
 });
-
 router.put('/api/campaigns/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) return res.status(400).json({ error: "ID da campanha inválido" });
-    const campaignData = insertCampaignSchema.partial().parse(req.body);
+    const campaignData = partialCampaignSchema.parse(req.body);
     const campaign = await storage.updateCampaign(req.user.id, id, campaignData);
     if (!campaign) return res.status(404).json({ error: 'Campanha não encontrada ou não autorizada' });
     res.json(campaign);
@@ -218,7 +223,6 @@ router.put('/api/campaigns/:id', authenticateToken, async (req: AuthenticatedReq
     next(error);
   }
 });
-
 router.delete('/api/campaigns/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const id = parseInt(req.params.id, 10);
@@ -231,61 +235,148 @@ router.delete('/api/campaigns/:id', authenticateToken, async (req: Authenticated
   }
 });
 
-
-// --- Creatives Routes ---
+// Creatives Routes
+const partialCreativeSchema = insertCreativeSchema.partial().omit({ userId: true, id: true, createdAt: true });
 router.post('/api/creatives', authenticateToken, creativesUpload, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
-        const creativePayload = { ...req.body };
-        if (req.file) {
-            creativePayload.fileUrl = `/uploads/creatives-assets/${req.file.filename}`;
-        }
-        // Converter campaignId para número se existir e não for nulo/vazio
-        if (creativePayload.campaignId && creativePayload.campaignId !== 'null' && creativePayload.campaignId !== '') {
-            creativePayload.campaignId = parseInt(creativePayload.campaignId, 10);
-             if (isNaN(creativePayload.campaignId)) {
-                throw new Error("ID da Campanha inválido fornecido para o criativo.");
-            }
+        const payload: any = { ...req.body };
+        if (req.file) payload.fileUrl = `/uploads/creatives-assets/${req.file.filename}`;
+        
+        if (payload.campaignId && payload.campaignId !== 'null' && payload.campaignId !== '') {
+            payload.campaignId = parseInt(payload.campaignId, 10);
+            if (isNaN(payload.campaignId)) payload.campaignId = null; // ou lançar erro
         } else {
-            creativePayload.campaignId = null; // Definir como null se não fornecido ou 'null'
+            payload.campaignId = null;
         }
-
-        const parsedData = insertCreativeSchema.parse(creativePayload);
-        const creative = await storage.createCreative(req.user.id, parsedData);
+        const creativeData = insertCreativeSchema.omit({ userId: true, id: true, createdAt: true, updatedAt: true }).parse(payload);
+        const creative = await storage.createCreative(req.user.id, creativeData);
         res.status(201).json(creative);
     } catch (error) {
-        if (req.file) { // Se o upload do arquivo ocorreu mas a validação falhou, remover o arquivo
-            await fs.unlink(req.file.path).catch(err => console.error("Erro ao remover arquivo após falha:", err));
-        }
+        if (req.file) await fs.unlink(req.file.path).catch(console.error);
         if (error instanceof ZodError) return handleZodError(error, req, res, next);
         next(error);
     }
 });
-// ... (outras rotas de criativos GET, PUT, DELETE devem ser implementadas similarmente)
+router.get('/api/creatives', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+        const campaignIdQuery = req.query.campaignId as string | undefined;
+        const campaignId = campaignIdQuery ? parseInt(campaignIdQuery, 10) : undefined;
+        if (campaignIdQuery && isNaN(campaignId!)) return res.status(400).json({ error: "ID de Campanha inválido" });
+        
+        const creativeResults = await storage.getCreatives(req.user.id, campaignId);
+        res.json(creativeResults);
+    } catch (error) {
+        next(error);
+    }
+});
+router.get('/api/creatives/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+        const id = parseInt(req.params.id, 10);
+        if (isNaN(id)) return res.status(400).json({ error: "ID do criativo inválido" });
+        // Adicionar método getCreativeById no storage e usar aqui
+        // const creative = await storage.getCreativeById(req.user.id, id);
+        // if (!creative) return res.status(404).json({ error: 'Criativo não encontrado' });
+        // res.json(creative);
+        res.status(501).json({error: "Rota GET /api/creatives/:id não implementada no storage."}); // Placeholder
+    } catch (error) {
+        next(error);
+    }
+});
+router.put('/api/creatives/:id', authenticateToken, creativesUpload, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+        const id = parseInt(req.params.id, 10);
+        if (isNaN(id)) return res.status(400).json({ error: "ID do criativo inválido" });
+        
+        const payload: any = { ...req.body };
+        if (req.file) payload.fileUrl = `/uploads/creatives-assets/${req.file.filename}`;
+        if (payload.campaignId && payload.campaignId !== 'null' && payload.campaignId !== '') {
+            payload.campaignId = parseInt(payload.campaignId, 10);
+            if (isNaN(payload.campaignId)) payload.campaignId = null;
+        } else if (payload.campaignId === 'null' || payload.campaignId === '') {
+            payload.campaignId = null;
+        }
 
-// --- Flows Routes ---
-const partialFlowSchema = insertFlowSchema.partial().extend({
+        const creativeData = partialCreativeSchema.parse(payload);
+        const creative = await storage.updateCreative(req.user.id, id, creativeData);
+        if (!creative) return res.status(404).json({ error: 'Criativo não encontrado ou não autorizado' });
+        res.json(creative);
+    } catch (error) {
+        if (req.file) await fs.unlink(req.file.path).catch(console.error);
+        if (error instanceof ZodError) return handleZodError(error, req, res, next);
+        next(error);
+    }
+});
+router.delete('/api/creatives/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+        const id = parseInt(req.params.id, 10);
+        if (isNaN(id)) return res.status(400).json({ error: "ID do criativo inválido" });
+        const result = await storage.deleteCreative(req.user.id, id);
+        if (!result.success) return res.status(404).json({ error: 'Criativo não encontrado ou não autorizado' });
+        res.status(204).send();
+    } catch (error) {
+        next(error);
+    }
+});
+
+// Budgets Routes (Implementar CRUD completo se necessário)
+// Copies Routes (Implementar CRUD completo se necessário)
+const partialCopySchema = insertCopySchema.partial().omit({ userId: true, id: true, createdAt: true});
+router.post('/api/copies', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+        const copyData = insertCopySchema.omit({ userId: true, id: true, createdAt:true}).parse(req.body);
+        const newCopy = await storage.createCopy(req.user.id, copyData);
+        res.status(201).json(newCopy);
+    } catch(error) {
+        if (error instanceof ZodError) return handleZodError(error, req, res, next);
+        next(error);
+    }
+});
+router.get('/api/copies', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+        const campaignIdQuery = req.query.campaignId as string | undefined;
+        const campaignId = campaignIdQuery ? parseInt(campaignIdQuery, 10) : undefined;
+        if (campaignIdQuery && isNaN(campaignId!)) return res.status(400).json({ error: "ID de Campanha inválido" });
+        const copiesResults = await storage.getCopies(req.user.id, campaignId);
+        res.json(copiesResults);
+    } catch (error) {
+        next(error);
+    }
+});
+// PUT e DELETE para Copies podem ser adicionados aqui
+
+
+// Flows Routes
+const partialFlowUpdateSchema = insertFlowSchema.partial().extend({
   elements: z.object({
     nodes: z.array(z.any()),
     edges: z.array(z.any()),
-  }).optional().nullable(),
-});
+  }).nullable().optional(),
+}).omit({ userId: true, id: true, createdAt: true, updatedAt: true });
 
 router.post('/api/flows', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    const flowData = insertFlowSchema.omit({ userId: true, id: true, createdAt: true, updatedAt: true }).parse(req.body);
-    const flow = await storage.createFlow(req.user.id, { ...flowData, userId: req.user.id });
-    res.status(201).json(flow);
+    let flowDataToParse = { ...req.body };
+    if (flowDataToParse.campaign_id === null || flowDataToParse.campaign_id === 'null' || flowDataToParse.campaign_id === '') {
+        flowDataToParse.campaign_id = null;
+    } else if (flowDataToParse.campaign_id !== undefined && typeof flowDataToParse.campaign_id === 'string') {
+        const parsedCampaignId = parseInt(flowDataToParse.campaign_id, 10);
+        flowDataToParse.campaign_id = isNaN(parsedCampaignId) ? null : parsedCampaignId;
+    } else if (typeof flowDataToParse.campaign_id !== 'number' && flowDataToParse.campaign_id !== null) {
+        flowDataToParse.campaign_id = null; // Default to null if not a valid number or explicit null
+    }
+
+    const flowDataValidated = insertFlowSchema.omit({ id: true, userId: true, createdAt: true, updatedAt: true }).parse(flowDataToParse);
+    const newFlow = await storage.createFlow(req.user.id, flowDataValidated);
+    res.status(201).json(newFlow);
   } catch (error) {
     if (error instanceof ZodError) return handleZodError(error, req, res, next);
     next(error);
   }
 });
-
 router.get('/api/flows', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const flowIdQuery = req.query.id as string | undefined;
     const campaignIdQuery = req.query.campaignId as string | undefined;
-
     if (flowIdQuery) {
       const id = parseInt(flowIdQuery, 10);
       if (isNaN(id)) return res.status(400).json({ error: "ID do fluxo inválido" });
@@ -293,25 +384,32 @@ router.get('/api/flows', authenticateToken, async (req: AuthenticatedRequest, re
       if (!flow) return res.status(404).json({ error: 'Fluxo não encontrado' });
       return res.json(flow);
     } else {
-      const flows = await storage.getFlows(req.user.id, campaignIdQuery);
-      return res.json(flows);
+      const flowResults = await storage.getFlows(req.user.id, campaignIdQuery);
+      return res.json(flowResults);
     }
   } catch (error) {
     next(error);
   }
 });
-
 router.put('/api/flows', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const flowIdQuery = req.query.id as string | undefined;
     if (!flowIdQuery) return res.status(400).json({ error: "ID do fluxo é obrigatório na query string" });
-    
     const id = parseInt(flowIdQuery, 10);
     if (isNaN(id)) return res.status(400).json({ error: "ID do fluxo inválido" });
     
-    const flowData = partialFlowSchema.parse(req.body);
-    const updatedFlow = await storage.updateFlow(req.user.id, id, flowData);
-    
+    let flowDataToParse = { ...req.body };
+     if (flowDataToParse.campaign_id === null || flowDataToParse.campaign_id === 'null' || flowDataToParse.campaign_id === '') {
+        flowDataToParse.campaign_id = null;
+    } else if (flowDataToParse.campaign_id !== undefined && typeof flowDataToParse.campaign_id === 'string') {
+        const parsedCampaignId = parseInt(String(flowDataToParse.campaign_id), 10);
+        flowDataToParse.campaign_id = isNaN(parsedCampaignId) ? null : parsedCampaignId;
+    } else if (typeof flowDataToParse.campaign_id !== 'number' && flowDataToParse.campaign_id !== null) {
+         flowDataToParse.campaign_id = undefined; // Deixar Zod decidir se é opcional ou não
+    }
+
+    const flowDataValidated = partialFlowUpdateSchema.parse(flowDataToParse);
+    const updatedFlow = await storage.updateFlow(req.user.id, id, flowDataValidated);
     if (!updatedFlow) return res.status(404).json({ error: 'Fluxo não encontrado ou não autorizado' });
     res.json(updatedFlow);
   } catch (error) {
@@ -319,15 +417,12 @@ router.put('/api/flows', authenticateToken, async (req: AuthenticatedRequest, re
     next(error);
   }
 });
-
 router.delete('/api/flows', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const flowIdQuery = req.query.id as string | undefined;
     if (!flowIdQuery) return res.status(400).json({ error: "ID do fluxo é obrigatório na query string" });
-
     const id = parseInt(flowIdQuery, 10);
     if (isNaN(id)) return res.status(400).json({ error: "ID do fluxo inválido" });
-
     const result = await storage.deleteFlow(req.user.id, id);
     if (!result.success) return res.status(404).json({ error: result.message || 'Fluxo não encontrado ou não autorizado' });
     res.status(204).send();
@@ -336,42 +431,21 @@ router.delete('/api/flows', authenticateToken, async (req: AuthenticatedRequest,
   }
 });
 
-
-// --- WhatsApp Related Routes ---
-// Placeholder para reload de fluxo
+// WhatsApp Related Routes
 router.post('/api/whatsapp/reload-flow', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
-        // Lógica para o bot recarregar o(s) fluxo(s) ativo(s)
-        // Ex: chamar um método no whatsapp-connection.service.ts
-        console.log(`[WhatsApp Flow] Usuário ${req.user.id} solicitou recarga de fluxo.`);
-        // await whatsappService.reloadActiveFlowsForUser(req.user.id); // Exemplo
-        res.json({ message: "Solicitação de recarga de fluxo recebida. O bot tentará aplicar as mudanças." });
+        console.log(`[WhatsApp Flow Reload] Usuário ${req.user.id} solicitou recarga de fluxo.`);
+        // Lógica futura: await whatsappService.reloadActiveFlowsForUser(req.user.id);
+        res.json({ message: "Solicitação de recarga de fluxo recebida (placeholder)." });
     } catch (error) {
-        console.error("Erro ao recarregar fluxo do WhatsApp:", error);
+        console.error("Erro ao processar recarga de fluxo do WhatsApp:", error);
         next(error);
     }
 });
+// Outras rotas de WhatsApp (status, qr-code, send-message, messages, contacts) precisam ser implementadas com o whatsapp-connection.service
 
-// ... (outras rotas de WhatsApp como /connect, /status, /send-message, /messages, /contacts precisam de implementação completa)
-// ... Exemplo de como seria uma rota para enviar mensagem, que precisaria do whatsapp.service.ts implementado
-// router.post('/api/whatsapp/send-message', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-//   try {
-//     const { to, message } = req.body;
-//     if (!to || !message) return res.status(400).json({ error: 'Destinatário e mensagem são obrigatórios.' });
-//     // const success = await whatsappService.sendMessage(req.user.id, to, message);
-//     // if (success) {
-//     //   res.json({ message: 'Mensagem enviada com sucesso.' });
-//     // } else {
-//     //   res.status(500).json({ error: 'Falha ao enviar mensagem. Verifique a conexão do WhatsApp.' });
-//     // }
-//      res.status(503).json({ error: 'Funcionalidade de envio de mensagem ainda não implementada.' });
-//   } catch (error) {
-//     next(error);
-//   }
-// });
-
-
-// --- Landing Page Routes (Exemplos, precisam ser completadas e validadas) ---
+// Landing Page Routes
+const partialLandingPageSchema = insertLandingPageSchema.partial().omit({ userId: true, id: true, createdAt: true, publishedAt: true, publicUrl: true });
 router.post('/api/landingpages', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
         const pageData = insertLandingPageSchema.omit({userId: true, id: true, createdAt: true, updatedAt: true, publishedAt: true, publicUrl: true}).parse(req.body);
@@ -382,142 +456,142 @@ router.post('/api/landingpages', authenticateToken, async (req: AuthenticatedReq
         next(error);
     }
 });
-// ... (GET, PUT, DELETE para landing pages)
-router.get('/api/landingpages/slug/:slug', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/api/landingpages', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+        const pages = await storage.getLandingPages(req.user.id);
+        res.json(pages);
+    } catch (error) {
+        next(error);
+    }
+});
+router.get('/api/landingpages/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+        const id = parseInt(req.params.id, 10);
+        if (isNaN(id)) return res.status(400).json({ error: "ID da Landing Page inválido" });
+        const page = await storage.getLandingPageById(req.user.id, id);
+        if (!page) return res.status(404).json({ error: 'Landing Page não encontrada' });
+        res.json(page);
+    } catch (error) {
+        next(error);
+    }
+});
+router.put('/api/landingpages/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+        const id = parseInt(req.params.id, 10);
+        if (isNaN(id)) return res.status(400).json({ error: "ID da Landing Page inválido" });
+        const pageData = partialLandingPageSchema.parse(req.body);
+        const page = await storage.updateLandingPage(req.user.id, id, pageData);
+        if (!page) return res.status(404).json({ error: 'Landing Page não encontrada ou não autorizada' });
+        res.json(page);
+    } catch (error) {
+        if (error instanceof ZodError) return handleZodError(error, req, res, next);
+        next(error);
+    }
+});
+router.delete('/api/landingpages/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+        const id = parseInt(req.params.id, 10);
+        if (isNaN(id)) return res.status(400).json({ error: "ID da Landing Page inválido" });
+        const result = await storage.deleteLandingPage(req.user.id, id);
+        if (!result.success) return res.status(404).json({ error: 'Landing Page não encontrada ou não autorizada' });
+        res.status(204).send();
+    } catch (error) {
+        next(error);
+    }
+});
+router.get('/api/landingpages/slug/:slug', async (req: Request, res: Response, next: NextFunction) => { // Rota pública
     try {
         const page = await storage.getLandingPageBySlug(req.params.slug);
         if (!page || page.status !== 'published') {
             return res.status(404).json({ error: 'Página não encontrada ou não publicada.' });
         }
-        res.json({ title: page.name, description: page.description, grapesJsData: page.grapesJsData }); // Ajuste conforme necessário
+        res.json({ name: page.name, description: page.description, grapesJsData: page.grapesJsData, studioProjectId: page.studioProjectId });
     } catch (error) {
         next(error);
     }
 });
-
-// --- Rota para upload de assets do GrapesJS Studio ---
-router.post('/api/assets/lp-upload', authenticateToken, lpAssetUpload, (req: AuthenticatedRequest, res: Response) => {
-    if (!req.file) {
-        return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
-    }
-    // O GrapesJS Studio espera uma resposta com um array de URLs ou objetos com 'src'
-    const fileUrl = `/uploads/lp-assets/${req.file.filename}`;
-    res.json([fileUrl]); // Ou [{ src: fileUrl }] dependendo do que o Studio espera
-});
-// Implementar /api/assets/lp-delete se necessário
-
-
-// --- Copy Routes (Exemplos) ---
-router.post('/api/copies', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+router.get('/api/landingpages/studio-project/:studioProjectId', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
-        const copyData = insertCopySchema.omit({userId: true, id: true, createdAt:true}).parse(req.body);
-        const newCopy = await storage.createCopy(req.user.id, copyData);
-        res.status(201).json(newCopy);
-    } catch(error) {
-        if (error instanceof ZodError) return handleZodError(error, req, res, next);
+        const page = await storage.getLandingPageByStudioProjectId(req.params.studioProjectId);
+        // Não checar userId aqui, pois o Studio SDK pode precisar carregar via project ID sem autenticação de usuário da app.
+        // A segurança deve ser feita no onSave/onLoad do Studio.
+        if (!page) {
+            return res.status(404).json({ error: 'Projeto de Landing Page não encontrado.' });
+        }
+        res.json(page); // Retorna todos os dados da LP, incluindo grapesJsData
+    } catch (error) {
         next(error);
     }
 });
+router.post('/api/assets/lp-upload', authenticateToken, lpAssetUpload, (req: AuthenticatedRequest, res: Response) => {
+    if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
+    const fileUrl = `/uploads/lp-assets/${req.file.filename}`;
+    res.json([fileUrl]); 
+});
 
+// Copy Generation Route
 router.post('/api/copies/generate', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
-        const { prompt, type, platform, tone, keywords, targetAudience, campaignObjective, language, numSuggestions = 3 } = req.body;
+        const { prompt, type, platform, tone, keywords, targetAudience, campaignObjective, language = 'Português (Brasil)', numSuggestions = 3 } = req.body;
         if (!prompt && (!campaignObjective || !targetAudience)) {
             return res.status(400).json({ error: "Prompt ou detalhes da campanha (objetivo, público) são necessários." });
         }
-
-        if (!GEMINI_API_KEY) {
-            return res.status(503).json({ error: "Serviço de IA indisponível: API Key não configurada." });
-        }
+        if (!GEMINI_API_KEY) return res.status(503).json({ error: "Serviço de IA indisponível: API Key não configurada." });
+        
         const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
-        
-        const generationConfig = {
-          temperature: 0.8,
-          topK: 32,
-          topP: 0.9,
-          maxOutputTokens: 1024,
-        };
+        const generationConfig = { temperature: 0.8, topK: 32, topP: 0.9, maxOutputTokens: 1024 };
+        const safetySettings = [ /* ... seus safety settings ... */ ];
 
-        const safetySettings = [
-            { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
-            { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
-            { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
-            { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
-        ];
-
-        const actualPrompt = prompt || 
-          `Gere ${numSuggestions} sugestões de copy para ${type || 'um anúncio'} na plataforma ${platform || 'geral'}.
-           Tom: ${tone || 'neutro'}. Palavras-chave: ${keywords || 'não especificadas'}.
-           Público-alvo: ${targetAudience}. Objetivo da campanha: ${campaignObjective}.
-           Idioma: ${language || 'Português (Brasil)'}.
-           Formato de saída esperado: JSON com uma chave "suggestions" contendo um array de strings. Cada string é uma sugestão de copy.`;
-
-        const result = await model.generateContent({
-            contents: [{ role: "user", parts: [{text: actualPrompt }] }],
-            generationConfig,
-            safetySettings
-        });
-        
+        const actualPrompt = prompt || `Gere ${numSuggestions} sugestões de copy para ${type || 'um anúncio'} na plataforma ${platform || 'geral'}. Tom: ${tone || 'neutro'}. Palavras-chave: ${keywords || 'não especificadas'}. Público-alvo: ${targetAudience}. Objetivo da campanha: ${campaignObjective}. Idioma: ${language}. Formato de saída: JSON com uma chave "suggestions" contendo um array de strings.`;
+        const result = await model.generateContent({ contents: [{ role: "user", parts: [{text: actualPrompt }] }], generationConfig, safetySettings });
         const responseText = result.response.text();
         try {
-            // Tenta parsear se a IA retornar JSON diretamente
             const parsedResponse = JSON.parse(responseText);
             if (parsedResponse.suggestions && Array.isArray(parsedResponse.suggestions)) {
                  res.json({ suggestions: parsedResponse.suggestions.slice(0, numSuggestions) });
             } else {
-                // Se não for o JSON esperado, mas for um JSON, encapsula
-                 res.json({ suggestions: [responseText] }); // Ou processa de outra forma
+                 res.json({ suggestions: [responseText] });
             }
         } catch (e) {
-            // Se não for JSON, trata como texto e divide por quebras de linha se necessário
             const suggestions = responseText.split('\n').map(s => s.trim()).filter(Boolean).slice(0, numSuggestions);
             res.json({ suggestions });
         }
-
     } catch (error: any) {
         console.error("Erro na geração de copy com Gemini:", error);
-        if (error.isGoogleGenerativeAIError) { // Checa se é um erro específico do SDK do Gemini
-            res.status(500).json({ error: "Erro ao comunicar com o serviço de IA.", details: error.message });
+        const anyError = error as any;
+        if (anyError.isGoogleGenerativeAIError === true) {
+             res.status(500).json({ error: "Erro ao comunicar com o serviço de IA.", details: anyError.message });
         } else {
             next(error);
         }
     }
 });
 
-
-// --- Chat MCP Routes ---
+// MCP Routes
 router.post('/api/mcp/converse', authenticateToken, mcpAttachmentUpload, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
         const { message, sessionId: currentSessionId, context } = req.body;
         let attachmentUrl = null;
-        if (req.file) {
-            attachmentUrl = `/uploads/mcp-attachments/${req.file.filename}`;
-        }
+        if (req.file) attachmentUrl = `/uploads/mcp-attachments/${req.file.filename}`;
         const response = await mcpHandler.handleConversation(req.user, message, attachmentUrl, currentSessionId, context);
         res.json(response);
     } catch (error) {
-      if (req.file) { 
-            await fs.unlink(req.file.path).catch(err => console.error("Erro ao remover anexo MCP após falha:", err));
-      }
+      if (req.file) await fs.unlink(req.file.path).catch(console.error);
       next(error);
     }
 });
-
-// CRUD para sessões de chat
 router.post('/api/chat/sessions', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
         const { title } = req.body;
-        if (!title || typeof title !== 'string' || title.trim() === '') {
-            return res.status(400).json({ error: "Título da sessão é obrigatório." });
-        }
-        const session = await storage.createChatSession(req.user.id, title.trim());
+        const parsedData = insertChatSessionSchema.pick({ title: true }).parse({ title });
+        const session = await storage.createChatSession(req.user.id, parsedData.title!);
         res.status(201).json(session);
     } catch (error) {
+        if (error instanceof ZodError) return handleZodError(error, req, res, next);
         next(error);
     }
 });
-
 router.get('/api/chat/sessions', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
         const sessions = await storage.getChatSessions(req.user.id);
@@ -526,7 +600,6 @@ router.get('/api/chat/sessions', authenticateToken, async (req: AuthenticatedReq
         next(error);
     }
 });
-
 router.get('/api/chat/sessions/:sessionId/messages', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
         const sessionId = parseInt(req.params.sessionId, 10);
@@ -543,17 +616,15 @@ router.put('/api/chat/sessions/:sessionId/title', authenticateToken, async (req:
         const sessionId = parseInt(req.params.sessionId, 10);
         const { title } = req.body;
         if (isNaN(sessionId)) return res.status(400).json({ error: "ID da sessão inválido." });
-        if (!title || typeof title !== 'string' || title.trim() === '') {
-            return res.status(400).json({ error: "Novo título é obrigatório." });
-        }
-        const updatedSession = await storage.updateChatSessionTitle(req.user.id, sessionId, title.trim());
+        const parsedData = insertChatSessionSchema.pick({ title: true }).parse({ title });
+        const updatedSession = await storage.updateChatSessionTitle(req.user.id, sessionId, parsedData.title!);
         if (!updatedSession) return res.status(404).json({ error: "Sessão não encontrada ou não autorizada." });
         res.json(updatedSession);
     } catch (error) {
+        if (error instanceof ZodError) return handleZodError(error, req, res, next);
         next(error);
     }
 });
-
 router.delete('/api/chat/sessions/:sessionId', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
         const sessionId = parseInt(req.params.sessionId, 10);
@@ -566,29 +637,22 @@ router.delete('/api/chat/sessions/:sessionId', authenticateToken, async (req: Au
     }
 });
 
-// Error handling middleware (deve ser o último)
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+// Error handling middleware (final)
 router.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
   console.error(`[GLOBAL_ERROR_HANDLER] ${new Date().toISOString()} Path: ${req.path}`);
   console.error(err);
-
-  if (err instanceof ZodError) { // Já tratado pelo handleZodError, mas pode ser pego aqui se não for na rota.
-    return handleZodError(err, req, res, _next);
-  }
-  
+  if (err instanceof ZodError) return handleZodError(err, req, res, _next);
   if (err instanceof multer.MulterError) {
     res.locals.errorMessage = { error: 'Erro de upload de arquivo', details: err.message, code: err.code };
     return res.status(400).json(res.locals.errorMessage);
   }
-
-  if ('isGoogleGenerativeAIError' in err && err.isGoogleGenerativeAIError) {
-     res.locals.errorMessage = { error: 'Erro no serviço de IA (Google Gemini)', details: err.message };
-     return res.status(502).json(res.locals.errorMessage); // Bad Gateway
+  const anyError = err as any;
+  if (anyError.isGoogleGenerativeAIError === true) {
+     res.locals.errorMessage = { error: 'Erro no serviço de IA (Google Gemini)', details: anyError.message };
+     return res.status(502).json(res.locals.errorMessage);
   }
-  
   res.locals.errorMessage = { error: 'Erro interno do servidor', details: err.message };
   return res.status(500).json(res.locals.errorMessage);
 });
-
 
 export default router;
