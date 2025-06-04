@@ -1,9 +1,9 @@
 // server/routes.ts
 import { Router, Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { storage } from './storage'; // storage.ts já usa o schema namespaced
+import { storage } from './storage';
 import { JWT_SECRET, GEMINI_API_KEY } from './config';
-import * as schema from '../shared/schema'; // Importar tudo de shared/schema como 'schema'
+import * as schema from '../shared/schema';
 import { z, ZodError } from 'zod';
 import multer from 'multer';
 import path from 'path';
@@ -11,7 +11,7 @@ import fs from 'fs/promises';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import { MCPHandler } from './mcp_handler'; // Mantendo a importação nomeada
 
-const mcpHandler = new MCPHandler(/* Se MCPHandler precisar de storage, ele deve ser injetado aqui ou MCPHandler deve importar storage diretamente */);
+const mcpHandler = new MCPHandler(); // Removido 'storage' do construtor se não for mais necessário diretamente
 
 interface AuthenticatedRequest extends Request {
   user: {
@@ -90,6 +90,7 @@ const creativesUpload = createUploadMiddleware('creatives-assets');
 const lpAssetUpload = createUploadMiddleware('lp-assets');
 const mcpAttachmentUpload = createUploadMiddleware('mcp-attachments');
 
+
 const router = Router();
 
 router.use((req: Request, res: Response, next: NextFunction) => {
@@ -126,7 +127,7 @@ router.post('/api/auth/register', async (req: Request, res: Response, next: Next
     res.status(201).json({ user: { id: userRecord.id, username: userRecord.username, email: userRecord.email }, token });
   } catch (error: any) {
     if (error instanceof ZodError) return handleZodError(error, req, res, next);
-    if (error.code === '23505') { // Código de erro do PostgreSQL para unique_violation
+    if (error.code === '23505') { 
       if (error.constraint === 'users_email_unique' || (error.detail && error.detail.includes('(email)'))) {
         return res.status(409).json({ error: "Este e-mail já está em uso." });
       }
@@ -330,7 +331,6 @@ router.get('/api/copies', authenticateToken, async (req: AuthenticatedRequest, r
         next(error);
     }
 });
-// Adicionar PUT e DELETE para Copies se necessário
 
 // Flows Routes (WhatsApp Flows)
 const partialFlowUpdateSchema = schema.insertFlowSchema.partial().extend({
@@ -621,8 +621,8 @@ router.delete('/api/chat/sessions/:sessionId', authenticateToken, async (req: Au
 // Error handling middleware (final)
 router.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
   console.error(`[GLOBAL_ERROR_HANDLER] ${new Date().toISOString()} Path: ${req.path}`);
-  console.error(err); // Log completo do erro no servidor
-  if (err instanceof ZodError) return handleZodError(err, req, res, _next); // Já define res.locals.errorMessage
+  console.error(err); 
+  if (err instanceof ZodError) return handleZodError(err, req, res, _next);
   if (err instanceof multer.MulterError) {
     res.locals.errorMessage = { error: 'Erro de upload de arquivo', details: err.message, code: err.code };
     return res.status(400).json(res.locals.errorMessage);
@@ -632,8 +632,7 @@ router.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
      res.locals.errorMessage = { error: 'Erro no serviço de IA (Google Gemini)', details: anyError.message };
      return res.status(502).json(res.locals.errorMessage);
   }
-  // Para todos os outros erros, enviar uma mensagem genérica, mas logar o erro detalhado.
-  res.locals.errorMessage = { error: 'Erro interno do servidor.', details: 'Ocorreu um problema inesperado.' }; // Mensagem genérica para o cliente
+  res.locals.errorMessage = { error: 'Erro interno do servidor.', details: 'Ocorreu um problema inesperado.' };
   return res.status(500).json(res.locals.errorMessage);
 });
 
