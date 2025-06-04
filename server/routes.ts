@@ -3,28 +3,27 @@ import { Router, Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { storage } from './storage';
 import { JWT_SECRET, GEMINI_API_KEY } from './config';
-import {
-    users, insertUserSchema,
-    campaigns, insertCampaignSchema,
-    creatives, insertCreativeSchema,
-    budgets, insertBudgetSchema, // Assumindo que você terá este schema
-    copies, insertCopySchema,
-    alerts, // Assumindo que você terá este schema
-    metrics, // Assumindo que você terá este schema
-    landingPages, insertLandingPageSchema,
-    funnels, insertFunnelSchema, // Para funis de marketing/vendas gerais
-    funnelStages, insertFunnelStageSchema, // Para etapas de funis gerais
-    flows, insertFlowSchema, // Para fluxos do WhatsApp (zapFlows)
+import { 
+    users, insertUserSchema, 
+    campaigns, insertCampaignSchema, 
+    creatives, insertCreativeSchema, 
+    budgets, insertBudgetSchema, 
+    copies, insertCopySchema, 
+    alerts, 
+    metrics, 
+    landingPages, insertLandingPageSchema, 
+    funnels, insertFunnelSchema, 
+    funnelStages, insertFunnelStageSchema, 
+    flowsTable, insertFlowSchema, // Corrigido para flowsTable, e insertFlowSchema (verificar exportação em shared/schema.ts)
     chatSessions, insertChatSessionSchema,
-    chatMessages, insertChatMessageSchema,
-    // Outros schemas Zod para update podem ser criados como .partial()
+    chatMessages, // insertChatMessageSchema (se necessário)
 } from '../shared/schema';
 import { z, ZodError } from 'zod';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs/promises';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
-import { MCPHandler } from './mcp_handler';
+import { MCPHandler } from './mcp_handler'; // Assumindo que MCPHandler é exportado corretamente
 
 const mcpHandler = new MCPHandler(storage);
 
@@ -88,7 +87,7 @@ const createUploadMiddleware = (destination: string, fieldName: string = 'file')
     });
     return multer({
         storage: storageConfig,
-        limits: { fileSize: 25 * 1024 * 1024 }, // Aumentado para 25MB para vídeos etc.
+        limits: { fileSize: 25 * 1024 * 1024 }, 
         fileFilter: (req, file, cb) => {
             const allowedTypes = /jpeg|jpg|png|gif|mp4|mov|avi|pdf|txt|ogg|mp3|wav|webp/;
             const mimetype = allowedTypes.test(file.mimetype);
@@ -244,7 +243,7 @@ router.post('/api/creatives', authenticateToken, creativesUpload, async (req: Au
         
         if (payload.campaignId && payload.campaignId !== 'null' && payload.campaignId !== '') {
             payload.campaignId = parseInt(payload.campaignId, 10);
-            if (isNaN(payload.campaignId)) payload.campaignId = null; // ou lançar erro
+            if (isNaN(payload.campaignId)) payload.campaignId = null;
         } else {
             payload.campaignId = null;
         }
@@ -273,11 +272,10 @@ router.get('/api/creatives/:id', authenticateToken, async (req: AuthenticatedReq
     try {
         const id = parseInt(req.params.id, 10);
         if (isNaN(id)) return res.status(400).json({ error: "ID do criativo inválido" });
-        // Adicionar método getCreativeById no storage e usar aqui
-        // const creative = await storage.getCreativeById(req.user.id, id);
+        // const creative = await storage.getCreativeById(req.user.id, id); // Necessário implementar em storage.ts
         // if (!creative) return res.status(404).json({ error: 'Criativo não encontrado' });
         // res.json(creative);
-        res.status(501).json({error: "Rota GET /api/creatives/:id não implementada no storage."}); // Placeholder
+        res.status(501).json({error: "Rota GET /api/creatives/:id não completamente implementada no storage."});
     } catch (error) {
         next(error);
     }
@@ -318,8 +316,7 @@ router.delete('/api/creatives/:id', authenticateToken, async (req: Authenticated
     }
 });
 
-// Budgets Routes (Implementar CRUD completo se necessário)
-// Copies Routes (Implementar CRUD completo se necessário)
+// Copies Routes
 const partialCopySchema = insertCopySchema.partial().omit({ userId: true, id: true, createdAt: true});
 router.post('/api/copies', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
@@ -344,7 +341,6 @@ router.get('/api/copies', authenticateToken, async (req: AuthenticatedRequest, r
 });
 // PUT e DELETE para Copies podem ser adicionados aqui
 
-
 // Flows Routes
 const partialFlowUpdateSchema = insertFlowSchema.partial().extend({
   elements: z.object({
@@ -362,9 +358,8 @@ router.post('/api/flows', authenticateToken, async (req: AuthenticatedRequest, r
         const parsedCampaignId = parseInt(flowDataToParse.campaign_id, 10);
         flowDataToParse.campaign_id = isNaN(parsedCampaignId) ? null : parsedCampaignId;
     } else if (typeof flowDataToParse.campaign_id !== 'number' && flowDataToParse.campaign_id !== null) {
-        flowDataToParse.campaign_id = null; // Default to null if not a valid number or explicit null
+        flowDataToParse.campaign_id = null;
     }
-
     const flowDataValidated = insertFlowSchema.omit({ id: true, userId: true, createdAt: true, updatedAt: true }).parse(flowDataToParse);
     const newFlow = await storage.createFlow(req.user.id, flowDataValidated);
     res.status(201).json(newFlow);
@@ -405,9 +400,8 @@ router.put('/api/flows', authenticateToken, async (req: AuthenticatedRequest, re
         const parsedCampaignId = parseInt(String(flowDataToParse.campaign_id), 10);
         flowDataToParse.campaign_id = isNaN(parsedCampaignId) ? null : parsedCampaignId;
     } else if (typeof flowDataToParse.campaign_id !== 'number' && flowDataToParse.campaign_id !== null) {
-         flowDataToParse.campaign_id = undefined; // Deixar Zod decidir se é opcional ou não
+         flowDataToParse.campaign_id = undefined; 
     }
-
     const flowDataValidated = partialFlowUpdateSchema.parse(flowDataToParse);
     const updatedFlow = await storage.updateFlow(req.user.id, id, flowDataValidated);
     if (!updatedFlow) return res.status(404).json({ error: 'Fluxo não encontrado ou não autorizado' });
@@ -435,14 +429,12 @@ router.delete('/api/flows', authenticateToken, async (req: AuthenticatedRequest,
 router.post('/api/whatsapp/reload-flow', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
         console.log(`[WhatsApp Flow Reload] Usuário ${req.user.id} solicitou recarga de fluxo.`);
-        // Lógica futura: await whatsappService.reloadActiveFlowsForUser(req.user.id);
         res.json({ message: "Solicitação de recarga de fluxo recebida (placeholder)." });
     } catch (error) {
         console.error("Erro ao processar recarga de fluxo do WhatsApp:", error);
         next(error);
     }
 });
-// Outras rotas de WhatsApp (status, qr-code, send-message, messages, contacts) precisam ser implementadas com o whatsapp-connection.service
 
 // Landing Page Routes
 const partialLandingPageSchema = insertLandingPageSchema.partial().omit({ userId: true, id: true, createdAt: true, publishedAt: true, publicUrl: true });
@@ -499,7 +491,7 @@ router.delete('/api/landingpages/:id', authenticateToken, async (req: Authentica
         next(error);
     }
 });
-router.get('/api/landingpages/slug/:slug', async (req: Request, res: Response, next: NextFunction) => { // Rota pública
+router.get('/api/landingpages/slug/:slug', async (req: Request, res: Response, next: NextFunction) => {
     try {
         const page = await storage.getLandingPageBySlug(req.params.slug);
         if (!page || page.status !== 'published') {
@@ -513,12 +505,8 @@ router.get('/api/landingpages/slug/:slug', async (req: Request, res: Response, n
 router.get('/api/landingpages/studio-project/:studioProjectId', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
         const page = await storage.getLandingPageByStudioProjectId(req.params.studioProjectId);
-        // Não checar userId aqui, pois o Studio SDK pode precisar carregar via project ID sem autenticação de usuário da app.
-        // A segurança deve ser feita no onSave/onLoad do Studio.
-        if (!page) {
-            return res.status(404).json({ error: 'Projeto de Landing Page não encontrado.' });
-        }
-        res.json(page); // Retorna todos os dados da LP, incluindo grapesJsData
+        if (!page) return res.status(404).json({ error: 'Projeto de Landing Page não encontrado.' });
+        res.json(page);
     } catch (error) {
         next(error);
     }
@@ -541,8 +529,7 @@ router.post('/api/copies/generate', authenticateToken, async (req: Authenticated
         const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
         const generationConfig = { temperature: 0.8, topK: 32, topP: 0.9, maxOutputTokens: 1024 };
-        const safetySettings = [ /* ... seus safety settings ... */ ];
-
+        const safetySettings = [ { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE }, { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE }, { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE }, { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE }, ];
         const actualPrompt = prompt || `Gere ${numSuggestions} sugestões de copy para ${type || 'um anúncio'} na plataforma ${platform || 'geral'}. Tom: ${tone || 'neutro'}. Palavras-chave: ${keywords || 'não especificadas'}. Público-alvo: ${targetAudience}. Objetivo da campanha: ${campaignObjective}. Idioma: ${language}. Formato de saída: JSON com uma chave "suggestions" contendo um array de strings.`;
         const result = await model.generateContent({ contents: [{ role: "user", parts: [{text: actualPrompt }] }], generationConfig, safetySettings });
         const responseText = result.response.text();
@@ -581,10 +568,11 @@ router.post('/api/mcp/converse', authenticateToken, mcpAttachmentUpload, async (
       next(error);
     }
 });
+const partialChatSessionSchema = insertChatSessionSchema.pick({ title: true });
 router.post('/api/chat/sessions', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
         const { title } = req.body;
-        const parsedData = insertChatSessionSchema.pick({ title: true }).parse({ title });
+        const parsedData = partialChatSessionSchema.parse({ title });
         const session = await storage.createChatSession(req.user.id, parsedData.title!);
         res.status(201).json(session);
     } catch (error) {
@@ -616,7 +604,7 @@ router.put('/api/chat/sessions/:sessionId/title', authenticateToken, async (req:
         const sessionId = parseInt(req.params.sessionId, 10);
         const { title } = req.body;
         if (isNaN(sessionId)) return res.status(400).json({ error: "ID da sessão inválido." });
-        const parsedData = insertChatSessionSchema.pick({ title: true }).parse({ title });
+        const parsedData = partialChatSessionSchema.parse({ title });
         const updatedSession = await storage.updateChatSessionTitle(req.user.id, sessionId, parsedData.title!);
         if (!updatedSession) return res.status(404).json({ error: "Sessão não encontrada ou não autorizada." });
         res.json(updatedSession);
