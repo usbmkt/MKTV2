@@ -32,6 +32,11 @@ export default defineConfig(({ command, mode }) => {
         "@shared": path.resolve(path.dirname(fileURLToPath(import.meta.url)), "shared"),
         // Alias para assets.
         "@assets": path.resolve(path.dirname(fileURLToPath(import.meta.url)), "attached_assets"),
+        // Alias para os tipos do fluxo (se você criar client/src/types/zapTypes.ts)
+        "@/types": path.resolve(path.dirname(fileURLToPath(import.meta.url)), "client", "src", "types"),
+        // Alias para componentes do fluxo (se você criar client/src/components/flow)
+        "@/components/flow": path.resolve(path.dirname(fileURLToPath(import.meta.url)), "client", "src", "components", "flow"),
+
       },
     },
     // Define a pasta raiz para o Vite, onde ele procurará o index.html.
@@ -51,13 +56,8 @@ export default defineConfig(({ command, mode }) => {
     },
     optimizeDeps: {
       include: [
-        // Adicione aqui o nome EXATO do pacote que você está tentando importar
-        // e que está causando o erro "Rollup failed to resolve import".
-        // Se o erro for para "@grapesjs/studio", adicione-o.
-        // Se o pacote real for "@grapesjs/studio-sdk", use esse.
-        '@grapesjs/studio', // Exemplo, ajuste para o nome correto do pacote do GrapesJS Studio SDK
-        // Adicione outros pacotes do SDK se forem importados diretamente e causarem problemas
-        // Ex: '@grapesjs/studio-react' (se for um pacote separado e importado)
+        '@grapesjs/studio',
+        '@xyflow/react', // <-- ADICIONADO AQUI
       ],
       // esbuildOptions: { // Raramente necessário, mas pode ajudar com alguns pacotes
       //   target: 'esnext', 
