@@ -8,7 +8,6 @@
     
     "build:mktv2:client": "vite build",
     "build:mktv2:server": "esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
-    
   },
   "dependencies": {
     "@google/generative-ai": "^0.15.0",
