@@ -2,7 +2,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 import express, { type Request, Response, NextFunction, type Express } from "express";
-import { createServer as createHttpServer, type Server as HttpServer } from "http"; // Importar createServer daqui
+import { createServer as createHttpServer, type Server as HttpServer } from "http";
 import { registerRoutes } from "./routes";
 import { setupVite, configureStaticServing, log } from "./vite";
 import path from "path";
@@ -28,9 +28,11 @@ app.use((req, res, next) => {
     const source = req.originalUrl.startsWith('/api') ? 'api-server' : 
                    req.originalUrl.startsWith('/uploads') ? 'upload-server' : 
                    'static-server';
+    
     if (source === 'api-server' || source === 'upload-server' || 
         (source === 'static-server' && res.statusCode !== 200 && res.statusCode !== 304) ||
         process.env.LOG_ALL_STATIC === 'true') {
+
       let logLine = `${req.method} ${requestPath} ${res.statusCode} in ${duration}ms`;
       if (capturedJsonResponse && Object.keys(capturedJsonResponse).length > 0 && source === 'api-server') {
         const jsonString = JSON.stringify(capturedJsonResponse);
@@ -43,22 +45,26 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  const httpServer: HttpServer = createHttpServer(app); // Criar a instância do servidor HTTP aqui
+  const httpServer: HttpServer = createHttpServer(app); 
 
   if (process.env.NODE_ENV === "development") {
     log("Modo de Desenvolvimento Ativado", "server-index");
-    await registerRoutes(app); // Registrar rotas API
-    await setupVite(app, httpServer); // Passar o httpServer para o Vite
+    await registerRoutes(app); 
+    await setupVite(app, httpServer); 
   } else { 
     log("Modo de Produção Ativado", "server-index");
     
-    // 1. Registrar rotas da API primeiro
-    await registerRoutes(app);
-    
-    // 2. Configurar o serviço de arquivos estáticos (frontend e uploads)
-    // A rota /uploads já é configurada dentro de registerRoutes agora
-    // configureStaticServing(app); // Chamada ainda válida para servir /dist/public
+    // Servir uploads ANTES de registrar rotas da API se eles não forem parte do apiRouter
+    const uploadsPath = path.resolve(process.cwd(), "uploads");
+    if (fs.existsSync(uploadsPath)) {
+        app.use('/uploads', express.static(uploadsPath));
+        log(`[StaticServing] Rota /uploads configurada para ${uploadsPath}`, "server-index");
+    } else {
+        log(`[StaticServing] ATENÇÃO: Diretório de uploads não encontrado: ${uploadsPath}`, "server-index");
+    }
 
+    await registerRoutes(app); // Registrar rotas API (que agora incluem /api/...)
+    
     const publicDistPath = path.resolve(process.cwd(), "dist/public");
     if (fs.existsSync(publicDistPath)) {
         app.use(express.static(publicDistPath));
@@ -67,8 +73,6 @@ app.use((req, res, next) => {
         log(`[StaticServing] ATENÇÃO: Diretório de build do frontend não encontrado: ${publicDistPath}.`, "server-index");
     }
 
-
-    // 3. Middleware de fallback para o index.html (SPA)
     app.get('*', (req, res, next) => {
       if (req.method === 'GET' && 
           !req.path.startsWith('/api') && 
@@ -90,12 +94,23 @@ app.use((req, res, next) => {
     });
   }
 
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    console.error("[GLOBAL_ERROR_HANDLER] Erro capturado:", err.message, err.stack);
-    const status = err.status || err.statusCode || 500;
+  // Middlewares de tratamento de erro no final
+  app.use((err: any, req: Request, res: Response, next: NextFunction) => { // Precisa do _req, e next mesmo se não usado para ser reconhecido como error handler
+    console.error("[GLOBAL_ERROR_HANDLER] Erro capturado:", err.message, err.stack ? `\nStack: ${err.stack}` : '');
+    const status = err.statusCode || err.status || 500; // Prioridade para err.statusCode
     const message = err.message || "Erro Interno do Servidor";
-    res.status(status).json({ error: message, details: process.env.NODE_ENV === 'development' ? err.stack : undefined });
+    
+    // Evitar enviar stack trace em produção na resposta JSON
+    const errorResponse: { error: string; details?: any } = { error: message };
+    if (process.env.NODE_ENV === 'development' && err.stack) {
+        errorResponse.details = err.stack;
+    } else if (err.details && typeof err.details !== 'object') { // Se 'details' já é uma string de erro.
+        errorResponse.details = err.details;
+    }
+
+    res.status(status).json(errorResponse);
   });
+
 
   const port = process.env.PORT || 5000;
   httpServer.listen(Number(port), "0.0.0.0", () => {
