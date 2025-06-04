@@ -687,3 +687,4 @@ const WhatsAppPage: React.FC<WhatsAppPageProps> = () => {
     </div>
   );
 }
+export default WhatsApp;
