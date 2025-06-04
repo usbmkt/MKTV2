@@ -2,7 +2,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import express from "express";
 import { createServer, type Server as HttpServer } from "http";
-import { storage } from "./storage"; // <-- MUDANÇA AQUI: importação nomeada novamente
+import { storage } from "./storage"; // <-- Voltando para importação nomeada
 import jwt from 'jsonwebtoken';
 import multer from 'multer';
 import path from 'path';
@@ -35,7 +35,6 @@ export interface AuthenticatedRequest extends Request {
 }
 
 // Middlewares (authenticateToken, handleZodError, handleError) permanecem os mesmos
-// ... (código dos middlewares aqui, sem alterações) ...
 const authenticateToken = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   if (process.env.FORCE_AUTH_BYPASS === 'true') {
     console.log('[AUTH_BYPASS] Autenticação bypassada. Usando usuário mock.');
@@ -111,7 +110,6 @@ if (GEMINI_API_KEY && GEMINI_API_KEY !== "SUA_CHAVE_API_GEMINI_AQUI" && GEMINI_A
   console.warn("[GEMINI] Chave da API do Gemini (GEMINI_API_KEY) não configurada ou inválida.");
 }
 
-
 async function doRegisterRoutes(app: Express): Promise<HttpServer> {
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -120,7 +118,7 @@ async function doRegisterRoutes(app: Express): Promise<HttpServer> {
 
   app.post('/api/auth/register', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const userData = schemaShared.insertUserSchema.parse(req.body); // Usando schemaShared
+      const userData = schemaShared.insertUserSchema.parse(req.body);
       const existingUserByEmail = await storage.getUserByEmail(userData.email);
       if (existingUserByEmail) return res.status(409).json({ error: 'Usuário com este email já existe.' });
       const existingUserByUsername = await storage.getUserByUsername(userData.username);
@@ -143,8 +141,7 @@ async function doRegisterRoutes(app: Express): Promise<HttpServer> {
       res.json({ user: { id: user.id, username: user.username, email: user.email }, token });
     } catch (error) { console.error(`[LOGIN_HANDLER] Erro no handler de login para email ${req.body.email}:`, error); next(error); }
   });
-
-  // --- Demais rotas usando a instância 'storage' ---
+  
   app.get('/api/dashboard', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try { if (!req.user || typeof req.user.id !== 'number') return res.status(401).json({ error: 'Usuário não autenticado.' });
       const userId = req.user.id; const timeRange = req.query.timeRange as string || '30d';
@@ -169,13 +166,13 @@ async function doRegisterRoutes(app: Express): Promise<HttpServer> {
         const { product, audience, objective, tone, copyPurposeKey, details, launchPhase } = req.body;
         if (!genAI) { return res.status(503).json({ error: "Serviço de IA não configurado." }); }
         if (!product || !audience || !copyPurposeKey || !details || !launchPhase ) { return res.status(400).json({ error: "Informações insuficientes (product, audience, copyPurposeKey, details, launchPhase obrigatórios)." });}
-        const currentPurposeConfig = schemaShared.allCopyPurposesConfig.find(p => p.key === copyPurposeKey); // Usando schemaShared
+        const currentPurposeConfig = schemaShared.allCopyPurposesConfig.find(p => p.key === copyPurposeKey); 
         if (!currentPurposeConfig) { return res.status(400).json({ error: "Finalidade da copy desconhecida." }); }
         const launchPhaseLabel = launchPhase === 'pre_launch' ? 'Pré-Lançamento' : launchPhase === 'launch' ? 'Lançamento' : 'Pós-Lançamento';
         let prompt = `Contexto da IA: Você é um Copywriter Mestre... (prompt completo como no seu original) ...DETALHES ESPECÍFICOS... ${Object.entries(details).map(([key, value]) => `- ${currentPurposeConfig.fields.find(f => f.name === key)?.label || key}: ${value || '(Não informado)'}`).join('\n')} ... TAREFA: ...`;
         const baseInfoForEnhancer = { product, audience, objective, tone };
         if (currentPurposeConfig.promptEnhancer) { prompt = currentPurposeConfig.promptEnhancer(prompt, details, baseInfoForEnhancer as any); }
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest", generationConfig: { responseMimeType: "application/json", responseSchema: schemaShared.aiResponseSchema as any, maxOutputTokens: 3000, temperature: 0.75 }, safetySettings: [ { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },  { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE }, { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE }, { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE } ]});
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest", generationConfig: { responseMimeType: "application/json", responseSchema: schemaShared.aiResponseSchema as any, maxOutputTokens: 3000, temperature: 0.75 }, safetySettings: [ { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE }, { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE }, { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE }, { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE } ]});
         const result = await model.generateContent(prompt);
         const responseText = result.response.text();
         let generatedData; try { generatedData = typeof responseText === 'string' ? JSON.parse(responseText) : responseText; } catch (parseError) { console.error("Erro parsear JSON da IA:", parseError, "Resposta bruta:", responseText); throw new Error("A IA retornou JSON inválido."); }
@@ -201,7 +198,7 @@ async function doRegisterRoutes(app: Express): Promise<HttpServer> {
   app.post('/api/assets/lp-delete', authenticateToken, async (req: AuthenticatedRequest, res, next) => { try {const {assets} = req.body; if(!Array.isArray(assets)) return res.status(400).json({error: 'Assets inválidos.'}); assets.forEach(a => { try { if (a && typeof a.src === 'string') { const assetUrl = new URL(a.src); const filename = path.basename(assetUrl.pathname); if (filename.includes("..") || !assetUrl.pathname.includes(`/${UPLOADS_ROOT_DIR}/lp-assets/`)) { console.warn(`[ASSET_DELETE_LP] Tentativa de path traversal ou URL inválida: ${a.src}`); return; } const filePath = path.join(LP_ASSETS_DIR, filename); if(fs.existsSync(filePath)) fs.unlink(filePath, (err) => { if(err) console.error("Erro ao deletar asset:", err)});}} catch(e){ console.error("Erro ao tentar deletar asset de LP:", e);} }); res.status(200).json({message: 'Solicitação processada.'});} catch(e){next(e);}});
   
   app.post('/api/mcp/upload-attachment', authenticateToken, mcpAttachmentUpload.single('attachment'), async (req, res, next) => {if (!req.file) return res.status(400).json({ error: 'Nenhum anexo.' }); const appBaseUrl = process.env.APP_BASE_URL || `http://localhost:${SERVER_PORT}`; const publicUrl = `${appBaseUrl}/${UPLOADS_ROOT_DIR}/mcp-attachments/${req.file.filename}`; res.status(200).json({ url: publicUrl });});
-  app.post('/api/mcp/converse', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => { /* ... Usa storage ... */ 
+  app.post('/api/mcp/converse', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => { 
     try {
       if (!req.user || typeof req.user.id !== 'number') { return res.status(401).json({ error: 'Usuário não autenticado corretamente.' }); }
       const { message: userMessage, sessionId, attachmentUrl } = req.body; const userId = req.user.id;
@@ -217,7 +214,7 @@ async function doRegisterRoutes(app: Express): Promise<HttpServer> {
         const intentResult = await intentModel.generateContent(promptForIntent); const intentResponse = intentResult.response.text().trim();
         const validRoutes = [ "/dashboard", "/campaigns", "/creatives", "/budget", "/landingpages", "/whatsapp", "/copy", "/funnel", "/metrics", "/alerts", "/export", "/integrations" ];
         if (validRoutes.includes(intentResponse)) { agentReplyText = `Claro! Te levarei para ${intentResponse.replace("/", "") || "o Dashboard"}...`; action = "navigate"; payload = intentResponse;
-        } else { const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" }); const messagesFromDb = await storage.getChatMessages(currentSession.id, userId); const historyForGemini = messagesFromDb.map(msg => ({ role: msg.sender === 'user' ? 'user' : 'model', parts: [{text: msg.text}] })); const chat = model.startChat({ history: historyForGemini, generationConfig: { maxOutputTokens: 300 }, safetySettings: [/* ... */]}); const result = await chat.sendMessage(userMessage || "Processar anexo"); agentReplyText = result.response.text(); }
+        } else { const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" }); const messagesFromDb = await storage.getChatMessages(currentSession.id, userId); const historyForGemini = messagesFromDb.map(msg => ({ role: msg.sender === 'user' ? 'user' : 'model', parts: [{text: msg.text}] })); const chat = model.startChat({ history: historyForGemini, generationConfig: { maxOutputTokens: 300 }, safetySettings: [ { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE }, { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE }, { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE }, { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE } ]}); const result = await chat.sendMessage(userMessage || "Processar anexo"); agentReplyText = result.response.text(); }
       } else { agentReplyText = `Recebido: "${userMessage}". IA não disponível.`; }
       await storage.addChatMessage({ sessionId: currentSession.id, sender: 'agent', text: agentReplyText });
       return res.json({ reply: agentReplyText, sessionId: currentSession.id, action, payload });
@@ -240,10 +237,8 @@ async function doRegisterRoutes(app: Express): Promise<HttpServer> {
   app.delete('/api/stages/:id', authenticateToken, async (req: AuthenticatedRequest, res, next) => { try { if (!req.user?.id) return res.status(401).json({error: 'Não autenticado'}); const id=parseInt(req.params.id); if(isNaN(id)) return res.status(400).json({error: 'ID Etapa Inválido'}); const s = await storage.deleteFunnelStage(id, req.user.id); if(!s) return res.status(404).json({error: 'Etapa não encontrada'}); res.status(200).json({message: 'Etapa excluída'});} catch(e){next(e);}});
 
 
-  // Servir arquivos estáticos da pasta de uploads
   app.use(`/${UPLOADS_ROOT_DIR}`, express.static(path.join(process.cwd(), UPLOADS_ROOT_DIR)));
 
-  // Middlewares de tratamento de erro devem ser os últimos
   app.use(handleZodError);
   app.use(handleError);
 
@@ -251,7 +246,6 @@ async function doRegisterRoutes(app: Express): Promise<HttpServer> {
   return httpServer;
 }
 
-// Exporta a função de setup das rotas (como no seu original, para ser chamada no index.ts)
 export const RouterSetup = {
   registerRoutes: doRegisterRoutes
 };
