@@ -1,7 +1,7 @@
-// Conteúdo para: utils.ts
+// client/src/components/flow/utils.ts
 import React from 'react';
 import { LucideProps } from 'lucide-react';
-import { cn } from "@/lib/utils"; // Supondo que cn já existe
+import { cn } from "@/lib/utils";
 
 // Constantes de Cor Neon (adaptadas de flow.tsx)
 export const NEON_COLOR = 'hsl(207, 90%, 54%)'; // Um azul neon padrão
@@ -24,7 +24,6 @@ export const popoverContentStyle = cn(
 );
 
 // Estilo para Scrollbar Customizada (adaptado de flow.tsx)
-// Idealmente, isso estaria no seu CSS global (index.css), mas para manter a portabilidade de flow.tsx:
 export const customScrollbarStyle = cn(
   "[&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar]:h-1.5",
   "[&::-webkit-scrollbar-track]:bg-transparent",
@@ -32,24 +31,29 @@ export const customScrollbarStyle = cn(
   "[&::-webkit-scrollbar-thumb:hover]:bg-muted-foreground/50"
 );
 
-
-// Componente IconWithGlow (adaptado de flow.tsx)
-export const IconWithGlow: React.FC<LucideProps & { icon: React.ElementType, color?: string, glowOpacity?: number }> = ({
-  icon: Icon,
-  className,
-  color,
-  glowOpacity = 0.5,
-  ...props
-}) => {
+// Componente IconWithGlow
+export const IconWithGlow: React.FC<LucideProps & { icon: React.ElementType, color?: string, glowOpacity?: number }> = (componentProps) => {
+  // Extrai 'icon' e renomeia para IconComponent.
+  // Extrai 'className', 'color', 'glowOpacity' explicitamente.
+  // O restante das props (que devem ser LucideProps) é capturado em 'rest'.
+  const { icon: IconComponent, className, color, glowOpacity = 0.5, ...rest } = componentProps;
+  
   const iconColor = color || NEON_COLOR;
+
+  // Uma verificação para garantir que IconComponent é válido (mais para robustez)
+  if (!IconComponent || (typeof IconComponent === 'string' && !/^[a-zA-Z]/.test(IconComponent))) {
+    console.error("IconWithGlow: 'icon' prop não é um componente React válido ou é uma string inválida para tag HTML.");
+    return null; 
+  }
+  
   return (
-    <Icon
+    <IconComponent
       className={cn("icon-with-glow", className)}
       style={{
         filter: `drop-shadow(0 0 4px hsla(${iconColor.replace('hsl(','').replace(')','').split(', ').map((v,i) => i === 2 ? v : v.replace('%','')).join(',')}, ${glowOpacity})) drop-shadow(0 0 8px hsla(${iconColor.replace('hsl(','').replace(')','').split(', ').map((v,i) => i === 2 ? v : v.replace('%','')).join(',')}, ${glowOpacity * 0.5}))`,
         color: iconColor,
       }}
-      {...props}
+      {...rest} {/* Espalha as props restantes (LucideProps como size, strokeWidth, etc.) */}
     />
   );
 };
