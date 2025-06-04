@@ -5,50 +5,44 @@ import { eq, count, sum, sql, desc, and, or, gte, lte, isNull, asc, ilike } from
 import bcrypt from 'bcrypt'; 
 import { z } from 'zod';
 
-// ... (Funções de simulação de gráfico e interface IStorage como antes, usando schema.Tipo)
+// Funções de simulação de dados de gráfico (mantidas)
+const chartColors = { palette: [ 'rgba(75, 192, 192, 1)', 'rgba(255, 99, 132, 1)', 'rgba(54, 162, 235, 1)', 'rgba(255, 206, 86, 1)', 'rgba(153, 102, 255, 1)', 'rgba(255, 159, 64, 1)', 'rgba(200, 200, 200, 1)' ], background: [ 'rgba(75, 192, 192, 0.2)', 'rgba(255, 99, 132, 0.2)', 'rgba(54, 162, 235, 0.2)', 'rgba(255, 206, 86, 0.2)', 'rgba(153, 102, 255, 0.2)', 'rgba(255, 159, 64, 0.2)', 'rgba(200, 200, 200, 0.2)' ] };
+function generateSimulatedLineChartData(label: string, startValue: number, countNum: number, maxFluctuation: number, color: string): { labels: string[], datasets: { label: string, data: number[], borderColor: string, backgroundColor: string, fill: boolean, tension: number }[] } { const dataPoints: number[] = []; const labels: string[] = []; let currentValue = startValue; for (let i = 0; i < countNum; i++) { labels.push(`Dia ${i + 1}`); dataPoints.push(Math.round(currentValue)); currentValue += (Math.random() * maxFluctuation * 2) - maxFluctuation; if (currentValue < 0) currentValue = 0; } return { labels: labels, datasets: [ { label: label, data: dataPoints, borderColor: color, backgroundColor: color.replace('1)', '0.2)'), fill: true, tension: 0.4, }, ], }; }
+function generateSimulatedBarChartData(label: string, categories: string[], baseValue: number, maxFluctuation: number, colors: string[]): { labels: string[], datasets: { label: string, data: number[], backgroundColor: string[] }[] } { const dataPoints: number[] = categories.map(() => Math.round(baseValue + (Math.random() * maxFluctuation * 2) - maxFluctuation)); return { labels: categories, datasets: [ { label: label, data: dataPoints, backgroundColor: colors, }, ], }; }
+function generateSimulatedDoughnutChartData(chartLabels: string[], baseValue: number, maxFluctuation: number, colors: string[]): { labels: string[], datasets: { data: number[], backgroundColor: string[], borderWidth: number }[] } { const dataPoints: number[] = chartLabels.map(() => Math.round(baseValue + (Math.random() * maxFluctuation * 2) - maxFluctuation)); return { labels: chartLabels, datasets: [ { data: dataPoints, backgroundColor: colors.map(color => color.replace('1)', '0.8)')), borderWidth: 0, }, ], }; }
 
-// Interface IStorage (usando os tipos do namespace 'schema')
 export interface IStorage {
-  // ... (assinaturas de todos os métodos, incluindo os novos para flows)
   getUser(id: number): Promise<schema.User | undefined>;
   getUserByUsername(username: string): Promise<schema.User | undefined>;
   getUserByEmail(email: string): Promise<schema.User | undefined>;
   createUser(user: schema.InsertUser): Promise<schema.User>;
   validatePassword(password: string, hashedPassword: string): Promise<boolean>;
-  
   getCampaigns(userId: number, limit?: number): Promise<schema.Campaign[]>;
   getCampaign(id: number, userId: number): Promise<schema.Campaign | undefined>;
   createCampaign(campaign: schema.InsertCampaign): Promise<schema.Campaign>;
   updateCampaign(id: number, campaign: Partial<Omit<schema.InsertCampaign, 'userId'>>, userId: number): Promise<schema.Campaign | undefined>;
   deleteCampaign(id: number, userId: number): Promise<boolean>;
-  
   getCreatives(userId: number, campaignId?: number | null): Promise<schema.Creative[]>;
   getCreative(id: number, userId: number): Promise<schema.Creative | undefined>;
   createCreative(creative: schema.InsertCreative): Promise<schema.Creative>;
   updateCreative(id: number, creative: Partial<Omit<schema.InsertCreative, 'userId'>>, userId: number): Promise<schema.Creative | undefined>;
   deleteCreative(id: number, userId: number): Promise<boolean>;
-  
   getMetricsForCampaign(campaignId: number, userId: number): Promise<schema.Metric[]>;
   createMetric(metricData: z.infer<typeof schema.insertMetricSchema>): Promise<schema.Metric>;
-  
   getMessages(userId: number, contactNumber?: string): Promise<schema.WhatsappMessage[]>;
   createMessage(messageData: schema.InsertWhatsappMessage): Promise<schema.WhatsappMessage>;
   markMessageAsRead(id: number, userId: number): Promise<boolean>;
   getContacts(userId: number): Promise<{ contactNumber: string; contactName: string | null; lastMessage: string; timestamp: Date, unreadCount: number }[]>;
-  
   getCopies(userId: number, campaignId?: number | null, phase?: string, purposeKey?: string, searchTerm?: string): Promise<schema.Copy[]>;
   createCopy(copy: schema.InsertCopy): Promise<schema.Copy>;
   updateCopy(id: number, copyData: Partial<Omit<schema.InsertCopy, 'userId' | 'id' | 'createdAt'>>, userId: number): Promise<schema.Copy | undefined>;
   deleteCopy(id: number, userId: number): Promise<boolean>;
-  
   getAlerts(userId: number, onlyUnread?: boolean): Promise<schema.Alert[]>;
   createAlert(alertData: schema.InsertAlert): Promise<schema.Alert>;
   markAlertAsRead(id: number, userId: number): Promise<boolean>;
-  
   getBudgets(userId: number, campaignId?: number | null): Promise<schema.Budget[]>;
   createBudget(budget: schema.InsertBudget): Promise<schema.Budget>;
   updateBudget(id: number, budgetData: Partial<Omit<schema.InsertBudget, 'userId' | 'campaignId'>>, userId: number): Promise<schema.Budget | undefined>;
-  
   getLandingPages(userId: number): Promise<schema.LandingPage[]>;
   getLandingPage(id: number, userId: number): Promise<schema.LandingPage | undefined>;
   getLandingPageBySlug(slug: string): Promise<schema.LandingPage | undefined>;
@@ -56,7 +50,6 @@ export interface IStorage {
   createLandingPage(lpData: schema.InsertLandingPage): Promise<schema.LandingPage>;
   updateLandingPage(id: number, lpData: Partial<Omit<schema.InsertLandingPage, 'userId'>>, userId: number): Promise<schema.LandingPage | undefined>;
   deleteLandingPage(id: number, userId: number): Promise<boolean>;
-  
   createChatSession(userId: number, title?: string): Promise<schema.ChatSession>;
   getChatSession(sessionId: number, userId: number): Promise<schema.ChatSession | undefined>;
   getChatSessions(userId: number): Promise<schema.ChatSession[]>;
@@ -64,21 +57,16 @@ export interface IStorage {
   deleteChatSession(sessionId: number, userId: number): Promise<boolean>;
   addChatMessage(messageData: schema.InsertChatMessage): Promise<schema.ChatMessage>;
   getChatMessages(sessionId: number, userId: number): Promise<schema.ChatMessage[]>;
-  
   getDashboardData(userId: number, timeRange: string): Promise<any>;
-  
   getFunnels(userId: number, campaignId?: number | null): Promise<schema.Funnel[]>;
   getFunnel(id: number, userId: number): Promise<schema.Funnel | undefined>;
   createFunnel(funnelData: schema.InsertFunnel): Promise<schema.Funnel>;
   updateFunnel(id: number, funnelData: Partial<Omit<schema.InsertFunnel, 'userId' | 'campaignId'>>, userId: number): Promise<schema.Funnel | undefined>;
   deleteFunnel(id: number, userId: number): Promise<boolean>;
-  
   getFunnelStages(funnelId: number, userId: number): Promise<schema.FunnelStage[]>;
   createFunnelStage(stageData: schema.InsertFunnelStage): Promise<schema.FunnelStage>;
   updateFunnelStage(id: number, stageData: Partial<Omit<schema.InsertFunnelStage, 'funnelId'>>, userId: number): Promise<schema.FunnelStage | undefined>;
   deleteFunnelStage(id: number, userId: number): Promise<boolean>;
-
-  // Métodos para Flows (WhatsApp)
   getFlows(userId: number, campaignId?: number | null): Promise<schema.Flow[]>;
   getFlow(id: number, userId: number): Promise<schema.Flow | undefined>;
   createFlow(flowData: schema.InsertFlow): Promise<schema.Flow>;
@@ -87,64 +75,6 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
-  // ... (todos os seus métodos existentes, usando schema.NomeDaTabela)
-
-  // Implementação dos Métodos para Flows
-  async getFlows(userId: number, campaignId?: number | null): Promise<schema.Flow[]> {
-    const conditions: any[] = [eq(schema.flows.userId, userId)];
-    if (campaignId !== undefined) {
-      conditions.push(campaignId === null ? isNull(schema.flows.campaignId) : eq(schema.flows.campaignId, campaignId));
-    }
-    return db.select().from(schema.flows)
-      .where(and(...conditions))
-      .orderBy(desc(schema.flows.createdAt));
-  }
-
-  async getFlow(id: number, userId: number): Promise<schema.Flow | undefined> {
-    const [flow] = await db.select().from(schema.flows)
-      .where(and(eq(schema.flows.id, id), eq(schema.flows.userId, userId)))
-      .limit(1);
-    return flow;
-  }
-
-  async createFlow(flowData: schema.InsertFlow): Promise<schema.Flow> {
-    const dataToInsert = { ...flowData, elements: flowData.elements || { nodes: [], edges: [] } };
-    const [newFlow] = await db.insert(schema.flows).values(dataToInsert).returning();
-    if (!newFlow) throw new Error("Falha ao criar fluxo.");
-    return newFlow;
-  }
-
-  async updateFlow(id: number, flowData: Partial<Omit<schema.InsertFlow, 'userId' | 'campaignId'>>, userId: number): Promise<schema.Flow | undefined> {
-    const dataToSet: Partial<schema.Flow & { campaignId?: number | null }> = {
-      ...flowData,
-      updatedAt: new Date()
-    };
-    if (flowData.hasOwnProperty('campaignId')) {
-      dataToSet.campaignId = flowData.campaignId;
-    }
-    if (flowData.elements && (typeof flowData.elements !== 'object' || flowData.elements === null)) {
-        console.warn(`[storage.updateFlow] Tentativa de salvar 'elements' com tipo inválido: ${typeof flowData.elements}. Resetando para default.`);
-        dataToSet.elements = { nodes: [], edges: [] };
-    } else if (flowData.elements) {
-        dataToSet.elements = flowData.elements;
-    }
-
-
-    const [updatedFlow] = await db.update(schema.flows)
-      .set(dataToSet)
-      .where(and(eq(schema.flows.id, id), eq(schema.flows.userId, userId)))
-      .returning();
-    return updatedFlow;
-  }
-
-  async deleteFlow(id: number, userId: number): Promise<boolean> {
-    const result = await db.delete(schema.flows)
-      .where(and(eq(schema.flows.id, id), eq(schema.flows.userId, userId)));
-    return (result.rowCount ?? 0) > 0;
-  }
-  
-  // ... (Restante dos seus métodos existentes, como getUserByEmail, createUser, etc., usando schema.NomeDaTabela)
-  // Métodos de User
   async getUser(id: number): Promise<schema.User | undefined> { const result = await db.select().from(schema.users).where(eq(schema.users.id, id)).limit(1); return result[0]; }
   async getUserByUsername(username: string): Promise<schema.User | undefined> { const result = await db.select().from(schema.users).where(eq(schema.users.username, username)).limit(1); return result[0]; }
   async getUserByEmail(email: string): Promise<schema.User | undefined> { const result = await db.select().from(schema.users).where(eq(schema.users.email, email)).limit(1); return result[0]; }
@@ -200,6 +130,12 @@ export class DatabaseStorage implements IStorage {
   async createFunnelStage(stageData: schema.InsertFunnelStage): Promise<schema.FunnelStage> { const [newStage] = await db.insert(schema.funnelStages).values(stageData).returning(); if (!newStage) throw new Error("Falha ao criar etapa do funil."); return newStage; }
   async updateFunnelStage(id: number, stageData: Partial<Omit<schema.InsertFunnelStage, 'funnelId'>>, userId: number): Promise<schema.FunnelStage | undefined> { const existingStage = await db.query.funnelStages.findFirst({ where: eq(schema.funnelStages.id, id), with: { funnel: { columns: { userId: true } } } }); if (!existingStage || existingStage.funnel?.userId !== userId) { throw new Error("Etapa do funil não encontrada ou não pertence ao usuário."); } const [updatedStage] = await db.update(schema.funnelStages) .set({ ...stageData, updatedAt: new Date() }) .where(eq(schema.funnelStages.id, id)) .returning(); return updatedStage; }
   async deleteFunnelStage(id: number, userId: number): Promise<boolean> { const existingStage = await db.query.funnelStages.findFirst({ where: eq(schema.funnelStages.id, id), with: { funnel: { columns: { userId: true } } } }); if (!existingStage || existingStage.funnel?.userId !== userId) { console.warn(`Tentativa de deletar etapa ${id} não encontrada ou não pertencente ao usuário ${userId}.`); return false;  } const result = await db.delete(schema.funnelStages).where(eq(schema.funnelStages.id, id)); return (result.rowCount ?? 0) > 0; }
+  async getFlows(userId: number, campaignId?: number | null): Promise<schema.Flow[]> { const conditions: any[] = [eq(schema.flows.userId, userId)]; if (campaignId !== undefined) { conditions.push(campaignId === null ? isNull(schema.flows.campaignId) : eq(schema.flows.campaignId, campaignId)); } return db.select().from(schema.flows).where(and(...conditions)).orderBy(desc(schema.flows.createdAt)); }
+  async getFlow(id: number, userId: number): Promise<schema.Flow | undefined> { const [flow] = await db.select().from(schema.flows).where(and(eq(schema.flows.id, id), eq(schema.flows.userId, userId))).limit(1); return flow;}
+  async createFlow(flowData: schema.InsertFlow): Promise<schema.Flow> { const dataToInsert = { ...flowData, elements: flowData.elements || { nodes: [], edges: [] } }; const [newFlow] = await db.insert(schema.flows).values(dataToInsert).returning(); if (!newFlow) throw new Error("Falha ao criar fluxo."); return newFlow;}
+  async updateFlow(id: number, flowData: Partial<Omit<schema.InsertFlow, 'userId' | 'campaignId'>>, userId: number): Promise<schema.Flow | undefined> { const dataToSet: Partial<schema.Flow & { campaignId?: number | null }> = { ...flowData, updatedAt: new Date() }; if (flowData.hasOwnProperty('campaignId')) { dataToSet.campaignId = flowData.campaignId; } if (flowData.elements && (typeof flowData.elements !== 'object' || flowData.elements === null)) { console.warn(`[storage.updateFlow] Tentativa de salvar 'elements' com tipo inválido: ${typeof flowData.elements}. Resetando para default.`); dataToSet.elements = { nodes: [], edges: [] }; } else if (flowData.elements) { dataToSet.elements = flowData.elements; } const [updatedFlow] = await db.update(schema.flows).set(dataToSet).where(and(eq(schema.flows.id, id), eq(schema.flows.userId, userId))).returning(); return updatedFlow;}
+  async deleteFlow(id: number, userId: number): Promise<boolean> { const result = await db.delete(schema.flows).where(and(eq(schema.flows.id, id), eq(schema.flows.userId, userId))); return (result.rowCount ?? 0) > 0; }
 }
 
+// Alteração: Revertendo para exportação nomeada
 export const storage = new DatabaseStorage();
