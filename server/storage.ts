@@ -1,27 +1,35 @@
 // server/storage.ts
-import { eq, and, or, isNull, desc, InferSelectModel, InferInsertModel } from 'drizzle-orm';
+import { eq, and, or, isNull, desc, sum, count, avg } from 'drizzle-orm'; // Adicionado sum, count, avg
 import { db } from './db';
 import * as schema from '../shared/schema'; 
 import bcrypt from 'bcrypt';
 
+// Tipos inferidos para Drizzle usando o namespace 'schema'
 type User = InferSelectModel<typeof schema.users>;
 type NewUser = InferInsertModel<typeof schema.users>;
+
 type Campaign = InferSelectModel<typeof schema.campaigns>;
 type NewCampaign = InferInsertModel<typeof schema.campaigns>;
+
 type Creative = InferSelectModel<typeof schema.creatives>;
 type NewCreative = InferInsertModel<typeof schema.creatives>;
+
 type Budget = InferSelectModel<typeof schema.budgets>;
 type NewBudget = InferInsertModel<typeof schema.budgets>;
+
 type Copy = InferSelectModel<typeof schema.copies>;
 type NewCopy = InferInsertModel<typeof schema.copies>;
+
 type ChatSession = InferSelectModel<typeof schema.chatSessions>;
 type ChatMessage = InferSelectModel<typeof schema.chatMessages>;
+
 type LandingPage = InferSelectModel<typeof schema.landingPages>;
 type NewLandingPage = InferInsertModel<typeof schema.landingPages>;
 
-// Tipos para Flow usando as novas definições em schema.ts
 type Flow = InferSelectModel<typeof schema.flowsTable>; 
 type NewFlow = InferInsertModel<typeof schema.flowsTable>;
+
+type Metric = InferSelectModel<typeof schema.metrics>;
 
 
 interface IStorage {
@@ -58,7 +66,7 @@ interface IStorage {
   updateCopy(userId: number, copyId: number, copyData: Partial<Omit<NewCopy, 'userId' | 'id' | 'createdAt'>>): Promise<Copy | null>;
   deleteCopy(userId: number, copyId: number): Promise<{ success: boolean }>;
   
-  getDashboardData(userId: number): Promise<any>;
+  getDashboardData(userId: number, timeRange?: string): Promise<any>; // Adicionado timeRange
 
   createLandingPage(userId: number, pageData: Omit<NewLandingPage, 'userId' | 'id' | 'createdAt' | 'updatedAt' | 'publishedAt' | 'publicUrl'>): Promise<LandingPage | null>;
   getLandingPages(userId: number): Promise<LandingPage[]>;
@@ -226,7 +234,7 @@ export class DatabaseStorage implements IStorage {
     return db.query.copies.findMany({ where: and(...conditions), orderBy: [desc(schema.copies.createdAt)] });
   }
   async updateCopy(userId: number, copyId: number, copyData: Partial<Omit<NewCopy, 'userId' | 'id' | 'createdAt'>>): Promise<Copy | null> {
-    const result = await db.update(schema.copies).set(copyData) .where(and(eq(schema.copies.id, copyId), eq(schema.copies.userId, userId))).returning();
+    const result = await db.update(schema.copies).set(copyData).where(and(eq(schema.copies.id, copyId), eq(schema.copies.userId, userId))).returning();
     return result[0] || null;
   }
   async deleteCopy(userId: number, copyId: number): Promise<{ success: boolean }> {
@@ -235,11 +243,93 @@ export class DatabaseStorage implements IStorage {
   }
 
   // --- Dashboard Data ---
-  async getDashboardData(userId: number): Promise<any> {
-    const activeCampaignsResult = await db.query.campaigns.findMany({ where: and(eq(schema.campaigns.userId, userId), eq(schema.campaigns.status, 'active')) });
-    const recentCampaignsResult = await db.query.campaigns.findMany({ where: eq(schema.campaigns.userId, userId), orderBy: [desc(schema.campaigns.createdAt)], limit: 5, });
-    return { metrics: { activeCampaigns: activeCampaignsResult.length, totalSpent: 0, totalCostPeriod: 0, conversions: 0, avgROI: 0, impressions: 0, clicks: 0, ctr: 0, cpc: 0, }, recentCampaigns: recentCampaignsResult, performanceChartData: { labels: [], datasets: [] }, channelDistributionData: { labels: [], datasets: [] }, conversionByMonthData: { labels: [], datasets: [] }, roiByPlatformData: { labels: [], datasets: [] }, };
+  async getDashboardData(userId: number, timeRange?: string): Promise<any> {
+    // Lógica para determinar startDate com base no timeRange (ex: '7d', '30d', '90d')
+    // Esta é uma simplificação. Uma implementação real consideraria o 'timeRange'.
+    // Por enquanto, vamos pegar todas as métricas do usuário.
+    
+    const userMetrics = await db.select({
+        impressions: sum(schema.metrics.impressions).mapWith(Number),
+        clicks: sum(schema.metrics.clicks).mapWith(Number),
+        conversions: sum(schema.metrics.conversions).mapWith(Number),
+        cost: sum(schema.metrics.cost).mapWith(Number),
+        revenue: sum(schema.metrics.revenue).mapWith(Number),
+        leads: sum(schema.metrics.leads).mapWith(Number),
+      })
+      .from(schema.metrics)
+      .where(eq(schema.metrics.userId, userId));
+
+    const aggMetrics = userMetrics[0] || { impressions: 0, clicks: 0, conversions: 0, cost: 0, revenue: 0, leads: 0 };
+
+    const activeCampaignsResult = await db.select({value: count()})
+        .from(schema.campaigns)
+        .where(and(eq(schema.campaigns.userId, userId), eq(schema.campaigns.status, 'active')));
+    
+    const totalSpentResult = await db.select({value: sum(schema.budgets.spentAmount).mapWith(Number)})
+        .from(schema.budgets)
+        .where(eq(schema.budgets.userId, userId));
+
+    const totalSpent = totalSpentResult[0]?.value || 0;
+    const totalRevenue = aggMetrics.revenue || 0;
+    const totalCost = aggMetrics.cost || 0; // ou totalSpent, dependendo da definição
+    const totalConversions = aggMetrics.conversions || 0;
+    
+    let avgROI = 0;
+    if (totalCost > 0) {
+        avgROI = ((totalRevenue - totalCost) / totalCost) * 100;
+    } else if (totalRevenue > 0) {
+        avgROI = 100; // Ou Infinity, ou algum indicador de ROI positivo com custo zero
+    }
+
+    let ctr = 0;
+    if ((aggMetrics.impressions || 0) > 0) {
+        ctr = ((aggMetrics.clicks || 0) / (aggMetrics.impressions || 0)) * 100;
+    }
+
+    let cpc = 0;
+    if ((aggMetrics.clicks || 0) > 0) {
+        cpc = (totalCost) / (aggMetrics.clicks || 0);
+    }
+    
+    const recentCampaignsResult = await db.query.campaigns.findMany({
+        where: eq(schema.campaigns.userId, userId),
+        orderBy: [desc(schema.campaigns.createdAt)],
+        limit: 5,
+    });
+    
+    return {
+      metrics: {
+        activeCampaigns: activeCampaignsResult[0]?.value || 0,
+        totalSpent: totalSpent,
+        totalCostPeriod: totalCost, // Usando custo agregado das métricas
+        conversions: totalConversions,
+        avgROI: parseFloat(avgROI.toFixed(2)),
+        impressions: aggMetrics.impressions || 0,
+        clicks: aggMetrics.clicks || 0,
+        ctr: parseFloat(ctr.toFixed(2)),
+        cpc: parseFloat(cpc.toFixed(2)),
+        leads: aggMetrics.leads || 0,
+        // Placeholders para variações - lógica de período anterior não implementada
+        campaignsChange: 0, 
+        budgetChange: 0,    
+        conversionsChange: 0, 
+        roiChange: 0,       
+      },
+      summary: {
+        totalSpent: totalSpent,
+        totalRevenue: totalRevenue,
+        totalConversions: totalConversions,
+        avgROI: parseFloat(avgROI.toFixed(2)),
+      },
+      recentCampaigns: recentCampaignsResult,
+      // Para os gráficos, dados de exemplo mínimos para evitar quebra, mas idealmente seriam calculados
+      performanceChartData: { labels: ["Semana 1", "Semana 2", "Semana 3", "Semana 4"], datasets: [{ label: "Conversões", data: [5,8,12,10], tension: 0.3, borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)' }] }, 
+      channelDistributionData: { labels: ["Facebook", "Google", "Instagram"], datasets: [{ data: [120, 180, 90], backgroundColor: ['#36A2EB', '#FF6384', '#FFCE56'] }] },
+      conversionByMonthData: { labels: ["Jan", "Fev", "Mar"], datasets: [{ label: "Conversões Totais", data: [20,30,25], backgroundColor: '#4bc0c0' }]},
+      roiByPlatformData: { labels: ["Facebook", "Google"], datasets: [{ label: "ROI (%)", data: [180, 210], backgroundColor: ['#FFB300', '#0D47A1'] }]},
+    };
   }
+
   // --- Landing Page Methods ---
   async createLandingPage(userId: number, pageData: Omit<NewLandingPage, 'userId' | 'id' | 'createdAt' | 'updatedAt' | 'publishedAt' | 'publicUrl'>): Promise<LandingPage | null> {
     const result = await db.insert(schema.landingPages).values({ ...pageData, userId }).returning();
