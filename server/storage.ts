@@ -1,5 +1,5 @@
 // server/storage.ts
-import { eq, and, or, isNull, desc, sum, count, avg } from 'drizzle-orm'; // Adicionado sum, count, avg
+import { eq, and, or, isNull, desc, sum, count, avg } from 'drizzle-orm';
 import { db } from './db';
 import * as schema from '../shared/schema'; 
 import bcrypt from 'bcrypt';
@@ -29,7 +29,7 @@ type NewLandingPage = InferInsertModel<typeof schema.landingPages>;
 type Flow = InferSelectModel<typeof schema.flowsTable>; 
 type NewFlow = InferInsertModel<typeof schema.flowsTable>;
 
-type Metric = InferSelectModel<typeof schema.metrics>;
+// type Metric = InferSelectModel<typeof schema.metrics>; // Não usado diretamente aqui
 
 
 interface IStorage {
@@ -66,7 +66,7 @@ interface IStorage {
   updateCopy(userId: number, copyId: number, copyData: Partial<Omit<NewCopy, 'userId' | 'id' | 'createdAt'>>): Promise<Copy | null>;
   deleteCopy(userId: number, copyId: number): Promise<{ success: boolean }>;
   
-  getDashboardData(userId: number, timeRange?: string): Promise<any>; // Adicionado timeRange
+  getDashboardData(userId: number, timeRange?: string): Promise<any>;
 
   createLandingPage(userId: number, pageData: Omit<NewLandingPage, 'userId' | 'id' | 'createdAt' | 'updatedAt' | 'publishedAt' | 'publicUrl'>): Promise<LandingPage | null>;
   getLandingPages(userId: number): Promise<LandingPage[]>;
@@ -110,7 +110,6 @@ export class DatabaseStorage implements IStorage {
     return isValid ? userRecord : null;
   }
 
-  // --- Flow Methods ---
   async createFlow(userId: number, flowData: Omit<NewFlow, 'userId' | 'id' | 'createdAt' | 'updatedAt'>): Promise<Flow | null> {
     const result = await db.insert(schema.flowsTable).values({ ...flowData, userId }).returning();
     return result[0] || null;
@@ -162,7 +161,6 @@ export class DatabaseStorage implements IStorage {
     return { success: false, message: "Fluxo não encontrado ou usuário não autorizado." };
   }
 
-  // --- Campaign Methods ---
   async getCampaigns(userId: number): Promise<Campaign[]> {
     return db.query.campaigns.findMany({ where: eq(schema.campaigns.userId, userId), orderBy: [desc(schema.campaigns.updatedAt)], });
   }
@@ -182,7 +180,6 @@ export class DatabaseStorage implements IStorage {
     return result.length > 0 ? { success: true } : { success: false };
   }
 
-  // --- Creative Methods ---
   async getCreatives(userId: number, campaignId?: number): Promise<Creative[]> {
     const conditions = [eq(schema.creatives.userId, userId)];
     if (campaignId) conditions.push(eq(schema.creatives.campaignId, campaignId));
@@ -204,7 +201,6 @@ export class DatabaseStorage implements IStorage {
     return result.length > 0 ? { success: true } : { success: false };
   }
 
-  // --- Budget Methods ---
   async getBudgets(userId: number, campaignId?: number): Promise<Budget[]> {
     const conditions = [eq(schema.budgets.userId, userId)];
     if (campaignId) conditions.push(eq(schema.budgets.campaignId, campaignId));
@@ -223,7 +219,6 @@ export class DatabaseStorage implements IStorage {
     return result.length > 0 ? { success: true } : { success: false };
   }
   
-  // --- Copy Methods ---
   async createCopy(userId: number, copyData: Omit<NewCopy, 'userId' | 'id' | 'createdAt'>): Promise<Copy | null> {
     const result = await db.insert(schema.copies).values({ ...copyData, userId }).returning();
     return result[0] || null;
@@ -234,61 +229,53 @@ export class DatabaseStorage implements IStorage {
     return db.query.copies.findMany({ where: and(...conditions), orderBy: [desc(schema.copies.createdAt)] });
   }
   async updateCopy(userId: number, copyId: number, copyData: Partial<Omit<NewCopy, 'userId' | 'id' | 'createdAt'>>): Promise<Copy | null> {
-    const result = await db.update(schema.copies).set(copyData).where(and(eq(schema.copies.id, copyId), eq(schema.copies.userId, userId))).returning();
+    const result = await db.update(schema.copies).set(copyData) .where(and(eq(schema.copies.id, copyId), eq(schema.copies.userId, userId))).returning();
     return result[0] || null;
   }
   async deleteCopy(userId: number, copyId: number): Promise<{ success: boolean }> {
     const result = await db.delete(schema.copies).where(and(eq(schema.copies.id, copyId), eq(schema.copies.userId, userId))).returning({ id: schema.copies.id });
     return result.length > 0 ? { success: true } : { success: false };
   }
-
-  // --- Dashboard Data ---
+  
   async getDashboardData(userId: number, timeRange?: string): Promise<any> {
-    // Lógica para determinar startDate com base no timeRange (ex: '7d', '30d', '90d')
-    // Esta é uma simplificação. Uma implementação real consideraria o 'timeRange'.
-    // Por enquanto, vamos pegar todas as métricas do usuário.
-    
-    const userMetrics = await db.select({
-        impressions: sum(schema.metrics.impressions).mapWith(Number),
-        clicks: sum(schema.metrics.clicks).mapWith(Number),
-        conversions: sum(schema.metrics.conversions).mapWith(Number),
-        cost: sum(schema.metrics.cost).mapWith(Number),
-        revenue: sum(schema.metrics.revenue).mapWith(Number),
-        leads: sum(schema.metrics.leads).mapWith(Number),
-      })
-      .from(schema.metrics)
-      .where(eq(schema.metrics.userId, userId));
-
-    const aggMetrics = userMetrics[0] || { impressions: 0, clicks: 0, conversions: 0, cost: 0, revenue: 0, leads: 0 };
-
     const activeCampaignsResult = await db.select({value: count()})
         .from(schema.campaigns)
         .where(and(eq(schema.campaigns.userId, userId), eq(schema.campaigns.status, 'active')));
     
-    const totalSpentResult = await db.select({value: sum(schema.budgets.spentAmount).mapWith(Number)})
-        .from(schema.budgets)
-        .where(eq(schema.budgets.userId, userId));
+    const metricsAggregated = await db
+        .select({
+            totalSpent: sum(schema.metrics.cost).mapWith(Number),
+            totalConversions: sum(schema.metrics.conversions).mapWith(Number),
+            totalImpressions: sum(schema.metrics.impressions).mapWith(Number),
+            totalClicks: sum(schema.metrics.clicks).mapWith(Number),
+            totalRevenue: sum(schema.metrics.revenue).mapWith(Number), // Adicionado
+        })
+        .from(schema.metrics)
+        .where(eq(schema.metrics.userId, userId)); // Idealmente filtrar por timeRange aqui também
 
-    const totalSpent = totalSpentResult[0]?.value || 0;
-    const totalRevenue = aggMetrics.revenue || 0;
-    const totalCost = aggMetrics.cost || 0; // ou totalSpent, dependendo da definição
-    const totalConversions = aggMetrics.conversions || 0;
+    const agg = metricsAggregated[0] || { 
+        totalSpent: 0, totalConversions: 0, totalImpressions: 0, totalClicks: 0, totalRevenue: 0
+    };
+
+    const totalSpent = agg.totalSpent || 0;
+    const totalRevenue = agg.totalRevenue || 0;
+    const totalConversions = agg.totalConversions || 0;
     
     let avgROI = 0;
-    if (totalCost > 0) {
-        avgROI = ((totalRevenue - totalCost) / totalCost) * 100;
+    if (totalSpent > 0) {
+        avgROI = ((totalRevenue - totalSpent) / totalSpent) * 100;
     } else if (totalRevenue > 0) {
-        avgROI = 100; // Ou Infinity, ou algum indicador de ROI positivo com custo zero
+        avgROI = 100; // Ou Infinity, ou tratar como N/A
     }
 
     let ctr = 0;
-    if ((aggMetrics.impressions || 0) > 0) {
-        ctr = ((aggMetrics.clicks || 0) / (aggMetrics.impressions || 0)) * 100;
+    if ((agg.totalImpressions || 0) > 0) {
+        ctr = ((agg.totalClicks || 0) / (agg.totalImpressions || 0)) * 100;
     }
 
     let cpc = 0;
-    if ((aggMetrics.clicks || 0) > 0) {
-        cpc = (totalCost) / (aggMetrics.clicks || 0);
+    if ((agg.totalClicks || 0) > 0) {
+        cpc = (totalSpent) / (agg.totalClicks || 0);
     }
     
     const recentCampaignsResult = await db.query.campaigns.findMany({
@@ -297,32 +284,35 @@ export class DatabaseStorage implements IStorage {
         limit: 5,
     });
     
-    return {
-      metrics: {
+    // Sempre retornar a estrutura completa esperada pelo frontend
+    const metricsResponse = {
         activeCampaigns: activeCampaignsResult[0]?.value || 0,
-        totalSpent: totalSpent,
-        totalCostPeriod: totalCost, // Usando custo agregado das métricas
+        totalSpent: parseFloat(totalSpent.toFixed(2)),
+        totalCostPeriod: parseFloat(totalSpent.toFixed(2)), // Simplificado por agora
         conversions: totalConversions,
         avgROI: parseFloat(avgROI.toFixed(2)),
-        impressions: aggMetrics.impressions || 0,
-        clicks: aggMetrics.clicks || 0,
+        impressions: agg.totalImpressions || 0,
+        clicks: agg.totalClicks || 0,
         ctr: parseFloat(ctr.toFixed(2)),
         cpc: parseFloat(cpc.toFixed(2)),
-        leads: aggMetrics.leads || 0,
-        // Placeholders para variações - lógica de período anterior não implementada
-        campaignsChange: 0, 
-        budgetChange: 0,    
-        conversionsChange: 0, 
-        roiChange: 0,       
-      },
-      summary: {
-        totalSpent: totalSpent,
-        totalRevenue: totalRevenue,
-        totalConversions: totalConversions,
-        avgROI: parseFloat(avgROI.toFixed(2)),
-      },
+        leads: await db.select({value: sum(schema.metrics.leads).mapWith(Number)}).from(schema.metrics).where(eq(schema.metrics.userId, userId)).then(r => r[0]?.value || 0),
+        campaignsChange: 0, // Placeholder, necessita lógica de período anterior
+        budgetChange: 0,    // Placeholder
+        conversionsChange: 0, // Placeholder
+        roiChange: 0,       // Placeholder
+    };
+
+    const summaryResponse = {
+        totalSpent: metricsResponse.totalSpent,
+        totalRevenue: parseFloat(totalRevenue.toFixed(2)),
+        totalConversions: metricsResponse.conversions,
+        avgROI: metricsResponse.avgROI,
+      };
+    
+    return {
+      metrics: metricsResponse,
+      summary: summaryResponse,
       recentCampaigns: recentCampaignsResult,
-      // Para os gráficos, dados de exemplo mínimos para evitar quebra, mas idealmente seriam calculados
       performanceChartData: { labels: ["Semana 1", "Semana 2", "Semana 3", "Semana 4"], datasets: [{ label: "Conversões", data: [5,8,12,10], tension: 0.3, borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)' }] }, 
       channelDistributionData: { labels: ["Facebook", "Google", "Instagram"], datasets: [{ data: [120, 180, 90], backgroundColor: ['#36A2EB', '#FF6384', '#FFCE56'] }] },
       conversionByMonthData: { labels: ["Jan", "Fev", "Mar"], datasets: [{ label: "Conversões Totais", data: [20,30,25], backgroundColor: '#4bc0c0' }]},
@@ -330,7 +320,6 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  // --- Landing Page Methods ---
   async createLandingPage(userId: number, pageData: Omit<NewLandingPage, 'userId' | 'id' | 'createdAt' | 'updatedAt' | 'publishedAt' | 'publicUrl'>): Promise<LandingPage | null> {
     const result = await db.insert(schema.landingPages).values({ ...pageData, userId }).returning();
     return result[0] || null;
@@ -356,7 +345,6 @@ export class DatabaseStorage implements IStorage {
     return result.length > 0 ? { success: true } : { success: false };
   }
 
-  // Chat MCP Methods
   async createChatSession(userId: number, title: string): Promise<ChatSession | null> {
     const result = await db.insert(schema.chatSessions).values({ userId, title }).returning();
     return result[0] || null;
