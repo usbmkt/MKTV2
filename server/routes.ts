@@ -1,17 +1,17 @@
 // server/routes.ts
 import { Router, Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { storage } from './storage';
+import { storage } from './storage'; // storage.ts já usa o schema namespaced
 import { JWT_SECRET, GEMINI_API_KEY } from './config';
-import * as schema from '../shared/schema'; 
+import * as schema from '../shared/schema'; // Importar tudo de shared/schema como 'schema'
 import { z, ZodError } from 'zod';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs/promises';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
-import MCPHandler from './mcp_handler'; // Corrigido para importação default
+import { MCPHandler } from './mcp_handler'; // Mantendo a importação nomeada
 
-const mcpHandler = new MCPHandler(/* Removido storage daqui, pois o construtor de MCPHandler foi alterado */);
+const mcpHandler = new MCPHandler(/* Se MCPHandler precisar de storage, ele deve ser injetado aqui ou MCPHandler deve importar storage diretamente */);
 
 interface AuthenticatedRequest extends Request {
   user: {
@@ -90,7 +90,6 @@ const creativesUpload = createUploadMiddleware('creatives-assets');
 const lpAssetUpload = createUploadMiddleware('lp-assets');
 const mcpAttachmentUpload = createUploadMiddleware('mcp-attachments');
 
-
 const router = Router();
 
 router.use((req: Request, res: Response, next: NextFunction) => {
@@ -119,17 +118,23 @@ router.post('/api/auth/register', async (req: Request, res: Response, next: Next
   try {
     const userData = schema.insertUserSchema.parse(req.body);
     const userRecord = await storage.createUser(userData);
-    if (!userRecord) return res.status(500).json({ error: 'Falha ao criar usuário' });
+    if (!userRecord) {
+        console.error("[REGISTER_FAIL] storage.createUser retornou null para userData:", userData);
+        return res.status(500).json({ error: 'Falha ao criar usuário no banco de dados.' });
+    }
     const token = jwt.sign({ id: userRecord.id, email: userRecord.email }, JWT_SECRET!, { expiresIn: '7d' });
-    res.json({ user: { id: userRecord.id, username: userRecord.username, email: userRecord.email }, token });
+    res.status(201).json({ user: { id: userRecord.id, username: userRecord.username, email: userRecord.email }, token });
   } catch (error: any) {
     if (error instanceof ZodError) return handleZodError(error, req, res, next);
-    if (error.code === 'SQLITE_CONSTRAINT' && error.message.includes('UNIQUE constraint failed: users.email')) { // Ajustar para erro PostgreSQL se mudar o dialeto
+    if (error.code === '23505') { // Código de erro do PostgreSQL para unique_violation
+      if (error.constraint === 'users_email_unique' || (error.detail && error.detail.includes('(email)'))) {
         return res.status(409).json({ error: "Este e-mail já está em uso." });
-    }
-    if (error.code === 'SQLITE_CONSTRAINT' && error.message.includes('UNIQUE constraint failed: users.username')) { // Ajustar para erro PostgreSQL
+      }
+      if (error.constraint === 'users_username_unique' || (error.detail && error.detail.includes('(username)'))) {
         return res.status(409).json({ error: "Este nome de usuário já está em uso." });
+      }
     }
+    console.error("[REGISTER_ERROR_UNHANDLED]", error);
     next(error);
   }
 });
@@ -158,7 +163,7 @@ router.get('/api/health', (req, res) => res.status(200).send('OK'));
 // Dashboard Route
 router.get('/api/dashboard', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
-        const data = await storage.getDashboardData(req.user.id);
+        const data = await storage.getDashboardData(req.user.id, req.query.timeRange as string | undefined);
         res.json(data);
     } catch (error) {
         next(error);
@@ -306,7 +311,7 @@ router.delete('/api/creatives/:id', authenticateToken, async (req: Authenticated
 const partialCopySchema = schema.insertCopySchema.partial().omit({ userId: true, id: true, createdAt: true});
 router.post('/api/copies', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
-        const copyData = schema.insertCopySchema.omit({ userId: true, id: true, createdAt:true}).parse(req.body);
+        const copyData = schema.insertCopySchema.omit({ userId: true, id: true, createdAt:true, lastUpdatedAt: true }).parse(req.body);
         const newCopy = await storage.createCopy(req.user.id, copyData);
         res.status(201).json(newCopy);
     } catch(error) {
@@ -325,6 +330,7 @@ router.get('/api/copies', authenticateToken, async (req: AuthenticatedRequest, r
         next(error);
     }
 });
+// Adicionar PUT e DELETE para Copies se necessário
 
 // Flows Routes (WhatsApp Flows)
 const partialFlowUpdateSchema = schema.insertFlowSchema.partial().extend({
@@ -615,18 +621,19 @@ router.delete('/api/chat/sessions/:sessionId', authenticateToken, async (req: Au
 // Error handling middleware (final)
 router.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
   console.error(`[GLOBAL_ERROR_HANDLER] ${new Date().toISOString()} Path: ${req.path}`);
-  console.error(err);
-  if (err instanceof ZodError) return handleZodError(err, req, res, _next);
+  console.error(err); // Log completo do erro no servidor
+  if (err instanceof ZodError) return handleZodError(err, req, res, _next); // Já define res.locals.errorMessage
   if (err instanceof multer.MulterError) {
     res.locals.errorMessage = { error: 'Erro de upload de arquivo', details: err.message, code: err.code };
     return res.status(400).json(res.locals.errorMessage);
   }
   const anyError = err as any;
-  if (anyError.isGoogleGenerativeAIError === true) {
+  if (anyError.isGoogleGenerativeAIError === true) { 
      res.locals.errorMessage = { error: 'Erro no serviço de IA (Google Gemini)', details: anyError.message };
      return res.status(502).json(res.locals.errorMessage);
   }
-  res.locals.errorMessage = { error: 'Erro interno do servidor', details: err.message };
+  // Para todos os outros erros, enviar uma mensagem genérica, mas logar o erro detalhado.
+  res.locals.errorMessage = { error: 'Erro interno do servidor.', details: 'Ocorreu um problema inesperado.' }; // Mensagem genérica para o cliente
   return res.status(500).json(res.locals.errorMessage);
 });
 
