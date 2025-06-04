@@ -3,8 +3,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { storage } from './storage';
 import { JWT_SECRET, GEMINI_API_KEY } from './config';
-// Importar tudo de shared/schema como 'schema'
-import * as schema from '../shared/schema';
+import * as schema from '../shared/schema'; // Importar tudo como 'schema'
 import { z, ZodError } from 'zod';
 import multer from 'multer';
 import path from 'path';
@@ -22,7 +21,6 @@ interface AuthenticatedRequest extends Request {
   };
 }
 
-// ... (authenticateToken e createUploadMiddleware como antes) ...
 const authenticateToken = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -308,6 +306,7 @@ router.delete('/api/creatives/:id', authenticateToken, async (req: Authenticated
 const partialCopySchema = schema.insertCopySchema.partial().omit({ userId: true, id: true, createdAt: true});
 router.post('/api/copies', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
+        // Removendo userId da validação Zod aqui, pois será pego de req.user.id
         const copyData = schema.insertCopySchema.omit({ userId: true, id: true, createdAt:true}).parse(req.body);
         const newCopy = await storage.createCopy(req.user.id, copyData);
         res.status(201).json(newCopy);
@@ -329,11 +328,12 @@ router.get('/api/copies', authenticateToken, async (req: AuthenticatedRequest, r
 });
 
 // Flows Routes (WhatsApp Flows)
-// Usando schema.insertFlowSchema do namespace schema
+// Usando schema.insertFlowSchema que agora deve estar definido e exportado corretamente
 const partialFlowUpdateSchema = schema.insertFlowSchema.partial().extend({
   elements: z.object({
     nodes: z.array(z.any()),
     edges: z.array(z.any()),
+    viewport: z.any().optional(), // Adicionado viewport
   }).nullable().optional(),
 }).omit({ userId: true, id: true, createdAt: true, updatedAt: true });
 
@@ -348,6 +348,7 @@ router.post('/api/flows', authenticateToken, async (req: AuthenticatedRequest, r
     } else if (typeof flowDataToParse.campaign_id !== 'number' && flowDataToParse.campaign_id !== null) {
         flowDataToParse.campaign_id = null;
     }
+    
     const flowDataValidated = schema.insertFlowSchema.omit({ id: true, userId: true, createdAt: true, updatedAt: true }).parse(flowDataToParse);
     const newFlow = await storage.createFlow(req.user.id, flowDataValidated);
     res.status(201).json(newFlow);
