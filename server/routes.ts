@@ -3,27 +3,13 @@ import { Router, Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { storage } from './storage';
 import { JWT_SECRET, GEMINI_API_KEY } from './config';
-import { 
-    users, insertUserSchema, 
-    campaigns, insertCampaignSchema, 
-    creatives, insertCreativeSchema, 
-    budgets, insertBudgetSchema, 
-    copies, insertCopySchema, 
-    alerts, 
-    metrics, 
-    landingPages, insertLandingPageSchema, 
-    funnels, insertFunnelSchema, 
-    funnelStages, insertFunnelStageSchema, 
-    flowsTable, insertFlowSchema, // Corrigido para flowsTable, e insertFlowSchema (verificar exportação em shared/schema.ts)
-    chatSessions, insertChatSessionSchema,
-    chatMessages, // insertChatMessageSchema (se necessário)
-} from '../shared/schema';
+import * as schema from '../shared/schema'; // Importar tudo como 'schema'
 import { z, ZodError } from 'zod';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs/promises';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
-import { MCPHandler } from './mcp_handler'; // Assumindo que MCPHandler é exportado corretamente
+import { MCPHandler } from './mcp_handler';
 
 const mcpHandler = new MCPHandler(storage);
 
@@ -130,17 +116,17 @@ const handleZodError = (err: ZodError, req: Request, res: Response, next: NextFu
 // Auth Routes
 router.post('/api/auth/register', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const userData = insertUserSchema.parse(req.body);
+    const userData = schema.insertUserSchema.parse(req.body); // Usando schema.insertUserSchema
     const userRecord = await storage.createUser(userData);
     if (!userRecord) return res.status(500).json({ error: 'Falha ao criar usuário' });
     const token = jwt.sign({ id: userRecord.id, email: userRecord.email }, JWT_SECRET!, { expiresIn: '7d' });
     res.json({ user: { id: userRecord.id, username: userRecord.username, email: userRecord.email }, token });
   } catch (error: any) {
     if (error instanceof ZodError) return handleZodError(error, req, res, next);
-    if (error.code === 'SQLITE_CONSTRAINT' && error.message.includes('UNIQUE constraint failed: users.email')) {
+    if (error.code === 'SQLITE_CONSTRAINT' && error.message.includes('UNIQUE constraint failed: users.email')) { // Ajustar para erro PostgreSQL se mudar o dialeto
         return res.status(409).json({ error: "Este e-mail já está em uso." });
     }
-    if (error.code === 'SQLITE_CONSTRAINT' && error.message.includes('UNIQUE constraint failed: users.username')) {
+    if (error.code === 'SQLITE_CONSTRAINT' && error.message.includes('UNIQUE constraint failed: users.username')) { // Ajustar para erro PostgreSQL
         return res.status(409).json({ error: "Este nome de usuário já está em uso." });
     }
     next(error);
@@ -179,10 +165,10 @@ router.get('/api/dashboard', authenticateToken, async (req: AuthenticatedRequest
 });
 
 // Campaigns Routes
-const partialCampaignSchema = insertCampaignSchema.partial().omit({ userId: true, id: true, createdAt: true });
+const partialCampaignSchema = schema.insertCampaignSchema.partial().omit({ userId: true, id: true, createdAt: true });
 router.post('/api/campaigns', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    const campaignData = insertCampaignSchema.omit({ userId: true, id: true, createdAt: true, updatedAt: true }).parse(req.body);
+    const campaignData = schema.insertCampaignSchema.omit({ userId: true, id: true, createdAt: true, updatedAt: true }).parse(req.body);
     const campaign = await storage.createCampaign(req.user.id, campaignData);
     res.status(201).json(campaign);
   } catch (error) {
@@ -235,7 +221,7 @@ router.delete('/api/campaigns/:id', authenticateToken, async (req: Authenticated
 });
 
 // Creatives Routes
-const partialCreativeSchema = insertCreativeSchema.partial().omit({ userId: true, id: true, createdAt: true });
+const partialCreativeSchema = schema.insertCreativeSchema.partial().omit({ userId: true, id: true, createdAt: true });
 router.post('/api/creatives', authenticateToken, creativesUpload, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
         const payload: any = { ...req.body };
@@ -243,11 +229,11 @@ router.post('/api/creatives', authenticateToken, creativesUpload, async (req: Au
         
         if (payload.campaignId && payload.campaignId !== 'null' && payload.campaignId !== '') {
             payload.campaignId = parseInt(payload.campaignId, 10);
-            if (isNaN(payload.campaignId)) payload.campaignId = null;
+            if (isNaN(payload.campaignId)) payload.campaignId = null; 
         } else {
             payload.campaignId = null;
         }
-        const creativeData = insertCreativeSchema.omit({ userId: true, id: true, createdAt: true, updatedAt: true }).parse(payload);
+        const creativeData = schema.insertCreativeSchema.omit({ userId: true, id: true, createdAt: true, updatedAt: true }).parse(payload);
         const creative = await storage.createCreative(req.user.id, creativeData);
         res.status(201).json(creative);
     } catch (error) {
@@ -272,10 +258,9 @@ router.get('/api/creatives/:id', authenticateToken, async (req: AuthenticatedReq
     try {
         const id = parseInt(req.params.id, 10);
         if (isNaN(id)) return res.status(400).json({ error: "ID do criativo inválido" });
-        // const creative = await storage.getCreativeById(req.user.id, id); // Necessário implementar em storage.ts
-        // if (!creative) return res.status(404).json({ error: 'Criativo não encontrado' });
-        // res.json(creative);
-        res.status(501).json({error: "Rota GET /api/creatives/:id não completamente implementada no storage."});
+        const creative = await storage.getCreativeById(req.user.id, id);
+        if (!creative) return res.status(404).json({ error: 'Criativo não encontrado' });
+        res.json(creative);
     } catch (error) {
         next(error);
     }
@@ -317,10 +302,10 @@ router.delete('/api/creatives/:id', authenticateToken, async (req: Authenticated
 });
 
 // Copies Routes
-const partialCopySchema = insertCopySchema.partial().omit({ userId: true, id: true, createdAt: true});
+const partialCopySchema = schema.insertCopySchema.partial().omit({ userId: true, id: true, createdAt: true});
 router.post('/api/copies', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
-        const copyData = insertCopySchema.omit({ userId: true, id: true, createdAt:true}).parse(req.body);
+        const copyData = schema.insertCopySchema.omit({ userId: true, id: true, createdAt:true}).parse(req.body);
         const newCopy = await storage.createCopy(req.user.id, copyData);
         res.status(201).json(newCopy);
     } catch(error) {
@@ -339,10 +324,9 @@ router.get('/api/copies', authenticateToken, async (req: AuthenticatedRequest, r
         next(error);
     }
 });
-// PUT e DELETE para Copies podem ser adicionados aqui
 
-// Flows Routes
-const partialFlowUpdateSchema = insertFlowSchema.partial().extend({
+// Flows Routes (WhatsApp Flows)
+const partialFlowUpdateSchema = schema.insertFlowSchema.partial().extend({
   elements: z.object({
     nodes: z.array(z.any()),
     edges: z.array(z.any()),
@@ -360,7 +344,7 @@ router.post('/api/flows', authenticateToken, async (req: AuthenticatedRequest, r
     } else if (typeof flowDataToParse.campaign_id !== 'number' && flowDataToParse.campaign_id !== null) {
         flowDataToParse.campaign_id = null;
     }
-    const flowDataValidated = insertFlowSchema.omit({ id: true, userId: true, createdAt: true, updatedAt: true }).parse(flowDataToParse);
+    const flowDataValidated = schema.insertFlowSchema.omit({ id: true, userId: true, createdAt: true, updatedAt: true }).parse(flowDataToParse);
     const newFlow = await storage.createFlow(req.user.id, flowDataValidated);
     res.status(201).json(newFlow);
   } catch (error) {
@@ -437,10 +421,10 @@ router.post('/api/whatsapp/reload-flow', authenticateToken, async (req: Authenti
 });
 
 // Landing Page Routes
-const partialLandingPageSchema = insertLandingPageSchema.partial().omit({ userId: true, id: true, createdAt: true, publishedAt: true, publicUrl: true });
+const partialLandingPageSchema = schema.insertLandingPageSchema.partial().omit({ userId: true, id: true, createdAt: true, publishedAt: true, publicUrl: true });
 router.post('/api/landingpages', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
-        const pageData = insertLandingPageSchema.omit({userId: true, id: true, createdAt: true, updatedAt: true, publishedAt: true, publicUrl: true}).parse(req.body);
+        const pageData = schema.insertLandingPageSchema.omit({userId: true, id: true, createdAt: true, updatedAt: true, publishedAt: true, publicUrl: true}).parse(req.body);
         const newPage = await storage.createLandingPage(req.user.id, pageData);
         res.status(201).json(newPage);
     } catch(error) {
@@ -568,7 +552,7 @@ router.post('/api/mcp/converse', authenticateToken, mcpAttachmentUpload, async (
       next(error);
     }
 });
-const partialChatSessionSchema = insertChatSessionSchema.pick({ title: true });
+const partialChatSessionSchema = schema.insertChatSessionSchema.pick({ title: true });
 router.post('/api/chat/sessions', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
         const { title } = req.body;
@@ -635,7 +619,7 @@ router.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
     return res.status(400).json(res.locals.errorMessage);
   }
   const anyError = err as any;
-  if (anyError.isGoogleGenerativeAIError === true) {
+  if (anyError.isGoogleGenerativeAIError === true) { // Verificação mais segura
      res.locals.errorMessage = { error: 'Erro no serviço de IA (Google Gemini)', details: anyError.message };
      return res.status(502).json(res.locals.errorMessage);
   }
