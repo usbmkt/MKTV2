@@ -57,7 +57,8 @@ export default defineConfig(({ command, mode }) => {
     optimizeDeps: {
       include: [
         '@grapesjs/studio',
-        '@xyflow/react', // <-- ADICIONADO AQUI
+        '@xyflow/react',
+        'jspdf', // <-- ADICIONADO AQUI 
       ],
       // esbuildOptions: { // Raramente necessário, mas pode ajudar com alguns pacotes
       //   target: 'esnext', 
