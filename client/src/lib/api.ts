@@ -1,137 +1,99 @@
 // client/src/lib/api.ts
 import { useAuthStore } from './auth';
 
-// Helper para construir a URL completa da API
-function getApiUrl(path: string): string {
-  const apiUrlFromEnv = import.meta.env.VITE_API_URL;
-  if (apiUrlFromEnv && typeof apiUrlFromEnv === 'string' && apiUrlFromEnv.trim() !== '') {
-    // Remove barras extras e junta
-    const base = apiUrlFromEnv.replace(/\/$/, '');
-    const endpoint = path.startsWith('/') ? path : `/${path}`;
-    return `${base}${endpoint}`;
+const VITE_API_URL = import.meta.env.VITE_API_URL || '/api';
+
+interface ApiErrorDetail {
+  path?: string;
+  message: string;
+}
+export class ApiError extends Error {
+  status: number;
+  error?: string; // Top-level error message from server
+  details?: ApiErrorDetail[]; // Detailed validation errors
+
+  constructor(message: string, status: number, error?: string, details?: ApiErrorDetail[]) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.error = error;
+    this.details = details;
+    Object.setPrototypeOf(this, ApiError.prototype);
   }
-  // Se VITE_API_URL não estiver definida, assume que a URL já é completa ou relativa à origem (para proxy)
-  return path;
 }
 
-export async function apiRequest(
-  method: string,
-  url: string, // url agora é o PATH da API, ex: /auth/login
-  data?: unknown,
-  isFormData: boolean = false
-): Promise<Response> {
-  const { token } = useAuthStore.getState();
-  const fullApiUrl = getApiUrl(url); // Constrói a URL completa
+export const apiRequest = async (method: string, path: string, data?: any, options?: RequestInit) => {
+  // Pega o token MAIS RECENTE diretamente do estado da store a cada chamada.
+  // Isso é crucial porque a instância do hook useAuthStore() pode não ser reativa fora de um componente React.
+  const token = useAuthStore.getState().token;
 
-  const headers: Record<string, string> = {};
+  const headers: HeadersInit = {
+    ...options?.headers,
+  };
 
-  if (!isFormData && data) {
+  // Não definir Content-Type para FormData, o navegador faz isso incluindo o boundary.
+  if (!(data instanceof FormData)) {
     headers['Content-Type'] = 'application/json';
   }
 
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
+  
+  // console.log(`[API Request] Making ${method} request to ${VITE_API_URL}${path} with token: ${token ? 'Present' : 'Absent'}`);
 
-  let body;
-  if (isFormData && data instanceof FormData) {
-    body = data;
-  } else if (data) {
-    body = JSON.stringify(data);
-  } else {
-    body = undefined;
-  }
-
-  const response = await fetch(fullApiUrl, { // Usa fullApiUrl
+  const config: RequestInit = {
     method,
     headers,
-    body,
-  });
+    ...options,
+  };
 
-  if (!response.ok) {
-    let errorMessage;
-    try {
-      const errorPayload = await response.json();
-      if (errorPayload && typeof errorPayload === 'object') {
-        if (errorPayload.error && typeof errorPayload.error === 'string' && errorPayload.error.trim() !== '') {
-          errorMessage = errorPayload.error;
-        } else if (errorPayload.message && typeof errorPayload.message === 'string' && errorPayload.message.trim() !== '') {
-          errorMessage = errorPayload.message;
-        }
-      }
-    } catch (e) {
-      try {
-        const errorText = await response.text();
-        if (errorText && errorText.trim() !== '') {
-          errorMessage = errorText;
-        }
-      } catch (textError) {}
-    }
-
-    if (!errorMessage) {
-      errorMessage = `API Error: ${response.status} ${response.statusText || ''}`.trim();
-    }
-    throw new Error(errorMessage);
+  if (data && !(data instanceof FormData)) {
+    config.body = JSON.stringify(data);
+  } else if (data instanceof FormData) {
+    config.body = data; // Para uploads de arquivo
   }
 
-  return response;
-}
+  const response = await fetch(`${VITE_API_URL}${path}`, config);
 
-export async function uploadFile(
-  url: string, // url agora é o PATH da API, ex: /creatives
-  file: File,
-  additionalData?: Record<string, string>,
-  method: string = 'POST'
-): Promise<Response> {
-  const { token } = useAuthStore.getState();
-  const fullApiUrl = getApiUrl(url); // Constrói a URL completa
+  if (!response.ok) {
+    let errorBody;
+    try {
+      errorBody = await response.json();
+    } catch (e) {
+      // Se o corpo do erro não for JSON válido
+      throw new ApiError(
+        `HTTP error ${response.status}: ${response.statusText || 'Falha na requisição'}`,
+        response.status
+      );
+    }
+    throw new ApiError(
+      errorBody.message || errorBody.error || `HTTP error ${response.status}`,
+      response.status,
+      errorBody.error, // Adicionado para capturar a mensagem de erro de nível superior
+      errorBody.details
+    );
+  }
 
+  // Se a resposta for 204 No Content ou outros casos sem corpo JSON
+  if (response.status === 204 || response.headers.get("content-length") === "0") {
+    return response; // Retorna a resposta completa para que possa ser tratada
+  }
+
+  return response.json(); // Retorna a promessa do JSON parseado
+};
+
+
+// Função específica para upload de arquivos, usando apiRequest internamente mas com FormData
+export const uploadFile = async (path: string, file: File, additionalData?: Record<string, string>) => {
   const formData = new FormData();
-  formData.append('file', file); 
+  formData.append('file', file); // 'file' é o nome do campo esperado pelo Multer no backend
 
   if (additionalData) {
-    Object.entries(additionalData).forEach(([key, value]) => {
-      formData.append(key, value);
-    });
-  }
-
-  const headers: Record<string, string> = {};
-
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-
-  const response = await fetch(fullApiUrl, { // Usa fullApiUrl
-    method: method,
-    headers,
-    body: formData,
-  });
-
-  if (!response.ok) {
-    let errorMessage;
-    try {
-      const errorPayload = await response.json();
-      if (errorPayload && typeof errorPayload === 'object') {
-        if (errorPayload.error && typeof errorPayload.error === 'string' && errorPayload.error.trim() !== '') {
-          errorMessage = errorPayload.error;
-        } else if (errorPayload.message && typeof errorPayload.message === 'string' && errorPayload.message.trim() !== '') {
-          errorMessage = errorPayload.message;
-        }
-      }
-    } catch (e) {
-      try {
-        const errorText = await response.text();
-        if (errorText && errorText.trim() !== '') {
-          errorMessage = errorText;
-        }
-      } catch (textError) {}
+    for (const key in additionalData) {
+      formData.append(key, additionalData[key]);
     }
-
-    if (!errorMessage) {
-      errorMessage = `Upload Error: ${response.status} ${response.statusText || ''}`.trim();
-    }
-    throw new Error(errorMessage);
   }
-
-  return response;
-}
+  // apiRequest já lida com FormData, não precisa de Content-Type aqui.
+  return apiRequest('POST', path, formData); 
+};
