@@ -6,20 +6,18 @@ import { relations } from 'drizzle-orm';
 
 // Enums do Banco de Dados
 export const campaignStatusEnum = pgEnum('campaign_status', ['active', 'paused', 'completed', 'draft']);
-export const chatSenderEnum = pgEnum('chat_sender', ['user', 'agent']);
-export const launchPhaseEnum = pgEnum('launch_phase', ['pre_launch', 'launch', 'post_launch']); // Este enum será usado por 'copies.launchPhase'
+export const chatSenderEnum = pgEnum('chat_sender', ['user', 'agent']); // Mantido 'agent' como no original
+export const launchPhaseEnum = pgEnum('launch_phase', ['pre_launch', 'launch', 'post_launch']);
+export const flowStatusEnum = pgEnum('flow_status', ['active', 'inactive', 'draft']); // NOVO ENUM PARA STATUS DO FLUXO
 
 // --- Definições de Tipos para Copy Configurations ---
-// Estas interfaces são para a lógica de configuração da sua aplicação, não diretamente para o schema do DB
 export interface BaseGeneratorFormState {
   product: string;
   audience: string;
   objective: 'sales' | 'leads' | 'engagement' | 'awareness';
   tone: 'professional' | 'casual' | 'urgent' | 'inspirational' | 'educational' | 'empathetic' | 'divertido' | 'sofisticado';
 }
-
-export type LaunchPhase = z.infer<typeof launchPhaseEnum>; // Tipo inferido do enum do Drizzle
-
+export type LaunchPhase = z.infer<typeof launchPhaseEnum>;
 export interface FieldDefinition {
   name: string;
   label: string;
@@ -32,11 +30,10 @@ export interface FieldDefinition {
   dependsOn?: string;
   showIf?: (formData: Record<string, any>, baseData?: BaseGeneratorFormState) => boolean;
 }
-
 export interface CopyPurposeConfig {
   key: string;
   label: string;
-  phase: LaunchPhase; // Usa o tipo LaunchPhase inferido
+  phase: LaunchPhase;
   fields: FieldDefinition[];
   category: string;
   description?: string;
@@ -72,21 +69,20 @@ export const campaigns = pgTable("campaigns", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-// Definição da tabela 'copies' ATUALIZADA (sem a coluna 'type' antiga)
 export const copies = pgTable("copies", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   campaignId: integer("campaign_id").references(() => campaigns.id, { onDelete: 'set null' }),
   title: text("title").notNull(),
   content: text("content").notNull(),
-  purposeKey: text("purpose_key").notNull(), // Nova coluna para identificar a finalidade
-  launchPhase: launchPhaseEnum("launch_phase").notNull(), // Nova coluna para a fase
-  details: jsonb("details").$type<Record<string, any>>().default({}).notNull(), // Detalhes específicos da copy
-  baseInfo: jsonb("base_info").$type<BaseGeneratorFormState | any>().default({}).notNull(), // Informações base usadas para gerar
-  fullGeneratedResponse: jsonb("full_generated_response").$type<any>().default({}).notNull(), // Resposta completa da IA
-  platform: text("platform"), // Plataforma sugerida ou alvo
+  purposeKey: text("purpose_key").notNull(),
+  launchPhase: launchPhaseEnum("launch_phase").notNull(),
+  details: jsonb("details").$type<Record<string, any>>().default({}).notNull(),
+  baseInfo: jsonb("base_info").$type<BaseGeneratorFormState | any>().default({}).notNull(),
+  fullGeneratedResponse: jsonb("full_generated_response").$type<any>().default({}).notNull(),
+  platform: text("platform"),
   isFavorite: boolean("is_favorite").default(false).notNull(),
-  tags: jsonb("tags").$type<string[]>().default([]).notNull(), // Tags como array de strings
+  tags: jsonb("tags").$type<string[]>().default([]).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   lastUpdatedAt: timestamp("last_updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
@@ -120,7 +116,7 @@ export const metrics = pgTable("metrics", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const whatsappMessages = pgTable("whatsapp_messages", {
+export const whatsappMessagesTable = pgTable("whatsapp_messages", { // Renomeado para clareza, se necessário, ou manter "whatsappMessages"
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   contactNumber: text("contact_number").notNull(),
@@ -161,7 +157,7 @@ export const landingPages = pgTable("landing_pages", {
     studioProjectId: varchar("studio_project_id", { length: 255 }).unique(),
     slug: varchar("slug", { length: 255 }).notNull().unique(),
     description: text("description"),
-    grapesJsData: jsonb("grapes_js_data"), // $type<any> é implícito para jsonb sem tipo específico
+    grapesJsData: jsonb("grapes_js_data"),
     status: text("status", { enum: ["draft", "published", "archived"] }).default("draft").notNull(),
     publicUrl: text("public_url"),
     publishedAt: timestamp("published_at", { withTimezone: true }),
@@ -202,18 +198,57 @@ export const funnelStages = pgTable("funnel_stages", {
   name: text("name").notNull(),
   description: text("description"),
   order: integer("order").notNull().default(0),
-  config: jsonb("config").$type<Record<string, any>>().default({}), // Adicionado default
+  config: jsonb("config").$type<Record<string, any>>().default({}),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// NOVA TABELA PARA FLUXOS DO WHATSAPP (ZAP)
+export const flowsTable = pgTable("flows", { // Nome da tabela no DB: "flows"
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  campaignId: integer("campaign_id").references(() => campaigns.id, { onDelete: 'set null' }),
+  name: text("name").notNull(),
+  description: text("description"),
+  elements: jsonb("elements").$type<{ nodes: any[]; edges: any[]; viewport: any }>().default({ nodes: [], edges: [], viewport: {x:0, y:0, zoom:1} }).notNull(),
+  status: flowStatusEnum("status").default("draft").notNull(),
+  // triggerType: text("trigger_type"), // Ex: 'keyword', 'api', 'manual'
+  // triggerConfig: jsonb("trigger_config"), // Ex: { keywords: ['oi', 'ola'] }
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 
 // --- RELAÇÕES ---
-export const userRelations = relations(users, ({ many }) => ({ campaigns: many(campaigns), creatives: many(creatives), metrics: many(metrics), whatsappMessages: many(whatsappMessages), copies: many(copies), alerts: many(alerts), budgets: many(budgets), landingPages: many(landingPages), chatSessions: many(chatSessions), funnels: many(funnels), }));
-export const campaignRelations = relations(campaigns, ({ one, many }) => ({ user: one(users, { fields: [campaigns.userId], references: [users.id] }), creatives: many(creatives), metrics: many(metrics), copies: many(copies), alerts: many(alerts), budgets: many(budgets), funnels: many(funnels), }));
+// (Relações existentes mantidas)
+export const userRelations = relations(users, ({ many }) => ({
+    campaigns: many(campaigns),
+    creatives: many(creatives),
+    metrics: many(metrics),
+    whatsappMessages: many(whatsappMessagesTable), // Usar o nome correto da tabela aqui
+    copies: many(copies),
+    alerts: many(alerts),
+    budgets: many(budgets),
+    landingPages: many(landingPages),
+    chatSessions: many(chatSessions),
+    funnels: many(funnels),
+    flows: many(flowsTable), // ADICIONADA RELAÇÃO para flowsTable
+}));
+
+export const campaignRelations = relations(campaigns, ({ one, many }) => ({
+    user: one(users, { fields: [campaigns.userId], references: [users.id] }),
+    creatives: many(creatives),
+    metrics: many(metrics),
+    copies: many(copies),
+    alerts: many(alerts),
+    budgets: many(budgets),
+    funnels: many(funnels),
+    flows: many(flowsTable), // ADICIONADA RELAÇÃO para flowsTable
+}));
+
 export const creativeRelations = relations(creatives, ({ one }) => ({ user: one(users, { fields: [creatives.userId], references: [users.id] }), campaign: one(campaigns, { fields: [creatives.campaignId], references: [campaigns.id] }), }));
 export const metricRelations = relations(metrics, ({ one }) => ({ campaign: one(campaigns, { fields: [metrics.campaignId], references: [campaigns.id] }), user: one(users, { fields: [metrics.userId], references: [users.id] }), }));
-export const whatsappMessageRelations = relations(whatsappMessages, ({ one }) => ({ user: one(users, { fields: [whatsappMessages.userId], references: [users.id] }), }));
+export const whatsappMessageRelations = relations(whatsappMessagesTable, ({ one }) => ({ user: one(users, { fields: [whatsappMessagesTable.userId], references: [users.id] }), }));
 export const copyRelations = relations(copies, ({ one }) => ({ user: one(users, { fields: [copies.userId], references: [users.id] }), campaign: one(campaigns, { fields: [copies.campaignId], references: [campaigns.id] }), }));
 export const alertRelations = relations(alerts, ({ one }) => ({ user: one(users, { fields: [alerts.userId], references: [users.id] }), campaign: one(campaigns, { fields: [alerts.campaignId], references: [campaigns.id] }), }));
 export const budgetRelations = relations(budgets, ({ one }) => ({ user: one(users, { fields: [budgets.userId], references: [users.id] }), campaign: one(campaigns, { fields: [budgets.campaignId], references: [campaigns.id] }), }));
@@ -222,6 +257,12 @@ export const chatSessionRelations = relations(chatSessions, ({ one, many }) => (
 export const chatMessageRelations = relations(chatMessages, ({ one }) => ({ session: one(chatSessions, { fields: [chatMessages.sessionId], references: [chatSessions.id] }), }));
 export const funnelRelations = relations(funnels, ({ one, many }) => ({ user: one(users, { fields: [funnels.userId], references: [users.id] }), campaign: one(campaigns, { fields: [funnels.campaignId], references: [campaigns.id] }), stages: many(funnelStages), }));
 export const funnelStageRelations = relations(funnelStages, ({ one }) => ({ funnel: one(funnels, { fields: [funnelStages.funnelId], references: [funnels.id] }), }));
+
+// NOVA RELAÇÃO para flowsTable
+export const flowRelations = relations(flowsTable, ({ one }) => ({
+  user: one(users, { fields: [flowsTable.userId], references: [users.id] }),
+  campaign: one(campaigns, { fields: [flowsTable.campaignId], references: [campaigns.id] }),
+}));
 
 
 // --- SCHEMAS ZOD PARA INSERÇÃO ---
@@ -233,96 +274,44 @@ export const insertUserSchema = createInsertSchema(users, {
 
 export const insertCampaignSchema = createInsertSchema(campaigns, {
   name: z.string().min(1, "Nome da campanha é obrigatório."),
-  budget: z.preprocess(
-    (val) => (typeof val === 'string' && val.trim() !== '' ? parseFloat(val) : (typeof val === 'number' ? val : undefined)),
-    z.number({ invalid_type_error: "Orçamento deve ser um número" }).nullable().optional()
-  ),
-  dailyBudget: z.preprocess(
-    (val) => (typeof val === 'string' && val.trim() !== '' ? parseFloat(val) : (typeof val === 'number' ? val : undefined)),
-    z.number({ invalid_type_error: "Orçamento diário deve ser um número" }).nullable().optional()
-  ),
-  avgTicket: z.preprocess(
-    (val) => (typeof val === 'string' && val.trim() !== '' ? parseFloat(val) : (typeof val === 'number' ? val : undefined)),
-    z.number({ invalid_type_error: "Ticket médio deve ser um número" }).nullable().optional()
-  ),
-  startDate: z.preprocess(
-    (arg) => { if (typeof arg === "string" || arg instanceof Date) return new Date(arg); return undefined; },
-    z.date().optional().nullable()
-  ),
-  endDate: z.preprocess(
-    (arg) => { if (typeof arg === "string" || arg instanceof Date) return new Date(arg); return undefined; },
-    z.date().optional().nullable()
-  ),
-  platforms: z.preprocess(
-    (val) => { if (Array.isArray(val)) return val; if (typeof val === 'string') return val.split(',').map(s => s.trim()).filter(s => s); return []; },
-    z.array(z.string()).default([])
-  ),
-  objectives: z.preprocess(
-    (val) => { if (Array.isArray(val)) return val; if (typeof val === 'string') return val.split(',').map(s => s.trim()).filter(s => s); return []; },
-    z.array(z.string()).default([])
-  ),
+  budget: z.preprocess( (val) => (typeof val === 'string' && val.trim() !== '' ? parseFloat(val) : (typeof val === 'number' ? val : undefined)), z.number({ invalid_type_error: "Orçamento deve ser um número" }).nullable().optional() ),
+  dailyBudget: z.preprocess( (val) => (typeof val === 'string' && val.trim() !== '' ? parseFloat(val) : (typeof val === 'number' ? val : undefined)), z.number({ invalid_type_error: "Orçamento diário deve ser um número" }).nullable().optional() ),
+  avgTicket: z.preprocess( (val) => (typeof val === 'string' && val.trim() !== '' ? parseFloat(val) : (typeof val === 'number' ? val : undefined)), z.number({ invalid_type_error: "Ticket médio deve ser um número" }).nullable().optional() ),
+  startDate: z.preprocess( (arg) => { if (typeof arg === "string" || arg instanceof Date) return new Date(arg); return undefined; }, z.date().optional().nullable() ),
+  endDate: z.preprocess( (arg) => { if (typeof arg === "string" || arg instanceof Date) return new Date(arg); return undefined; }, z.date().optional().nullable() ),
+  platforms: z.preprocess( (val) => { if (Array.isArray(val)) return val; if (typeof val === 'string') return val.split(',').map(s => s.trim()).filter(s => s); return []; }, z.array(z.string()).default([]) ),
+  objectives: z.preprocess( (val) => { if (Array.isArray(val)) return val; if (typeof val === 'string') return val.split(',').map(s => s.trim()).filter(s => s); return []; }, z.array(z.string()).default([]) ),
 }).omit({ id: true, createdAt: true, updatedAt: true, userId: true });
 
 export const insertCreativeSchema = createInsertSchema(creatives, {
   name: z.string().min(1, "Nome do criativo é obrigatório."),
   type: z.enum(["image", "video", "text", "carousel"]),
-  platforms: z.preprocess(
-    (val) => { if (Array.isArray(val)) { return val; } if (typeof val === 'string') { return val.split(',').map(s => s.trim()).filter(s => s.length > 0); } return []; },
-    z.array(z.string()).optional()
-  ),
+  platforms: z.preprocess( (val) => { if (Array.isArray(val)) { return val; } if (typeof val === 'string') { return val.split(',').map(s => s.trim()).filter(s => s.length > 0); } return []; }, z.array(z.string()).optional() ),
   fileUrl: z.string().url("URL do arquivo inválida.").nullable().optional(),
   thumbnailUrl: z.string().url("URL da thumbnail inválida.").nullable().optional(),
-  campaignId: z.preprocess(
-    (val) => {
-      if (val === "null" || val === "" || val === "NONE" || val === undefined || val === null) { return null; }
-      if (typeof val === 'number') { return val; }
-      if (typeof val === 'string') { const parsed = parseInt(val); return isNaN(parsed) ? null : parsed; }
-      return null;
-    },
-    z.number().int().positive().nullable().optional()
-  ),
+  campaignId: z.preprocess( (val) => { if (val === "null" || val === "" || val === "NONE" || val === undefined || val === null) { return null; } if (typeof val === 'number') { return val; } if (typeof val === 'string') { const parsed = parseInt(val); return isNaN(parsed) ? null : parsed; } return null; }, z.number().int().positive().nullable().optional() ),
 }).omit({ id: true, createdAt: true, updatedAt: true, userId: true });
 
-// Schema de inserção para 'copies' ATUALIZADO
 export const insertCopySchema = createInsertSchema(copies, {
-  // userId é obrigatório e será adicionado na rota. Validamos sua presença e tipo aqui.
-  userId: z.number().int().positive({ message: "ID do usuário é obrigatório e deve ser um número positivo." }),
+  userId: z.number().int().positive({ message: "ID do usuário é obrigatório." }), // Não omitir, mas não validar no payload da rota se já estiver no req.user
   title: z.string().min(1, "Título da copy é obrigatório."),
-  content: z.string().min(1, "Conteúdo (mainCopy) é obrigatório."),
-  purposeKey: z.string().min(1, "Chave da finalidade (purposeKey) é obrigatória."),
-  launchPhase: z.enum(launchPhaseEnum.enumValues, {
-    required_error: "Fase de lançamento é obrigatória.",
-    invalid_type_error: "Fase de lançamento inválida."
-  }),
+  content: z.string().min(1, "Conteúdo é obrigatório."),
+  purposeKey: z.string().min(1, "Chave da finalidade é obrigatória."),
+  launchPhase: z.enum(launchPhaseEnum.enumValues, { required_error: "Fase de lançamento é obrigatória." }),
   details: z.record(z.any()).optional().nullable().default({}),
   baseInfo: z.record(z.any()).optional().nullable().default({}),
   fullGeneratedResponse: z.record(z.any()).optional().nullable().default({}),
   platform: z.string().optional().nullable(),
   isFavorite: z.boolean().optional().default(false),
   tags: z.array(z.string()).optional().nullable().default([]),
-  campaignId: z.preprocess(
-    (val) => (val === undefined || val === null || val === "" || String(val).toUpperCase() === "NONE" ? null : parseInt(String(val))),
-    z.number().int().positive().nullable().optional()
-  ),
-}).omit({
-  id: true, // Gerado pelo banco
-  createdAt: true, // Gerado pelo banco com defaultNow()
-  lastUpdatedAt: true, // Gerado pelo banco com defaultNow()
-  // NÃO OMITIR 'userId' AQUI, pois ele é crucial e vem da autenticação.
-});
+  campaignId: z.preprocess( (val) => (val === undefined || val === null || val === "" || String(val).toUpperCase() === "NONE" ? null : parseInt(String(val))), z.number().int().positive().nullable().optional() ),
+}).omit({ id: true, createdAt: true, lastUpdatedAt: true });
 
 
 export const insertFunnelSchema = createInsertSchema(funnels, {
   name: z.string().min(1, "O nome do funil é obrigatório."),
   description: z.string().nullable().optional(),
-  campaignId: z.preprocess(
-    (val) => {
-      if (val === undefined || val === null || val === "" || String(val).toUpperCase() === "NONE") { return null; }
-      const parsed = parseInt(String(val));
-      return isNaN(parsed) ? null : parsed;
-    },
-    z.number().int().positive().nullable().optional()
-  ),
+  campaignId: z.preprocess( (val) => { if (val === undefined || val === null || val === "" || String(val).toUpperCase() === "NONE") { return null; } const parsed = parseInt(String(val)); return isNaN(parsed) ? null : parsed; }, z.number().int().positive().nullable().optional() ),
 }).omit({ id: true, createdAt: true, updatedAt: true, userId: true });
 
 export const insertFunnelStageSchema = createInsertSchema(funnelStages, {
@@ -341,7 +330,7 @@ export const insertLandingPageSchema = createInsertSchema(landingPages, {
   studioProjectId: z.string().optional().nullable(),
 }).omit({ id: true, createdAt: true, updatedAt: true, userId: true, publicUrl: true, publishedAt: true });
 
-export const insertWhatsappMessageSchema = createInsertSchema(whatsappMessages, {
+export const insertWhatsappMessageSchema = createInsertSchema(whatsappMessagesTable, { // Usar o nome correto da tabela
   contactNumber: z.string().min(1, "Número de contato é obrigatório."),
   message: z.string().min(1, "Mensagem é obrigatória."),
   direction: z.enum(["incoming", "outgoing"]),
@@ -354,27 +343,12 @@ export const insertAlertSchema = createInsertSchema(alerts, {
 }).omit({ id: true, userId: true, createdAt: true, isRead: true });
 
 export const insertBudgetSchema = createInsertSchema(budgets, {
-  totalBudget: z.preprocess(
-    (val) => (typeof val === 'string' && val.trim() !== '' ? parseFloat(val) : (typeof val === 'number' ? val : undefined)),
-    z.number({ required_error: "Orçamento total é obrigatório.", invalid_type_error: "Orçamento total deve ser um número." })
-  ),
-  spentAmount: z.preprocess(
-    (val) => (typeof val === 'string' && val.trim() !== '' ? parseFloat(val) : (typeof val === 'number' ? val : undefined)),
-    z.number({ invalid_type_error: "Valor gasto deve ser um número." }).default(0).optional()
-  ),
+  totalBudget: z.preprocess( (val) => (typeof val === 'string' && val.trim() !== '' ? parseFloat(val) : (typeof val === 'number' ? val : undefined)), z.number({ required_error: "Orçamento total é obrigatório.", invalid_type_error: "Orçamento total deve ser um número." }) ),
+  spentAmount: z.preprocess( (val) => (typeof val === 'string' && val.trim() !== '' ? parseFloat(val) : (typeof val === 'number' ? val : undefined)), z.number({ invalid_type_error: "Valor gasto deve ser um número." }).default(0).optional() ),
   period: z.enum(budgets.period.enumValues, { required_error: "Período é obrigatório." }),
-  startDate: z.preprocess(
-    (arg) => { if (typeof arg === "string" || arg instanceof Date) return new Date(arg); return undefined; },
-    z.date({ required_error: "Data de início é obrigatória." })
-  ),
-  endDate: z.preprocess(
-    (arg) => { if (typeof arg === "string" || arg instanceof Date) return new Date(arg); return undefined; },
-    z.date().optional().nullable()
-  ),
-  campaignId: z.preprocess(
-    (val) => (val === undefined || val === null || val === "" || String(val).toUpperCase() === "NONE" ? null : parseInt(String(val))),
-    z.number().int().positive().nullable().optional()
-  ),
+  startDate: z.preprocess( (arg) => { if (typeof arg === "string" || arg instanceof Date) return new Date(arg); return undefined; }, z.date({ required_error: "Data de início é obrigatória." }) ),
+  endDate: z.preprocess( (arg) => { if (typeof arg === "string" || arg instanceof Date) return new Date(arg); return undefined; }, z.date().optional().nullable() ),
+  campaignId: z.preprocess( (val) => (val === undefined || val === null || val === "" || String(val).toUpperCase() === "NONE" ? null : parseInt(String(val))), z.number().int().positive().nullable().optional() ),
 }).omit({ id: true, createdAt: true, userId: true });
 
 export const insertChatSessionSchema = createInsertSchema(chatSessions, {
@@ -388,6 +362,26 @@ export const insertChatMessageSchema = createInsertSchema(chatMessages, {
     attachmentUrl: z.string().url().optional().nullable(),
 }).omit({id: true, timestamp: true});
 
+// NOVO SCHEMA ZOD para flowsTable
+export const insertFlowSchema = createInsertSchema(flowsTable, {
+  name: z.string().min(1, "Nome do fluxo é obrigatório."),
+  elements: z.object({
+    nodes: z.array(z.any()),
+    edges: z.array(z.any()),
+    viewport: z.any().optional(), // Adicionando viewport como opcional
+  }).default({ nodes: [], edges: [], viewport: {x:0,y:0,zoom:1} }), // Default para elements
+  status: z.enum(flowStatusEnum.enumValues).default("draft"),
+  campaignId: z.preprocess(
+    (val) => {
+      if (val === undefined || val === null || val === "" || String(val).toUpperCase() === "NONE") { return null; }
+      const parsed = parseInt(String(val));
+      return isNaN(parsed) ? null : parsed;
+    },
+    z.number().int().positive().nullable().optional()
+  ),
+  description: z.string().nullable().optional(),
+}).omit({ id: true, userId: true, createdAt: true, updatedAt: true });
+
 
 // --- SCHEMAS ZOD PARA SELEÇÃO (SELECT) ---
 export const selectUserSchema = createSelectSchema(users);
@@ -395,7 +389,7 @@ export const selectCampaignSchema = createSelectSchema(campaigns);
 export const selectCreativeSchema = createSelectSchema(creatives);
 export const selectCopySchema = createSelectSchema(copies);
 export const selectMetricSchema = createSelectSchema(metrics);
-export const selectWhatsappMessageSchema = createSelectSchema(whatsappMessages);
+export const selectWhatsappMessageSchema = createSelectSchema(whatsappMessagesTable); // Usar o nome correto
 export const selectAlertSchema = createSelectSchema(alerts);
 export const selectBudgetSchema = createSelectSchema(budgets);
 export const selectLandingPageSchema = createSelectSchema(landingPages);
@@ -403,6 +397,7 @@ export const selectChatSessionSchema = createSelectSchema(chatSessions);
 export const selectChatMessageSchema = createSelectSchema(chatMessages);
 export const selectFunnelSchema = createSelectSchema(funnels);
 export const selectFunnelStageSchema = createSelectSchema(funnelStages);
+export const selectFlowSchema = createSelectSchema(flowsTable); // NOVO
 
 
 // --- Tipos Inferidos ---
@@ -412,10 +407,9 @@ export type Campaign = z.infer<typeof selectCampaignSchema>;
 export type InsertCampaign = z.infer<typeof insertCampaignSchema>;
 export type Creative = z.infer<typeof selectCreativeSchema>;
 export type InsertCreative = z.infer<typeof insertCreativeSchema>;
-export type Copy = z.infer<typeof selectCopySchema>; // Tipo para SELECT
-export type InsertCopy = z.infer<typeof insertCopySchema>; // Tipo para INSERT
+export type Copy = z.infer<typeof selectCopySchema>;
+export type InsertCopy = z.infer<typeof insertCopySchema>;
 export type Metric = z.infer<typeof selectMetricSchema>;
-// export type InsertMetric = z.infer<typeof insertMetricSchema>; // Se precisar
 export type WhatsappMessage = z.infer<typeof selectWhatsappMessageSchema>;
 export type InsertWhatsappMessage = z.infer<typeof insertWhatsappMessageSchema>;
 export type Alert = z.infer<typeof selectAlertSchema>;
@@ -432,15 +426,16 @@ export type Funnel = z.infer<typeof selectFunnelSchema>;
 export type InsertFunnel = z.infer<typeof insertFunnelSchema>;
 export type FunnelStage = z.infer<typeof selectFunnelStageSchema>;
 export type InsertFunnelStage = z.infer<typeof insertFunnelStageSchema>;
+export type Flow = z.infer<typeof selectFlowSchema>; // NOVO TIPO
+// export type InsertFlow = z.infer<typeof insertFlowSchema>; // Pode ser útil
 
 
 // --- CONFIGURAÇÕES DE COPY ---
-// (Mantido como no seu original)
 export const allCopyPurposesConfig: CopyPurposeConfig[] = [
   {
     key: 'prelaunch_ad_event_invitation',
     label: 'Anúncio: Convite para Evento Online Gratuito',
-    phase: 'pre_launch', // Usando o tipo LaunchPhase
+    phase: 'pre_launch',
     category: 'Anúncios (Pré-Lançamento)',
     description: 'Crie anúncios chamativos para convidar pessoas para seu webinar, masterclass ou live.',
     fields: [
@@ -483,3 +478,10 @@ export type AiResponseType = z.infer<typeof aiResponseValidationSchema>;
 
 export const contentIdeasResponseSchema = { type: "OBJECT" as const, properties: { contentIdeas: { type: "ARRAY" as const, items: { "type": "STRING" as const } } }, required: ["contentIdeas"] };
 export const optimizeCopyResponseSchema = { type: "OBJECT" as const, properties: { optimizedCopy: { type: "STRING" as const }, optimizationNotes: { type: "STRING" as const } }, required: ["optimizedCopy"] };
+
+// Adicionando a tabela de fluxos de automação do WhatsApp
+// (esta já foi adicionada acima, apenas garantindo que está no contexto)
+// export const flowsTable = pgTable(...);
+// export const insertFlowSchema = createInsertSchema(flowsTable, ...);
+// export const selectFlowSchema = createSelectSchema(flowsTable);
+// export type Flow = z.infer<typeof selectFlowSchema>;
