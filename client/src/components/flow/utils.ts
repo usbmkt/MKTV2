@@ -4,7 +4,7 @@ import { LucideProps } from 'lucide-react';
 import { cn } from "@/lib/utils";
 
 // Constantes de Cor Neon (adaptadas de flow.tsx)
-export const NEON_COLOR = 'hsl(207, 90%, 54%)'; // Um azul neon padrão
+export const NEON_COLOR = 'hsl(207, 90%, 54%)';
 export const NEON_GREEN = 'hsl(145, 100%, 45%)';
 export const NEON_RED = 'hsl(0, 100%, 55%)';
 
@@ -23,7 +23,6 @@ export const popoverContentStyle = cn(
   "p-1 border-[rgba(100,100,200,0.25)] shadow-2xl"
 );
 
-// Estilo para Scrollbar Customizada (adaptado de flow.tsx)
 export const customScrollbarStyle = cn(
   "[&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar]:h-1.5",
   "[&::-webkit-scrollbar-track]:bg-transparent",
@@ -31,29 +30,40 @@ export const customScrollbarStyle = cn(
   "[&::-webkit-scrollbar-thumb:hover]:bg-muted-foreground/50"
 );
 
-// Componente IconWithGlow
-export const IconWithGlow: React.FC<LucideProps & { icon: React.ElementType, color?: string, glowOpacity?: number }> = (componentProps) => {
-  // Extrai 'icon' e renomeia para IconComponent.
-  // Extrai 'className', 'color', 'glowOpacity' explicitamente.
-  // O restante das props (que devem ser LucideProps) é capturado em 'rest'.
-  const { icon: IconComponent, className, color, glowOpacity = 0.5, ...rest } = componentProps;
-  
+// Interface para as props do IconWithGlow
+interface IconWithGlowProps extends Omit<LucideProps, 'icon'> { // Omit 'icon' se LucideProps tiver, para evitar conflito
+  icon: React.ElementType; // O componente do ícone em si
+  color?: string;
+  glowOpacity?: number;
+  // className é herdado de LucideProps
+}
+
+export const IconWithGlow: React.FC<IconWithGlowProps> = ({
+  icon: IconElement, // Renomeado para clareza
+  className,
+  color,
+  glowOpacity = 0.5,
+  ...rest // Captura outras LucideProps como size, strokeWidth, etc.
+}) => {
   const iconColor = color || NEON_COLOR;
 
-  // Uma verificação para garantir que IconComponent é válido (mais para robustez)
-  if (!IconComponent || (typeof IconComponent === 'string' && !/^[a-zA-Z]/.test(IconComponent))) {
-    console.error("IconWithGlow: 'icon' prop não é um componente React válido ou é uma string inválida para tag HTML.");
-    return null; 
+  if (!IconElement || (typeof IconElement === 'string' && !/^[a-zA-Z]/.test(IconElement))) {
+     console.error("IconWithGlow: 'icon' prop não é um componente React válido ou é uma string inválida para tag HTML.");
+     return null;
   }
-  
+
+  // Forçando o tipo para 'any' como uma tentativa de workaround para o parser do ESBuild.
+  // Isso pode mascarar problemas de tipo, mas pode ajudar a identificar se o erro é de parsing devido à inferência de tipo.
+  const DynamicIconComponent: any = IconElement;
+
   return (
-    <IconComponent
-      className={cn("icon-with-glow", className)}
+    <DynamicIconComponent
+      className={cn("icon-with-glow", className)} // Esta é a linha que estava causando erro (linha 51 nos logs)
       style={{
         filter: `drop-shadow(0 0 4px hsla(${iconColor.replace('hsl(','').replace(')','').split(', ').map((v,i) => i === 2 ? v : v.replace('%','')).join(',')}, ${glowOpacity})) drop-shadow(0 0 8px hsla(${iconColor.replace('hsl(','').replace(')','').split(', ').map((v,i) => i === 2 ? v : v.replace('%','')).join(',')}, ${glowOpacity * 0.5}))`,
         color: iconColor,
       }}
-      {...rest} {/* Espalha as props restantes (LucideProps como size, strokeWidth, etc.) */}
+      {...rest}
     />
   );
 };
