@@ -14,7 +14,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/api';
 import { useAuthStore } from '@/lib/auth';
 import { useLocation } from "wouter";
+
+// ADICIONADO IMPORT QUE FALTAVA
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
 import {
     MessageSquare, ListChecks, Trash2 as IconTrash, Image as ImageIcon, Clock, Variable, Waypoints, HelpCircle, Settings, Plus, RefreshCw, Send, RadioTower, UserCheck, LogOut, Save, Play, Square, Filter, Layers, Activity, Workflow, Target, Mic, FileText as FileIcon, MapPin, Repeat, Webhook, Sparkles, ArrowLeft, X, AlertTriangle, Bot, FileTerminal, Clock10, Tag, Shuffle,
     MessageCircle as MsgIcon, Phone, Search, MoreVertical, Check, CheckCheck, Paperclip, Smile, Users, TrendingUp, Download, Upload
@@ -25,6 +28,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
+// Usando o novo caminho para os tipos
 import {
     FlowData,
     CampaignSelectItem,
@@ -55,11 +59,13 @@ import {
     TagContactNodeData,
     AllNodeDataTypes
 } from '@/types/zapTypes';
+// Usando os novos caminhos para componentes e utils do fluxo
 import NodeContextMenuComponent from '@/components/flow/NodeContextMenu';
 import { IconWithGlow, NEON_COLOR, NEON_GREEN, NEON_RED, baseButtonSelectStyle, baseCardStyle, baseInputInsetStyle, popoverContentStyle, customScrollbarStyle } from '@/components/flow/utils';
 import WhatsAppConnection from '@/components/whatsapp-connection';
 
-// Interfaces para os dados mockados (mantidas do seu original)
+
+// --- INTERFACES MOCK (MANTIDAS DO SEU CÓDIGO ORIGINAL PARA A ABA CONVERSAS) ---
 interface WhatsAppMessage {
   id: number;
   contactNumber: string;
@@ -131,12 +137,13 @@ const globalNodeOrigin: NodeOrigin = [0.5, 0.5];
 
 
 // --- INÍCIO DO EDITOR DE FLUXO INTERNO (ADAPTADO DE FLOW.TSX) ---
+// Corrigido o nome da interface aqui
 interface FlowEditorInnerProps {
   activeFlowId?: string | null;
   onFlowSelect?: (flowId: string) => void;
 }
 
-function FlowEditorInner({ activeFlowId, onFlowSelect }: FlowEditorInnerProps) {
+function FlowEditorInner({ activeFlowId, onFlowSelect }: FlowEditorInnerProps) { // Corrigido aqui
     const [nodes, setNodes, onNodesChange] = useNodesState<AllNodeDataTypes>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
     const reactFlowInstance = useReactFlow<AllNodeDataTypes, any>();
@@ -286,7 +293,7 @@ function FlowEditorInner({ activeFlowId, onFlowSelect }: FlowEditorInnerProps) {
         const nodeToAdd: Node<AllNodeDataTypes> = { id: newNodeId, type, position, data: newNodeData as AllNodeDataTypes, dragHandle: '.node-header' }; 
         reactFlowInstance.addNodes([nodeToAdd]); 
         setTimeout(() => { reactFlowInstance.setCenter(position.x, position.y, { zoom: reactFlowInstance.getZoom(), duration: 200 }); }, 50);
-    }, [reactFlowInstance, selectedFlow, toast, nodeTypes]); // Removido 'nodeTypes' da dependência se não for usado diretamente aqui.
+    }, [reactFlowInstance, selectedFlow, toast, nodeTypes]);
 
     const isLoadingEditor = isLoadingFlowDetails || isSaving || isTogglingStatus;
 
@@ -294,7 +301,7 @@ function FlowEditorInner({ activeFlowId, onFlowSelect }: FlowEditorInnerProps) {
         <div className="flex flex-row h-full min-h-0">
             <div className={cn("w-52 p-2.5 flex-shrink-0 flex flex-col space-y-1.5 border-r overflow-y-auto", baseCardStyle, 'rounded-none border-r-[rgba(30,144,255,0.2)] relative z-10', customScrollbarStyle)}>
                 <h3 className="text-sm font-semibold text-center text-white border-b border-[rgba(30,144,255,0.2)] pb-1.5 mb-1.5 sticky top-0 z-10" style={{ textShadow: `0 0 5px ${NEON_COLOR}`, background: 'hsl(var(--card))', backdropFilter: 'blur(4px)' }}> Adicionar Etapa </h3>
-                {Object.entries(nodeTypes).map(([type, NodeComponent]) => { // Alterado para usar nodeTypes como no original
+                {Object.entries(nodeTypes).map(([type, NodeComponent]) => {
                     let icon = HelpCircle; let name = type;
                     if (type === 'textMessage') { icon = MsgIcon; name = 'Texto'; }
                     else if (type === 'buttonMessage') { icon = ListChecks; name = 'Botões'; }
@@ -385,9 +392,8 @@ function FlowEditorInner({ activeFlowId, onFlowSelect }: FlowEditorInnerProps) {
 // --- FIM DO EDITOR DE FLUXO INTERNO ---
 
 
-interface WhatsAppPageActualProps {} // Renomeado para evitar conflito
+interface WhatsAppPageActualProps {} // Renomeado para evitar conflito com o export default
 
-// Renomeado o componente principal para WhatsApp e usado WhatsAppProps
 const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
   const [activeTab, setActiveTab] = useState('connection'); // Iniciar na aba de conexão
   const { toast } = useToast();
@@ -400,7 +406,7 @@ const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
   const [activeFlowIdForEditor, setActiveFlowIdForEditor] = useState<string | null>(null);
   const [isInitialFlowLoad, setIsInitialFlowLoad] = useState(true);
 
-  // Mock data e lógica para a aba "Conversas" (mantido do seu código original)
+  // Mock data e lógica para a aba "Conversas"
   const [selectedContact, setSelectedContact] = useState<string | null>(null);
   const [currentChatMessage, setCurrentChatMessage] = useState('');
   const [searchTermContacts, setSearchTermContacts] = useState('');
@@ -417,7 +423,7 @@ const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
     queryKey: ['flows', filterCampaignIdForList],
     queryFn: async () => {
       if (!auth.isAuthenticated) return [];
-      let url = '/api/flows'; // Endpoint principal do projeto
+      let url = '/api/flows';
       const params = new URLSearchParams();
       if (filterCampaignIdForList !== 'all') {
         params.append('campaignId', filterCampaignIdForList === 'none' ? 'null' : filterCampaignIdForList);
@@ -461,7 +467,7 @@ const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
 
   const createNewFlowMutation = useMutation<FlowData, Error, { name: string, campaign_id: string | null }>({
     mutationFn: async (flowData) => {
-      const response = await apiRequest('POST', '/api/flows', flowData); // Endpoint principal
+      const response = await apiRequest('POST', '/api/flows', flowData);
       if (!response.ok) {
         const err = await response.json();
         throw new Error(err.message || 'Falha ao criar fluxo');
@@ -487,7 +493,7 @@ const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
 
   const deleteFlowMutation = useMutation<void, Error, string>({
     mutationFn: async (flowId: string) => {
-      const response = await apiRequest('DELETE', `/api/flows?id=${flowId}`); // Endpoint principal
+      const response = await apiRequest('DELETE', `/api/flows?id=${flowId}`);
       if (!response.ok) {
         const err = await response.json();
         throw new Error(err.message || 'Falha ao deletar fluxo');
@@ -507,7 +513,7 @@ const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
     const flowToDelete = flowsList.find(f => String(f.id) === flowId);
     if (!flowToDelete || !window.confirm(`Deletar o fluxo "${flowToDelete.name}"?`)) return;
     deleteFlowMutation.mutate(flowId);
-  }, [flowsList, deleteFlowMutation, activeFlowIdForEditor]);
+  }, [flowsList, deleteFlowMutation, activeFlowIdForEditor]); // Adicionado activeFlowIdForEditor como dependência
 
   return (
     <div className="space-y-6">
@@ -703,6 +709,4 @@ const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
   );
 }
 
-// Correção da exportação: Renomear o componente principal para WhatsApp
-// e exportá-lo como default.
 export default WhatsApp;
