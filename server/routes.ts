@@ -3,13 +3,14 @@ import { Router, Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { storage } from './storage';
 import { JWT_SECRET, GEMINI_API_KEY } from './config';
-import * as schema from '../shared/schema'; // Importar tudo como 'schema'
+// Importar tudo de shared/schema como 'schema'
+import * as schema from '../shared/schema';
 import { z, ZodError } from 'zod';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs/promises';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
-import { MCPHandler } from './mcp_handler';
+import { MCPHandler } from './mcp_handler'; // Esta importação precisa funcionar
 
 const mcpHandler = new MCPHandler(storage);
 
@@ -21,6 +22,7 @@ interface AuthenticatedRequest extends Request {
   };
 }
 
+// ... (authenticateToken e createUploadMiddleware como antes) ...
 const authenticateToken = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -90,6 +92,7 @@ const creativesUpload = createUploadMiddleware('creatives-assets');
 const lpAssetUpload = createUploadMiddleware('lp-assets');
 const mcpAttachmentUpload = createUploadMiddleware('mcp-attachments');
 
+
 const router = Router();
 
 router.use((req: Request, res: Response, next: NextFunction) => {
@@ -116,17 +119,17 @@ const handleZodError = (err: ZodError, req: Request, res: Response, next: NextFu
 // Auth Routes
 router.post('/api/auth/register', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const userData = schema.insertUserSchema.parse(req.body); // Usando schema.insertUserSchema
+    const userData = schema.insertUserSchema.parse(req.body);
     const userRecord = await storage.createUser(userData);
     if (!userRecord) return res.status(500).json({ error: 'Falha ao criar usuário' });
     const token = jwt.sign({ id: userRecord.id, email: userRecord.email }, JWT_SECRET!, { expiresIn: '7d' });
     res.json({ user: { id: userRecord.id, username: userRecord.username, email: userRecord.email }, token });
   } catch (error: any) {
     if (error instanceof ZodError) return handleZodError(error, req, res, next);
-    if (error.code === 'SQLITE_CONSTRAINT' && error.message.includes('UNIQUE constraint failed: users.email')) { // Ajustar para erro PostgreSQL se mudar o dialeto
+    if (error.code === 'SQLITE_CONSTRAINT' && error.message.includes('UNIQUE constraint failed: users.email')) {
         return res.status(409).json({ error: "Este e-mail já está em uso." });
     }
-    if (error.code === 'SQLITE_CONSTRAINT' && error.message.includes('UNIQUE constraint failed: users.username')) { // Ajustar para erro PostgreSQL
+    if (error.code === 'SQLITE_CONSTRAINT' && error.message.includes('UNIQUE constraint failed: users.username')) {
         return res.status(409).json({ error: "Este nome de usuário já está em uso." });
     }
     next(error);
@@ -258,7 +261,7 @@ router.get('/api/creatives/:id', authenticateToken, async (req: AuthenticatedReq
     try {
         const id = parseInt(req.params.id, 10);
         if (isNaN(id)) return res.status(400).json({ error: "ID do criativo inválido" });
-        const creative = await storage.getCreativeById(req.user.id, id);
+        const creative = await storage.getCreativeById(req.user.id, id); 
         if (!creative) return res.status(404).json({ error: 'Criativo não encontrado' });
         res.json(creative);
     } catch (error) {
@@ -326,6 +329,7 @@ router.get('/api/copies', authenticateToken, async (req: AuthenticatedRequest, r
 });
 
 // Flows Routes (WhatsApp Flows)
+// Usando schema.insertFlowSchema do namespace schema
 const partialFlowUpdateSchema = schema.insertFlowSchema.partial().extend({
   elements: z.object({
     nodes: z.array(z.any()),
@@ -619,7 +623,7 @@ router.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
     return res.status(400).json(res.locals.errorMessage);
   }
   const anyError = err as any;
-  if (anyError.isGoogleGenerativeAIError === true) { // Verificação mais segura
+  if (anyError.isGoogleGenerativeAIError === true) {
      res.locals.errorMessage = { error: 'Erro no serviço de IA (Google Gemini)', details: anyError.message };
      return res.status(502).json(res.locals.errorMessage);
   }
