@@ -1,98 +1,90 @@
-import express, { type Express } from "express";
-import fs from "fs";
-import path from "path";
-import { createServer as createViteServer, createLogger, type ViteDevServer } from "vite"; // Adicionado ViteDevServer
-// @ts-ignore
-import viteConfigFunction from "../vite.config";
-import { type Server } from "http";
-import { nanoid } from "nanoid";
+// server/vite.ts
+import { type ViteDevServer, createServer as createViteServer } from "vite";
+import type { Express } from "express";
+import { type Server as HttpServer } from "http";
+import path from 'path';
+import { fileURLToPath } from 'node:url';
+import express from 'express'; // Importar express para app.use(express.static)
 
-const viteLogger = createLogger();
+// eslint-disable-next-line @typescript-eslint/naming-convention
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-export function log(message: string, source = "express") {
-  const formattedTime = new Date().toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: true,
-  });
-
-  console.log(`${formattedTime} [${source}] ${message}`);
+export function log(message: string, context?: string) {
+  const timestamp = new Date().toLocaleTimeString("pt-BR", { hour12: false });
+  console.log(`${timestamp} [${context || 'server-vite'}] ${message}`); // Contexto ajustado
 }
 
-export async function setupVite(app: Express, server: Server): Promise<ViteDevServer> {
-  // @ts-ignore
-  const viteConfig = viteConfigFunction({ command: 'serve', mode: 'development' });
-
-  const serverOptions = {
-    middlewareMode: true,
-    hmr: { server },
-    host: true,
-    ...viteConfig.server, 
-  };
-
+export async function setupVite(app: Express, httpServer: HttpServer) {
+  log('Configurando Vite Dev Server...', 'setupVite');
   const vite = await createViteServer({
-    ...viteConfig, 
-    configFile: false,
-    customLogger: {
-      ...viteLogger,
-      error: (msg, options) => {
-        viteLogger.error(msg, options);
-      },
+    server: { 
+      middlewareMode: true,
+      hmr: {
+        server: httpServer, // Conecta o HMR ao servidor HTTP principal
+        // overlay: false // Descomente para desabilitar o overlay de erro do Vite se preferir
+      }
     },
-    server: serverOptions,
-    appType: "custom",
+    appType: "spa", // 'spa' é comum para SPAs com fallback para index.html
+    root: path.resolve(__dirname, "..", "client"), // Raiz do cliente
+    // configFile: path.resolve(__dirname, "..", "vite.config.ts") // Opcional se o Vite encontrar automaticamente
   });
 
+  // Adiciona o middleware do Vite ao Express
+  // Isso permite que o Vite manipule as requisições para assets do frontend
   app.use(vite.middlewares);
+  log('Vite Dev Server configurado e middleware adicionado.', 'setupVite');
   
-  // Este handler de fallback DEVE vir DEPOIS do registerRoutes em server/index.ts para dev
-  // Por isso, não o chamamos aqui se vamos registrar rotas depois
-  // No entanto, para simplificar, podemos deixar como está e garantir a ordem no server/index.ts
-  app.use("*", async (req, res, next) => {
-    const url = req.originalUrl;
-    // Se a rota for de API, não servir index.html
-    if (url.startsWith('/api/') || url.startsWith('/uploads/')) {
-        return next();
+  // Middleware de fallback para servir index.html para todas as rotas não-API e não-Vite
+  // Deve vir depois das rotas da API e do middleware do Vite
+  app.use('*', async (req, res, next) => {
+    // Se a requisição não for para a API, tenta servir via Vite
+    if (req.originalUrl.startsWith('/api')) {
+      return next(); // Pula para o próximo handler (rotas da API)
     }
     try {
-      const clientRoot = viteConfig.root || path.resolve(import.meta.dirname, "..", "client");
-      const clientTemplate = path.resolve(
-        clientRoot,
-        "index.html"
-      );
-      let template = await fs.promises.readFile(clientTemplate, "utf-8");
-      template = template.replace(
-        /src="\/src\/main\.tsx"/, 
-        `src="/src/main.tsx?v=${nanoid()}"`
-      );
-      const page = await vite.transformIndexHtml(url, template);
-      res.status(200).set({ "Content-Type": "text/html" }).end(page);
+      const url = req.originalUrl;
+      let template = await vite.transformIndexHtml(url, fs.readFileSync(path.resolve(path.resolve(__dirname, "..", "client"), 'index.html'), 'utf-8'));
+      
+      // Adiciona variáveis de ambiente ao HTML se necessário
+      // template = template.replace('', `<script>window.process = { env: ${JSON.stringify(safeEnvVars)} };</script>`);
+
+      res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
     } catch (e) {
-      if (e instanceof Error) vite.ssrFixStacktrace(e); 
-      next(e);
+      if (e instanceof Error) {
+         vite.ssrFixStacktrace(e);
+         log(`Erro no middleware SPA fallback do Vite: ${e.message}`, 'setupVite-error');
+         next(e);
+      } else {
+         log(`Erro desconhecido no middleware SPA fallback do Vite`, 'setupVite-error');
+         next(new Error('Erro desconhecido no processamento da requisição SPA.'));
+      }
     }
   });
-  return vite; 
+  log('Middleware SPA fallback do Vite configurado.', 'setupVite');
 }
 
-export function configureStaticServing(app: Express) { 
-  const publicDistPath = path.resolve(process.cwd(), "dist/public");
-  const uploadsPath = path.resolve(process.cwd(), "uploads");
 
-  log(`[StaticServing] Servindo assets do frontend de: ${publicDistPath}`, "static-config");
+// Nova função serveStatic movida para cá e exportada
+export function serveStatic(app: Express) {
+  const clientDistPath = path.resolve(__dirname, "..", "dist", "public");
+  log(`[StaticServing] Servindo assets do frontend de: ${clientDistPath}`, 'serveStatic');
   
-  if (fs.existsSync(publicDistPath)) {
-    app.use(express.static(publicDistPath));
-  } else {
-    log(`[StaticServing] ATENÇÃO: Diretório de build do frontend não encontrado: ${publicDistPath}.`, "static-config");
-  }
+  // Servir arquivos estáticos da pasta de build do cliente
+  app.use(express.static(clientDistPath));
 
-  log(`[StaticServing] Verificando diretório de uploads em: ${uploadsPath}`, "static-config");
-  if (fs.existsSync(uploadsPath)) {
-    app.use('/uploads', express.static(uploadsPath));
-    log(`[StaticServing] Rota /uploads configurada para ${uploadsPath}`, "static-config");
-  } else {
-    log(`[StaticServing] ATENÇÃO: Diretório de uploads não encontrado: ${uploadsPath}`, "static-config");
-  }
+  // SPA fallback: para qualquer rota não tratada (não-API, não-arquivo estático), servir index.html
+  // Isso garante que o roteamento do lado do cliente funcione corretamente em produção.
+  app.get("*", (req, res, next) => {
+    if (req.originalUrl.startsWith('/api')) { // Não aplicar fallback para rotas de API
+        return next();
+    }
+    if (req.originalUrl.includes('.')) { // Não aplicar fallback se parece ser uma requisição de arquivo com extensão
+        return next();
+    }
+    log(`[SPA Fallback] Servindo index.html para ${req.originalUrl}`, 'serveStatic');
+    res.sendFile(path.resolve(clientDistPath, "index.html"));
+  });
 }
+
+// Adiciona importação de fs se ainda não estiver lá (para vite.transformIndexHtml)
+import fs from 'fs';
