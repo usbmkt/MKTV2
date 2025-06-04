@@ -1,8 +1,8 @@
 // server/storage.ts
 import { db } from './db';
-import * as schema from '../shared/schema'; // Importar tudo como namespace
+import * as schema from '../shared/schema'; 
 import { eq, count, sum, sql, desc, and, or, gte, lte, isNull, asc, ilike } from 'drizzle-orm';
-import * as bcrypt from 'bcrypt';
+import bcrypt from 'bcrypt'; // <-- MUDANÇA AQUI
 import { z } from 'zod';
 
 // Funções de simulação de dados de gráfico (mantidas)
@@ -208,5 +208,4 @@ export class DatabaseStorage implements IStorage {
   }
 }
 
-// Mantendo a exportação nomeada original para a instância
 export const storage = new DatabaseStorage();
