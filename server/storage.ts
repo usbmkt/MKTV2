@@ -1,324 +1,399 @@
 // server/storage.ts
+import { eq, and, or, isNull, desc, InferSelectModel, InferInsertModel } from 'drizzle-orm';
 import { db } from './db';
 import {
-  users, campaigns, creatives, metrics, whatsappMessages, copies, alerts, budgets, landingPages,
-  chatSessions, chatMessages, funnels, funnelStages, launchPhaseEnum,
-  type User, type InsertUser, type Campaign, type InsertCampaign,
-  type Creative, type InsertCreative, type Metric, type InsertMetric,
-  type WhatsappMessage, type InsertWhatsappMessage, type Copy, type InsertCopy,
-  type Alert, type InsertAlert, type Budget, type InsertBudget,
-  type LandingPage, type InsertLandingPage,
-  type ChatSession, type InsertChatSession, type ChatMessage, type InsertChatMessage,
-  type Funnel, type InsertFunnel, type FunnelStage, type InsertFunnelStage
-  // Adicione quaisquer outros tipos ou schemas que você usa aqui
-} from '../shared/schema'; // Ajuste o caminho se necessário
+  usersTable,
+  campaignsTable,
+  creativesTable,
+  metricsTable,
+  budgetsTable,
+  alertsTable,
+  copiesTable,
+  chatSessionsTable,
+  chatMessagesTable,
+  landingPagesTable,
+  funnelsTable,
+  funnelStagesTable,
+  flowsTable, // Adicionado para clareza, já deveria estar importado por '*' em db
+  NewFlow, // Assumindo que NewFlow é o tipo de inserção (InferInsertModel<typeof flowsTable>)
+  FlowData // Assumindo que FlowData é o tipo de seleção (InferSelectModel<typeof flowsTable>)
+} from '../shared/schema';
+import bcrypt from 'bcrypt';
 
-import { eq, count, sum, sql, desc, and, or, gte, lte, isNull, asc, ilike } from 'drizzle-orm';
-import * as bcrypt from 'bcrypt';
-
-// Funções de simulação de dados de gráfico (mantidas como no seu original)
-const chartColors = { /* ... seu objeto chartColors ... */ palette: [ 'rgba(75, 192, 192, 1)', 'rgba(255, 99, 132, 1)', 'rgba(54, 162, 235, 1)', 'rgba(255, 206, 86, 1)', 'rgba(153, 102, 255, 1)', 'rgba(255, 159, 64, 1)', 'rgba(200, 200, 200, 1)' ], background: [ 'rgba(75, 192, 192, 0.2)', 'rgba(255, 99, 132, 0.2)', 'rgba(54, 162, 235, 0.2)', 'rgba(255, 206, 86, 0.2)', 'rgba(153, 102, 255, 0.2)', 'rgba(255, 159, 64, 0.2)', 'rgba(200, 200, 200, 0.2)' ] };
-function generateSimulatedLineChartData(label: string, startValue: number, countNum: number, maxFluctuation: number, color: string): { labels: string[], datasets: { label: string, data: number[], borderColor: string, backgroundColor: string, fill: boolean, tension: number }[] } { const dataPoints: number[] = []; const labels: string[] = []; let currentValue = startValue; for (let i = 0; i < countNum; i++) { labels.push(`Dia ${i + 1}`); dataPoints.push(Math.round(currentValue)); currentValue += (Math.random() * maxFluctuation * 2) - maxFluctuation; if (currentValue < 0) currentValue = 0; } return { labels: labels, datasets: [ { label: label, data: dataPoints, borderColor: color, backgroundColor: color.replace('1)', '0.2)'), fill: true, tension: 0.4, }, ], }; }
-function generateSimulatedBarChartData(label: string, categories: string[], baseValue: number, maxFluctuation: number, colors: string[]): { labels: string[], datasets: { label: string, data: number[], backgroundColor: string[] }[] } { const dataPoints: number[] = categories.map(() => Math.round(baseValue + (Math.random() * maxFluctuation * 2) - maxFluctuation)); return { labels: categories, datasets: [ { label: label, data: dataPoints, backgroundColor: colors, }, ], }; }
-function generateSimulatedDoughnutChartData(chartLabels: string[], baseValue: number, maxFluctuation: number, colors: string[]): { labels: string[], datasets: { data: number[], backgroundColor: string[], borderWidth: number }[] } { const dataPoints: number[] = chartLabels.map(() => Math.round(baseValue + (Math.random() * maxFluctuation * 2) - maxFluctuation)); return { labels: chartLabels, datasets: [ { data: dataPoints, backgroundColor: colors.map(color => color.replace('1)', '0.8)')), borderWidth: 0, }, ], }; }
+// Tipos inferidos para garantir consistência (ajuste os nomes se necessário)
+// type FlowData = InferSelectModel<typeof flowsTable>; // Já definido acima
+// type NewFlow = InferInsertModel<typeof flowsTable>; // Já definido acima
 
 
-// Interface IStorage (mantida como no seu original)
-export interface IStorage {
-  getUser(id: number): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  getUserByEmail(email: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
-  validatePassword(password: string, hashedPassword: string): Promise<boolean>;
-  getCampaigns(userId: number, limit?: number): Promise<Campaign[]>;
-  getCampaign(id: number, userId: number): Promise<Campaign | undefined>;
-  createCampaign(campaign: InsertCampaign): Promise<Campaign>;
-  updateCampaign(id: number, campaign: Partial<Omit<InsertCampaign, 'userId'>>, userId: number): Promise<Campaign | undefined>;
-  deleteCampaign(id: number, userId: number): Promise<boolean>;
-  getCreatives(userId: number, campaignId?: number | null): Promise<Creative[]>;
-  getCreative(id: number, userId: number): Promise<Creative | undefined>;
-  createCreative(creative: InsertCreative): Promise<Creative>;
-  updateCreative(id: number, creative: Partial<Omit<InsertCreative, 'userId'>>, userId: number): Promise<Creative | undefined>;
-  deleteCreative(id: number, userId: number): Promise<boolean>;
-  getMetricsForCampaign(campaignId: number, userId: number): Promise<Metric[]>;
-  createMetric(metricData: InsertMetric): Promise<Metric>;
-  getMessages(userId: number, contactNumber?: string): Promise<WhatsappMessage[]>;
-  createMessage(messageData: InsertWhatsappMessage): Promise<WhatsappMessage>;
-  markMessageAsRead(id: number, userId: number): Promise<boolean>;
-  getContacts(userId: number): Promise<{ contactNumber: string; contactName: string | null; lastMessage: string; timestamp: Date, unreadCount: number }[]>;
-  getCopies(userId: number, campaignId?: number | null, phase?: string, purposeKey?: string, searchTerm?: string): Promise<Copy[]>;
-  createCopy(copy: InsertCopy): Promise<Copy>;
-  updateCopy(id: number, copyData: Partial<Omit<InsertCopy, 'userId' | 'id' | 'createdAt'>>, userId: number): Promise<Copy | undefined>;
-  deleteCopy(id: number, userId: number): Promise<boolean>;
-  getAlerts(userId: number, onlyUnread?: boolean): Promise<Alert[]>;
-  createAlert(alertData: InsertAlert): Promise<Alert>;
-  markAlertAsRead(id: number, userId: number): Promise<boolean>;
-  getBudgets(userId: number, campaignId?: number | null): Promise<Budget[]>;
-  createBudget(budget: InsertBudget): Promise<Budget>;
-  updateBudget(id: number, budgetData: Partial<Omit<InsertBudget, 'userId' | 'campaignId'>>, userId: number): Promise<Budget | undefined>;
-  getLandingPages(userId: number): Promise<LandingPage[]>;
-  getLandingPage(id: number, userId: number): Promise<LandingPage | undefined>;
-  getLandingPageBySlug(slug: string): Promise<LandingPage | undefined>;
-  getLandingPageByStudioProjectId(studioProjectId: string, userId: number): Promise<LandingPage | undefined>;
-  createLandingPage(lpData: InsertLandingPage): Promise<LandingPage>;
-  updateLandingPage(id: number, lpData: Partial<Omit<InsertLandingPage, 'userId'>>, userId: number): Promise<LandingPage | undefined>;
-  deleteLandingPage(id: number, userId: number): Promise<boolean>;
-  createChatSession(userId: number, title?: string): Promise<ChatSession>;
-  getChatSession(sessionId: number, userId: number): Promise<ChatSession | undefined>;
-  getChatSessions(userId: number): Promise<ChatSession[]>;
-  updateChatSessionTitle(sessionId: number, userId: number, newTitle: string): Promise<ChatSession | undefined>;
-  deleteChatSession(sessionId: number, userId: number): Promise<boolean>;
-  addChatMessage(messageData: InsertChatMessage): Promise<ChatMessage>;
-  getChatMessages(sessionId: number, userId: number): Promise<ChatMessage[]>;
-  getDashboardData(userId: number, timeRange: string): Promise<any>;
-  getFunnels(userId: number, campaignId?: number | null): Promise<Funnel[]>;
-  getFunnel(id: number, userId: number): Promise<Funnel | undefined>;
-  createFunnel(funnelData: InsertFunnel): Promise<Funnel>;
-  updateFunnel(id: number, funnelData: Partial<Omit<InsertFunnel, 'userId' | 'campaignId'>>, userId: number): Promise<Funnel | undefined>;
-  deleteFunnel(id: number, userId: number): Promise<boolean>;
-  getFunnelStages(funnelId: number, userId: number): Promise<FunnelStage[]>;
-  createFunnelStage(stageData: InsertFunnelStage): Promise<FunnelStage>;
-  updateFunnelStage(id: number, stageData: Partial<Omit<InsertFunnelStage, 'funnelId'>>, userId: number): Promise<FunnelStage | undefined>;
-  deleteFunnelStage(id: number, userId: number): Promise<boolean>;
+// Interface IStorage (simplificada para o contexto, mantenha a sua completa)
+interface IStorage {
+  // ... outras assinaturas de métodos ...
+  createUser(userData: InferInsertModel<typeof usersTable>): Promise<InferSelectModel<typeof usersTable> | null>;
+  getUser(email: string): Promise<InferSelectModel<typeof usersTable> | null>;
+  getUserById(id: number): Promise<InferSelectModel<typeof usersTable> | null>;
+  validatePassword(email: string, pass: string): Promise<InferSelectModel<typeof usersTable> | null>;
+  
+  createFlow(userId: number, flowData: NewFlow): Promise<FlowData | null>;
+  getFlows(userId: number, campaignIdParam?: string | null): Promise<FlowData[]>;
+  getFlowById(userId: number, flowId: number): Promise<FlowData | null>;
+  updateFlow(userId: number, flowId: number, flowData: Partial<Omit<NewFlow, 'userId' | 'id'>>): Promise<FlowData | null>;
+  deleteFlow(userId: number, flowId: number): Promise<{ success: boolean; message?: string }>;
+
+  getCampaigns(userId: number): Promise<InferSelectModel<typeof campaignsTable>[]>;
+  getCampaignById(userId: number, campaignId: number): Promise<InferSelectModel<typeof campaignsTable> | null>;
+  createCampaign(userId: number, campaignData: InferInsertModel<typeof campaignsTable>): Promise<InferSelectModel<typeof campaignsTable> | null>;
+  updateCampaign(userId: number, campaignId: number, campaignData: Partial<InferInsertModel<typeof campaignsTable>>): Promise<InferSelectModel<typeof campaignsTable> | null>;
+  deleteCampaign(userId: number, campaignId: number): Promise<{ success: boolean }>;
+
+  getCreatives(userId: number, campaignId?: number): Promise<InferSelectModel<typeof creativesTable>[]>;
+  createCreative(userId: number, creativeData: InferInsertModel<typeof creativesTable>): Promise<InferSelectModel<typeof creativesTable> | null>;
+  updateCreative(userId: number, creativeId: number, creativeData: Partial<InferInsertModel<typeof creativesTable>>): Promise<InferSelectModel<typeof creativesTable> | null>;
+  deleteCreative(userId: number, creativeId: number): Promise<{ success: boolean }>;
+
+  getBudgets(userId: number, campaignId?: number): Promise<InferSelectModel<typeof budgetsTable>[]>;
+  createBudget(userId: number, budgetData: InferInsertModel<typeof budgetsTable>): Promise<InferSelectModel<typeof budgetsTable> | null>;
+  updateBudget(userId: number, budgetId: number, budgetData: Partial<InferInsertModel<typeof budgetsTable>>): Promise<InferSelectModel<typeof budgetsTable> | null>;
+  deleteBudget(userId: number, budgetId: number): Promise<{ success: boolean }>;
+
+  createCopy(userId: number, copyData: InferInsertModel<typeof copiesTable>): Promise<InferSelectModel<typeof copiesTable> | null>;
+  getCopies(userId: number, campaignId?: number): Promise<InferSelectModel<typeof copiesTable>[]>;
+  updateCopy(userId: number, copyId: number, copyData: Partial<InferInsertModel<typeof copiesTable>>): Promise<InferSelectModel<typeof copiesTable> | null>;
+  deleteCopy(userId: number, copyId: number): Promise<{ success: boolean }>;
+  
+  getDashboardData(userId: number): Promise<any>;
+
+  createLandingPage(userId: number, pageData: InferInsertModel<typeof landingPagesTable>): Promise<InferSelectModel<typeof landingPagesTable> | null>;
+  getLandingPages(userId: number): Promise<InferSelectModel<typeof landingPagesTable>[]>;
+  getLandingPageById(userId: number, pageId: number): Promise<InferSelectModel<typeof landingPagesTable> | null>;
+  getLandingPageBySlug(slug: string): Promise<InferSelectModel<typeof landingPagesTable> | null>;
+  getLandingPageByStudioProjectId(studioProjectId: string): Promise<InferSelectModel<typeof landingPagesTable> | null>;
+  updateLandingPage(userId: number, pageId: number, pageData: Partial<InferInsertModel<typeof landingPagesTable>>): Promise<InferSelectModel<typeof landingPagesTable> | null>;
+  deleteLandingPage(userId: number, pageId: number): Promise<{ success: boolean }>;
+
+  // Chat MCP
+  createChatSession(userId: number, title: string): Promise<InferSelectModel<typeof chatSessionsTable> | null>;
+  getChatSessions(userId: number): Promise<InferSelectModel<typeof chatSessionsTable>[]>;
+  getChatSessionById(userId: number, sessionId: number): Promise<InferSelectModel<typeof chatSessionsTable> & { messages: InferSelectModel<typeof chatMessagesTable>[] } | null>;
+  addChatMessage(sessionId: number, sender: 'user' | 'mcp' | 'system', text: string, attachmentUrl?: string | null): Promise<InferSelectModel<typeof chatMessagesTable> | null>;
+  updateChatSessionTitle(userId: number, sessionId: number, newTitle: string): Promise<InferSelectModel<typeof chatSessionsTable> | null>;
+  deleteChatSession(userId: number, sessionId: number): Promise<{ success: boolean }>;
 }
 
 
 export class DatabaseStorage implements IStorage {
-  // Métodos de User (mantidos)
-  async getUser(id: number): Promise<User | undefined> { const result = await db.select().from(users).where(eq(users.id, id)).limit(1); return result[0]; }
-  async getUserByUsername(username: string): Promise<User | undefined> { const result = await db.select().from(users).where(eq(users.username, username)).limit(1); return result[0]; }
-  async getUserByEmail(email: string): Promise<User | undefined> { const result = await db.select().from(users).where(eq(users.email, email)).limit(1); return result[0]; }
-  async createUser(userData: InsertUser): Promise<User> { const hashedPassword = await bcrypt.hash(userData.password, 10); const [newUser] = await db.insert(users).values({ ...userData, password: hashedPassword, }).returning(); if (!newUser) throw new Error("Falha ao criar usuário."); return newUser; }
-  async validatePassword(password: string, hashedPassword: string): Promise<boolean> { return bcrypt.compare(password, hashedPassword); }
-
-  // Métodos de Campaign (mantidos)
-  async getCampaigns(userId: number, limit?: number): Promise<Campaign[]> { let query = db.select().from(campaigns).where(eq(campaigns.userId, userId)).orderBy(desc(campaigns.createdAt)); if (limit) { return query.limit(limit); } return query; }
-  async getCampaign(id: number, userId: number): Promise<Campaign | undefined> { const [campaign] = await db.select().from(campaigns).where(and(eq(campaigns.id, id), eq(campaigns.userId, userId))).limit(1); return campaign; }
-  async createCampaign(campaignData: InsertCampaign): Promise<Campaign> { const [newCampaign] = await db.insert(campaigns).values(campaignData).returning(); if (!newCampaign) throw new Error("Falha ao criar campanha."); return newCampaign; }
-  async updateCampaign(id: number, campaignData: Partial<Omit<InsertCampaign, 'userId'>>, userId: number): Promise<Campaign | undefined> { const [updatedCampaign] = await db.update(campaigns).set({ ...campaignData, updatedAt: new Date() }).where(and(eq(campaigns.id, id), eq(campaigns.userId, userId))).returning(); return updatedCampaign; }
-  async deleteCampaign(id: number, userId: number): Promise<boolean> { const result = await db.delete(campaigns).where(and(eq(campaigns.id, id), eq(campaigns.userId, userId))); return (result.rowCount ?? 0) > 0; }
-
-  // Métodos de Creative (mantidos)
-  async getCreatives(userId: number, campaignId?: number | null): Promise<Creative[]> { const conditions = [eq(creatives.userId, userId)]; if (campaignId !== undefined) { conditions.push(campaignId === null ? isNull(creatives.campaignId) : eq(creatives.campaignId, campaignId)); } return db.select().from(creatives).where(and(...conditions)).orderBy(desc(creatives.createdAt));}
-  async getCreative(id: number, userId: number): Promise<Creative | undefined> { const [creative] = await db.select().from(creatives).where(and(eq(creatives.id, id), eq(creatives.userId, userId))).limit(1); return creative; }
-  async createCreative(creativeData: InsertCreative): Promise<Creative> { const [newCreative] = await db.insert(creatives).values(creativeData).returning(); if (!newCreative) throw new Error("Falha ao criar criativo."); return newCreative; }
-  async updateCreative(id: number, creativeData: Partial<Omit<InsertCreative, 'userId'>>, userId: number): Promise<Creative | undefined> { const [updatedCreative] = await db.update(creatives).set({ ...creativeData, updatedAt: new Date() }).where(and(eq(creatives.id, id), eq(creatives.userId, userId))).returning(); return updatedCreative; }
-  async deleteCreative(id: number, userId: number): Promise<boolean> { const result = await db.delete(creatives).where(and(eq(creatives.id, id), eq(creatives.userId, userId))); return (result.rowCount ?? 0) > 0; }
-
-  // Métodos de Metrics (mantidos)
-  async getMetricsForCampaign(campaignId: number, userId: number): Promise<Metric[]> { const campaignExists = await db.select({id: campaigns.id}).from(campaigns).where(and(eq(campaigns.id, campaignId), eq(campaigns.userId, userId))).limit(1); if (!campaignExists.length) { throw new Error("Campanha não encontrada ou não pertence ao usuário."); } return db.select().from(metrics).where(eq(metrics.campaignId, campaignId)).orderBy(desc(metrics.date)); }
-  async createMetric(metricData: InsertMetric): Promise<Metric> { const [newMetric] = await db.insert(metrics).values(metricData).returning(); if (!newMetric) throw new Error("Falha ao criar métrica."); return newMetric; }
-
-  // Métodos de Whatsapp (mantidos)
-  async getMessages(userId: number, contactNumber?: string): Promise<WhatsappMessage[]> { const conditions = [eq(whatsappMessages.userId, userId)]; if (contactNumber) { conditions.push(eq(whatsappMessages.contactNumber, contactNumber)); } return db.select().from(whatsappMessages).where(and(...conditions)).orderBy(desc(whatsappMessages.timestamp)); }
-  async createMessage(messageData: InsertWhatsappMessage): Promise<WhatsappMessage> { const [newMessage] = await db.insert(whatsappMessages).values(messageData).returning(); if (!newMessage) throw new Error("Falha ao criar mensagem."); return newMessage; }
-  async markMessageAsRead(id: number, userId: number): Promise<boolean> { const result = await db.update(whatsappMessages).set({ isRead: true }).where(and(eq(whatsappMessages.id, id), eq(whatsappMessages.userId, userId), eq(whatsappMessages.isRead, false))); return (result.rowCount ?? 0) > 0; }
-  async getContacts(userId: number): Promise<{ contactNumber: string; contactName: string | null; lastMessage: string; timestamp: Date, unreadCount: number }[]> { const allMessages = await db.select().from(whatsappMessages).where(eq(whatsappMessages.userId, userId)).orderBy(desc(whatsappMessages.timestamp)); const contactsMap = new Map<string, { contactNumber: string; contactName: string | null; lastMessage: string; timestamp: Date, unreadCount: number }>(); for (const msg of allMessages) { if (!contactsMap.has(msg.contactNumber)) { contactsMap.set(msg.contactNumber, { contactNumber: msg.contactNumber, contactName: msg.contactName || null, lastMessage: msg.message, timestamp: new Date(msg.timestamp), unreadCount: 0, }); } const contact = contactsMap.get(msg.contactNumber)!; if (!msg.isRead && msg.direction === 'incoming') { contact.unreadCount++; } } return Array.from(contactsMap.values()).sort((a,b) => b.timestamp.getTime() - a.timestamp.getTime()); }
-
-  // --- MÉTODOS DE COPIES (COM LOGS) ---
-  async getCopies(userId: number, campaignId?: number | null, phase?: string, purposeKey?: string, searchTerm?: string): Promise<Copy[]> {
-    const conditions: any[] = [eq(copies.userId, userId)];
-    if (campaignId !== undefined) { // Verifica se campaignId foi fornecido
-      conditions.push(campaignId === null ? isNull(copies.campaignId) : eq(copies.campaignId, campaignId));
+  async createUser(userData: InferInsertModel<typeof usersTable>): Promise<InferSelectModel<typeof usersTable> | null> {
+    if (!userData.email || !userData.password || !userData.username) {
+      throw new Error("Email, username, and password are required");
     }
-    if (phase && phase !== 'all') { // Adicionado check para 'all'
-        conditions.push(eq(copies.launchPhase, phase as typeof launchPhaseEnum.enumValues[number]));
-    }
-    if (purposeKey && purposeKey !== 'all') { // Adicionado check para 'all'
-        conditions.push(eq(copies.purposeKey, purposeKey));
-    }
-    if (searchTerm && searchTerm.trim() !== '') {
-        const searchPattern = `%${searchTerm.toLowerCase()}%`; // Convertido para minúsculas para ilike
-        conditions.push(
-            or(
-                ilike(copies.title, searchPattern),
-                ilike(copies.content, searchPattern)
-                // Adicionar outros campos se necessário para busca, ex: ilike(copies.platform, searchPattern)
-            )
-        );
-    }
-    return db.select().from(copies).where(and(...conditions)).orderBy(desc(copies.createdAt));
+    const hashedPassword = await bcrypt.hash(userData.password, 10);
+    const result = await db.insert(usersTable).values({ ...userData, password: hashedPassword }).returning();
+    return result[0] || null;
   }
 
-  async createCopy(copyData: InsertCopy): Promise<Copy> {
-    // LOGS PARA DEBUG ADICIONADOS AQUI
-    console.log('[storage.createCopy] Iniciando método.');
-    console.log('[storage.createCopy] copyData recebido (argumento da função):', JSON.stringify(copyData, null, 2));
-
-    // Assegurar que userId está presente e é um número
-    if (typeof copyData.userId !== 'number') {
-        console.error('[storage.createCopy] ERRO FATAL: userId não é um número ou está ausente no copyData que chegou ao storage!', copyData.userId);
-        throw new Error("Erro interno: userId inválido ao tentar criar copy.");
-    }
-
-    const dataToInsert = {
-        ...copyData, // Espalha todos os campos de copyData (incluindo userId)
-        // Trata campaignId para ser null se for undefined, caso contrário usa o valor de copyData.campaignId
-        campaignId: copyData.campaignId === undefined ? null : copyData.campaignId,
-        // Garante que os campos JSONB tenham um valor padrão se não forem fornecidos
-        details: copyData.details || {},
-        baseInfo: copyData.baseInfo || {},
-        fullGeneratedResponse: copyData.fullGeneratedResponse || {},
-        tags: copyData.tags || [],
-        // createdAt e lastUpdatedAt são definidos pelo banco com defaultNow() e não devem ser incluídos aqui
-        // a menos que você queira sobrescrevê-los, o que geralmente não é o caso para create.
-    };
-
-    // Remover campos que o banco gerencia (id, createdAt, lastUpdatedAt) antes da inserção,
-    // embora o Drizzle possa lidar com isso, é uma boa prática ser explícito.
-    // No entanto, InsertCopy já deve ser o tipo correto sem esses campos devido ao .omit() no Zod schema.
-    // Mas se userId não está no .omit() do Zod, ele estará em copyData.
-
-    console.log('[storage.createCopy] dataToInsert (objeto final para o DB):', JSON.stringify(dataToInsert, null, 2));
-
-    const [newCopy] = await db.insert(copies).values(dataToInsert).returning();
-    if (!newCopy) {
-      console.error("[storage.createCopy] Falha ao inserir copy no banco. `returning()` não retornou dados.");
-      throw new Error("Falha ao salvar a copy no banco de dados.");
-    }
-    console.log('[storage.createCopy] Copy criada com sucesso:', JSON.stringify(newCopy, null, 2));
-    return newCopy;
+  async getUser(email: string): Promise<InferSelectModel<typeof usersTable> | null> {
+    return await db.query.usersTable.findFirst({ where: eq(usersTable.email, email) }) || null;
   }
 
-  async updateCopy(id: number, copyData: Partial<Omit<InsertCopy, 'userId' | 'id' | 'createdAt'>>, userId: number): Promise<Copy | undefined> {
-    // Verifica se a copy existe e pertence ao usuário
-    const existingCopyResult = await db.select({id: copies.id}).from(copies)
-        .where(and(eq(copies.id, id), eq(copies.userId, userId)))
-        .limit(1);
+  async getUserById(id: number): Promise<InferSelectModel<typeof usersTable> | null> {
+    return await db.query.usersTable.findFirst({ where: eq(usersTable.id, id) }) || null;
+  }
 
-    if(!existingCopyResult || existingCopyResult.length === 0) {
-      console.warn(`[storage.updateCopy] Tentativa de atualizar copy com ID: ${id} para UserID: ${userId}. Copy não encontrada ou não pertence ao usuário.`);
-      return undefined;
+  async validatePassword(email: string, pass: string): Promise<InferSelectModel<typeof usersTable> | null> {
+    const user = await this.getUser(email);
+    if (!user || !user.password) return null;
+    const isValid = await bcrypt.compare(pass, user.password);
+    return isValid ? user : null;
+  }
+
+  // --- Flow Methods ---
+  async createFlow(userId: number, flowData: NewFlow): Promise<FlowData | null> {
+    const result = await db.insert(flowsTable).values({ ...flowData, userId }).returning();
+    return result[0] || null;
+  }
+
+  async getFlows(userId: number, campaignIdParam?: string | null): Promise<FlowData[]> {
+    const conditions = [eq(flowsTable.userId, userId)];
+    if (campaignIdParam) {
+      if (campaignIdParam === 'null') {
+        conditions.push(isNull(flowsTable.campaignId));
+      } else {
+        const numericCampaignId = parseInt(campaignIdParam, 10);
+        if (!isNaN(numericCampaignId)) {
+          conditions.push(eq(flowsTable.campaignId, numericCampaignId));
+        }
+      }
     }
+    return db.query.flowsTable.findMany({
+      where: and(...conditions),
+      orderBy: [desc(flowsTable.updatedAt)],
+    });
+  }
 
-    // Prepara os dados para atualização
-    const dataToUpdate: Partial<Omit<Copy, 'id' | 'userId' | 'createdAt'>> = {
-        ...copyData, // Espalha os campos permitidos de copyData
-        lastUpdatedAt: new Date(), // Atualiza explicitamente o lastUpdatedAt
-    };
+  async getFlowById(userId: number, flowId: number): Promise<FlowData | null> {
+    return await db.query.flowsTable.findFirst({
+      where: and(eq(flowsTable.id, flowId), eq(flowsTable.userId, userId)),
+    }) || null;
+  }
 
-    // Tratar campaignId explicitamente para garantir que null seja enviado se for o caso
-    // Usar hasOwnProperty para distinguir entre campaignId não enviado e campaignId: undefined
-    if (copyData.hasOwnProperty('campaignId')) {
-        // @ts-ignore // campaignId pode ser null
-        dataToUpdate.campaignId = copyData.campaignId === undefined ? null : copyData.campaignId;
-    }
-    // Não é necessário remover userId, id, createdAt de dataToUpdate porque o tipo Omit já fez isso
+  async updateFlow(userId: number, flowId: number, flowData: Partial<Omit<NewFlow, 'userId' | 'id'>>): Promise<FlowData | null> {
+    // Garantir que 'elements' seja tratado como JSON, se necessário (Drizzle geralmente lida com isso para colunas jsonb)
+    const dataToUpdate = { ...flowData, updatedAt: new Date() };
 
-    console.log(`[storage.updateCopy] Atualizando copy ID: ${id} para UserID: ${userId} com dados:`, JSON.stringify(dataToUpdate, null, 2));
-
-    const [updatedCopy] = await db.update(copies)
+    const result = await db.update(flowsTable)
       .set(dataToUpdate)
-      .where(and(eq(copies.id, id), eq(copies.userId, userId))) // Garante que só atualiza a copy correta
+      .where(and(eq(flowsTable.id, flowId), eq(flowsTable.userId, userId)))
       .returning();
-
-    if (!updatedCopy) {
-        console.error(`[storage.updateCopy] Falha ao ATUALIZAR copy ID: ${id} para usuário ${userId} no banco, embora a verificação inicial tenha encontrado a copy.`);
-    } else {
-        console.log(`[storage.updateCopy] Copy ID: ${id} atualizada com sucesso para UserID: ${userId}.`);
-    }
-    return updatedCopy;
+    return result[0] || null;
   }
 
-  async deleteCopy(id: number, userId: number): Promise<boolean> {
-    console.log(`[storage.deleteCopy] Tentando deletar copy ID: ${id} para UserID: ${userId}`);
-    const result = await db.delete(copies).where(and(eq(copies.id, id), eq(copies.userId, userId)));
-    const success = (result.rowCount ?? 0) > 0;
-    if (success) {
-        console.log(`[storage.deleteCopy] Copy ID: ${id} deletada com sucesso para UserID: ${userId}.`);
-    } else {
-        console.warn(`[storage.deleteCopy] Nenhuma copy deletada para ID: ${id} e UserID: ${userId}. Pode não existir ou não pertencer ao usuário.`);
+  async deleteFlow(userId: number, flowId: number): Promise<{ success: boolean; message?: string }> {
+    const result = await db.delete(flowsTable)
+      .where(and(eq(flowsTable.id, flowId), eq(flowsTable.userId, userId)))
+      .returning({ id: flowsTable.id });
+    if (result.length > 0) {
+      return { success: true };
     }
-    return success;
+    return { success: false, message: "Fluxo não encontrado ou usuário não autorizado." };
   }
 
-  // Métodos de Alerts (mantidos)
-  async getAlerts(userId: number, onlyUnread?: boolean): Promise<Alert[]> { const conditions = [eq(alerts.userId, userId)]; if (onlyUnread) { conditions.push(eq(alerts.isRead, false)); } return db.select().from(alerts).where(and(...conditions)).orderBy(desc(alerts.createdAt)); }
-  async createAlert(alertData: InsertAlert): Promise<Alert> { const [newAlert] = await db.insert(alerts).values(alertData).returning(); if (!newAlert) throw new Error("Falha ao criar alerta."); return newAlert; }
-  async markAlertAsRead(id: number, userId: number): Promise<boolean> { const result = await db.update(alerts).set({ isRead: true }).where(and(eq(alerts.id, id), eq(alerts.userId, userId), eq(alerts.isRead, false))); return (result.rowCount ?? 0) > 0; }
+  // --- Campaign Methods ---
+  async getCampaigns(userId: number): Promise<InferSelectModel<typeof campaignsTable>[]> {
+    return db.query.campaignsTable.findMany({
+      where: eq(campaignsTable.userId, userId),
+      orderBy: [desc(campaignsTable.updatedAt)],
+    });
+  }
 
-  // Métodos de Budgets (mantidos)
-  async getBudgets(userId: number, campaignId?: number | null): Promise<Budget[]> { const conditions = [eq(budgets.userId, userId)]; if (campaignId !== undefined) { conditions.push(campaignId === null ? isNull(budgets.campaignId) : eq(budgets.campaignId, campaignId)); } return db.select().from(budgets).where(and(...conditions)).orderBy(desc(budgets.createdAt)); }
-  async createBudget(budgetData: InsertBudget): Promise<Budget> { const [newBudget] = await db.insert(budgets).values(budgetData).returning(); if (!newBudget) throw new Error("Falha ao criar orçamento."); return newBudget; }
-  async updateBudget(id: number, budgetData: Partial<Omit<InsertBudget, 'userId' | 'campaignId'>>, userId: number): Promise<Budget | undefined> { const existingBudget = await db.select().from(budgets).where(and(eq(budgets.id, id), eq(budgets.userId, userId))).limit(1); if(!existingBudget || existingBudget.length === 0) { return undefined;} const [updatedBudget] = await db.update(budgets).set(budgetData).where(and(eq(budgets.id, id), eq(budgets.userId, userId))).returning(); return updatedBudget; }
+  async getCampaignById(userId: number, campaignId: number): Promise<InferSelectModel<typeof campaignsTable> | null> {
+    return db.query.campaignsTable.findFirst({
+      where: and(eq(campaignsTable.id, campaignId), eq(campaignsTable.userId, userId)),
+    }) || null;
+  }
 
-  // Métodos de Landing Pages (mantidos)
-  async getLandingPages(userId: number): Promise<LandingPage[]> { return db.select().from(landingPages).where(eq(landingPages.userId, userId)).orderBy(desc(landingPages.createdAt)); }
-  async getLandingPage(id: number, userId: number): Promise<LandingPage | undefined> { const [lp] = await db.select().from(landingPages).where(and(eq(landingPages.id, id), eq(landingPages.userId, userId))).limit(1); return lp; }
-  async getLandingPageBySlug(slug: string): Promise<LandingPage | undefined> { const [lp] = await db.select().from(landingPages).where(eq(landingPages.slug, slug)).limit(1); return lp; }
-  async getLandingPageByStudioProjectId(studioProjectId: string, userId: number): Promise<LandingPage | undefined> { const [lp] = await db.select().from(landingPages).where(and(eq(landingPages.studioProjectId, studioProjectId), eq(landingPages.userId, userId))).limit(1); return lp; }
-  async createLandingPage(lpData: InsertLandingPage): Promise<LandingPage> { const [newLP] = await db.insert(landingPages).values(lpData).returning(); if (!newLP) throw new Error("Falha ao criar landing page."); return newLP; }
-  async updateLandingPage(id: number, lpData: Partial<Omit<InsertLandingPage, 'userId'>>, userId: number): Promise<LandingPage | undefined> { const [updatedLP] = await db.update(landingPages).set({ ...lpData, updatedAt: new Date() }).where(and(eq(landingPages.id, id), eq(landingPages.userId, userId))).returning(); return updatedLP; }
-  async deleteLandingPage(id: number, userId: number): Promise<boolean> { const result = await db.delete(landingPages).where(and(eq(landingPages.id, id), eq(landingPages.userId, userId))); return (result.rowCount ?? 0) > 0; }
+  async createCampaign(userId: number, campaignData: InferInsertModel<typeof campaignsTable>): Promise<InferSelectModel<typeof campaignsTable> | null> {
+    const result = await db.insert(campaignsTable).values({ ...campaignData, userId }).returning();
+    return result[0] || null;
+  }
 
-  // Métodos de Chat (mantidos)
-  async createChatSession(userId: number, title: string = 'Nova Conversa'): Promise<ChatSession> { const [newSession] = await db.insert(chatSessions).values({ userId, title, createdAt: new Date(), updatedAt: new Date() }).returning(); if (!newSession) throw new Error("Falha ao criar nova sessão de chat."); return newSession; }
-  async getChatSession(sessionId: number, userId: number): Promise<ChatSession | undefined> { const [session] = await db.select().from(chatSessions).where(and(eq(chatSessions.id, sessionId), eq(chatSessions.userId, userId))).limit(1); return session; }
-  async getChatSessions(userId: number): Promise<ChatSession[]> { return db.select().from(chatSessions).where(eq(chatSessions.userId, userId)).orderBy(desc(chatSessions.updatedAt)); }
-  async updateChatSessionTitle(sessionId: number, userId: number, newTitle: string): Promise<ChatSession | undefined> { const [updatedSession] = await db.update(chatSessions).set({ title: newTitle, updatedAt: new Date() }).where(and(eq(chatSessions.id, sessionId), eq(chatSessions.userId, userId))).returning(); return updatedSession; }
-  async deleteChatSession(sessionId: number, userId: number): Promise<boolean> { const result = await db.delete(chatSessions).where(and(eq(chatSessions.id, sessionId), eq(chatSessions.userId, userId))); return (result.rowCount ?? 0) > 0; }
-  async addChatMessage(messageData: InsertChatMessage): Promise<ChatMessage> { const [newMessage] = await db.insert(chatMessages).values({ ...messageData, timestamp: new Date() }).returning(); if (!newMessage) throw new Error("Falha ao adicionar mensagem ao chat."); await db.update(chatSessions).set({ updatedAt: new Date() }).where(eq(chatSessions.id, messageData.sessionId)); return newMessage; }
-  async getChatMessages(sessionId: number, userId: number): Promise<ChatMessage[]> { const sessionExists = await db.select({ id: chatSessions.id }).from(chatSessions).where(and(eq(chatSessions.id, sessionId), eq(chatSessions.userId, userId))).limit(1); if (!sessionExists.length) { console.warn(`Tentativa de acesso a mensagens da sessão ${sessionId} pelo usuário ${userId} falhou a verificação de propriedade.`); return []; } return db.select().from(chatMessages).where(eq(chatMessages.sessionId, sessionId)).orderBy(asc(chatMessages.timestamp)); }
+  async updateCampaign(userId: number, campaignId: number, campaignData: Partial<InferInsertModel<typeof campaignsTable>>): Promise<InferSelectModel<typeof campaignsTable> | null> {
+    const result = await db.update(campaignsTable)
+      .set({ ...campaignData, updatedAt: new Date() })
+      .where(and(eq(campaignsTable.id, campaignId), eq(campaignsTable.userId, userId)))
+      .returning();
+    return result[0] || null;
+  }
 
-  // Métodos de Funnels (mantidos)
-  async getFunnels(userId: number, campaignId?: number | null): Promise<Funnel[]> { const conditions: any[] = [eq(funnels.userId, userId)]; if (campaignId !== undefined) { conditions.push(campaignId === null ? isNull(funnels.campaignId) : eq(funnels.campaignId, campaignId)); } return db.query.funnels.findMany({ where: and(...conditions), with: { stages: { orderBy: [asc(funnelStages.order)], }, }, orderBy: [desc(funnels.createdAt)], }); }
-  async getFunnel(id: number, userId: number): Promise<Funnel | undefined> { return db.query.funnels.findFirst({ where: and(eq(funnels.id, id), eq(funnels.userId, userId)), with: { stages: { orderBy: [asc(funnelStages.order)], }, }, }); }
-  async createFunnel(funnelData: InsertFunnel): Promise<Funnel> { const [newFunnel] = await db.insert(funnels).values(funnelData).returning(); if (!newFunnel) throw new Error("Falha ao criar funil."); return newFunnel; }
-  async updateFunnel(id: number, funnelData: Partial<Omit<InsertFunnel, 'userId' | 'campaignId'>>, userId: number): Promise<Funnel | undefined> { const dataToSet: Partial<Funnel & { campaignId?: number | null }> = { ...funnelData, updatedAt: new Date() }; if (funnelData.hasOwnProperty('campaignId')) { dataToSet.campaignId = funnelData.campaignId; } const [updatedFunnel] = await db.update(funnels) .set(dataToSet) .where(and(eq(funnels.id, id), eq(funnels.userId, userId))) .returning(); return updatedFunnel; }
-  async deleteFunnel(id: number, userId: number): Promise<boolean> { const result = await db.delete(funnels) .where(and(eq(funnels.id, id), eq(funnels.userId, userId))); return (result.rowCount ?? 0) > 0; }
-  async getFunnelStages(funnelId: number, userId: number): Promise<FunnelStage[]> { const funnelOwner = await db.select({ id: funnels.id }).from(funnels) .where(and(eq(funnels.id, funnelId), eq(funnels.userId, userId))) .limit(1); if (!funnelOwner.length) { console.warn(`Tentativa de buscar etapas para funil ${funnelId} não pertencente ao usuário ${userId}.`); return []; } return db.select().from(funnelStages) .where(eq(funnelStages.funnelId, funnelId)) .orderBy(asc(funnelStages.order), desc(funnelStages.createdAt)); }
-  async createFunnelStage(stageData: InsertFunnelStage): Promise<FunnelStage> { const [newStage] = await db.insert(funnelStages).values(stageData).returning(); if (!newStage) throw new Error("Falha ao criar etapa do funil."); return newStage; }
-  async updateFunnelStage(id: number, stageData: Partial<Omit<InsertFunnelStage, 'funnelId'>>, userId: number): Promise<FunnelStage | undefined> { const existingStage = await db.query.funnelStages.findFirst({ where: eq(funnelStages.id, id), with: { funnel: { columns: { userId: true } } } }); if (!existingStage || existingStage.funnel?.userId !== userId) { throw new Error("Etapa do funil não encontrada ou não pertence ao usuário."); } const [updatedStage] = await db.update(funnelStages) .set({ ...stageData, updatedAt: new Date() }) .where(eq(funnelStages.id, id)) .returning(); return updatedStage; }
-  async deleteFunnelStage(id: number, userId: number): Promise<boolean> { const existingStage = await db.query.funnelStages.findFirst({ where: eq(funnelStages.id, id), with: { funnel: { columns: { userId: true } } } }); if (!existingStage || existingStage.funnel?.userId !== userId) { console.warn(`Tentativa de deletar etapa ${id} não encontrada ou não pertencente ao usuário ${userId}.`); return false;  } const result = await db.delete(funnelStages).where(eq(funnelStages.id, id)); return (result.rowCount ?? 0) > 0; }
+  async deleteCampaign(userId: number, campaignId: number): Promise<{ success: boolean }> {
+    const result = await db.delete(campaignsTable)
+      .where(and(eq(campaignsTable.id, campaignId), eq(campaignsTable.userId, userId)))
+      .returning({ id: campaignsTable.id });
+    return result.length > 0 ? { success: true } : { success: false };
+  }
 
-  // Método de Dashboard (mantido)
-  async getDashboardData(userId: number, timeRange: string = '30d'): Promise<any> {
-    const now = new Date();
-    let startDate = new Date();
-    if (timeRange === '7d') { startDate.setDate(now.getDate() - 7); }
-    else { startDate.setDate(now.getDate() - 30); }
+  // --- Creative Methods ---
+  async getCreatives(userId: number, campaignId?: number): Promise<InferSelectModel<typeof creativesTable>[]> {
+    const conditions = [eq(creativesTable.userId, userId)];
+    if (campaignId) {
+      conditions.push(eq(creativesTable.campaignId, campaignId));
+    }
+    return db.query.creativesTable.findMany({
+      where: and(...conditions),
+      orderBy: [desc(creativesTable.updatedAt)],
+    });
+  }
+  async createCreative(userId: number, creativeData: InferInsertModel<typeof creativesTable>): Promise<InferSelectModel<typeof creativesTable> | null> {
+    const result = await db.insert(creativesTable).values({ ...creativeData, userId }).returning();
+    return result[0] || null;
+  }
+  async updateCreative(userId: number, creativeId: number, creativeData: Partial<InferInsertModel<typeof creativesTable>>): Promise<InferSelectModel<typeof creativesTable> | null> {
+    const result = await db.update(creativesTable)
+      .set({ ...creativeData, updatedAt: new Date() })
+      .where(and(eq(creativesTable.id, creativeId), eq(creativesTable.userId, userId)))
+      .returning();
+    return result[0] || null;
+  }
+  async deleteCreative(userId: number, creativeId: number): Promise<{ success: boolean }> {
+    const result = await db.delete(creativesTable)
+      .where(and(eq(creativesTable.id, creativeId), eq(creativesTable.userId, userId)))
+      .returning({ id: creativesTable.id });
+    return result.length > 0 ? { success: true } : { success: false };
+  }
 
-    const metricsTimeCondition = and( eq(metrics.userId, userId), gte(metrics.date, startDate) );
-    const budgetsUserCondition = eq(budgets.userId, userId); // Assuming budgets also need a user check
+  // --- Budget Methods ---
+  async getBudgets(userId: number, campaignId?: number): Promise<InferSelectModel<typeof budgetsTable>[]> {
+    const conditions = [eq(budgetsTable.userId, userId)];
+    if (campaignId) {
+      conditions.push(eq(budgetsTable.campaignId, campaignId));
+    }
+    return db.query.budgetsTable.findMany({ where: and(...conditions) });
+  }
+  async createBudget(userId: number, budgetData: InferInsertModel<typeof budgetsTable>): Promise<InferSelectModel<typeof budgetsTable> | null> {
+    const result = await db.insert(budgetsTable).values({ ...budgetData, userId }).returning();
+    return result[0] || null;
+  }
+  async updateBudget(userId: number, budgetId: number, budgetData: Partial<InferInsertModel<typeof budgetsTable>>): Promise<InferSelectModel<typeof budgetsTable> | null> {
+    const result = await db.update(budgetsTable)
+      .set(budgetData)
+      .where(and(eq(budgetsTable.id, budgetId), eq(budgetsTable.userId, userId)))
+      .returning();
+    return result[0] || null;
+  }
+  async deleteBudget(userId: number, budgetId: number): Promise<{ success: boolean }> {
+    const result = await db.delete(budgetsTable)
+      .where(and(eq(budgetsTable.id, budgetId), eq(budgetsTable.userId, userId)))
+      .returning({ id: budgetsTable.id });
+    return result.length > 0 ? { success: true } : { success: false };
+  }
+  
+  // --- Copy Methods ---
+  async createCopy(userId: number, copyData: InferInsertModel<typeof copiesTable>): Promise<InferSelectModel<typeof copiesTable> | null> {
+    const result = await db.insert(copiesTable).values({ ...copyData, userId }).returning();
+    return result[0] || null;
+  }
+  async getCopies(userId: number, campaignId?: number): Promise<InferSelectModel<typeof copiesTable>[]> {
+    const conditions = [eq(copiesTable.userId, userId)];
+    if (campaignId) {
+      conditions.push(eq(copiesTable.campaignId, campaignId));
+    }
+    return db.query.copiesTable.findMany({ where: and(...conditions) });
+  }
+  async updateCopy(userId: number, copyId: number, copyData: Partial<InferInsertModel<typeof copiesTable>>): Promise<InferSelectModel<typeof copiesTable> | null> {
+    const result = await db.update(copiesTable)
+      .set(copyData)
+      .where(and(eq(copiesTable.id, copyId), eq(copiesTable.userId, userId)))
+      .returning();
+    return result[0] || null;
+  }
+  async deleteCopy(userId: number, copyId: number): Promise<{ success: boolean }> {
+    const result = await db.delete(copiesTable)
+      .where(and(eq(copiesTable.id, copyId), eq(copiesTable.userId, userId)))
+      .returning({ id: copiesTable.id });
+    return result.length > 0 ? { success: true } : { success: false };
+  }
 
-    const activeCampaignsResult = await db.select({ count: count() }).from(campaigns).where(and(eq(campaigns.userId, userId), eq(campaigns.status, 'active')));
-    const activeCampaigns = activeCampaignsResult[0]?.count || 0;
+  // --- Dashboard Data ---
+  async getDashboardData(userId: number): Promise<any> {
+    // Implementar lógica real para buscar dados agregados
+    // Exemplo (simulado):
+    const activeCampaigns = await db.query.campaignsTable.findMany({
+      where: and(eq(campaignsTable.userId, userId), eq(campaignsTable.status, 'active'))
+    });
+    // ... outras métricas ...
+    return {
+      metrics: {
+        activeCampaigns: activeCampaigns.length,
+        totalSpent: 0, // Calcular
+        totalCostPeriod: 0, // Calcular
+        conversions: 0, // Calcular
+        avgROI: 0, // Calcular
+        impressions: 0,
+        clicks: 0,
+        ctr: 0,
+        cpc: 0,
+      },
+      recentCampaigns: await db.query.campaignsTable.findMany({
+        where: eq(campaignsTable.userId, userId),
+        orderBy: [desc(campaignsTable.createdAt)],
+        limit: 5,
+      }),
+      performanceChartData: { labels: [], datasets: [] }, // Popular com dados reais
+      channelDistributionData: { labels: [], datasets: [] },
+      conversionByMonthData: { labels: [], datasets: [] },
+      roiByPlatformData: { labels: [], datasets: [] },
+    };
+  }
+  // --- Landing Page Methods ---
+  async createLandingPage(userId: number, pageData: InferInsertModel<typeof landingPagesTable>): Promise<InferSelectModel<typeof landingPagesTable> | null> {
+    const result = await db.insert(landingPagesTable).values({ ...pageData, userId }).returning();
+    return result[0] || null;
+  }
 
-    // Use sql<string | number> para CAST se os campos de orçamento forem TEXT
-    const totalSpentResult = await db.select({ total: sum(sql<string | number>`CAST(${budgets.spentAmount} AS DECIMAL)`) }).from(budgets).where(budgetsUserCondition);
-    const totalSpent = parseFloat(String(totalSpentResult[0]?.total || "0")) || 0;
+  async getLandingPages(userId: number): Promise<InferSelectModel<typeof landingPagesTable>[]> {
+    return db.query.landingPagesTable.findMany({
+      where: eq(landingPagesTable.userId, userId),
+      orderBy: [desc(landingPagesTable.updatedAt)],
+    });
+  }
 
-    const totalConversionsResult = await db.select({ total: sum(metrics.conversions) }).from(metrics).where(metricsTimeCondition);
-    const conversions = parseFloat(String(totalConversionsResult[0]?.total || '0')) || 0;
+  async getLandingPageById(userId: number, pageId: number): Promise<InferSelectModel<typeof landingPagesTable> | null> {
+    return db.query.landingPagesTable.findFirst({
+      where: and(eq(landingPagesTable.id, pageId), eq(landingPagesTable.userId, userId)),
+    }) || null;
+  }
 
-    const totalRevenueResult = await db.select({ total: sum(metrics.revenue) }).from(metrics).where(metricsTimeCondition);
-    const totalRevenue = parseFloat(String(totalRevenueResult[0]?.total || '0')) || 0;
+  async getLandingPageBySlug(slug: string): Promise<InferSelectModel<typeof landingPagesTable> | null> {
+    return db.query.landingPagesTable.findFirst({
+      where: eq(landingPagesTable.slug, slug),
+    }) || null;
+  }
+  
+  async getLandingPageByStudioProjectId(studioProjectId: string): Promise<InferSelectModel<typeof landingPagesTable> | null> {
+    return db.query.landingPagesTable.findFirst({
+        where: eq(landingPagesTable.studioProjectId, studioProjectId),
+    }) || null;
+  }
 
-    const totalCostResult = await db.select({ total: sum(metrics.cost) }).from(metrics).where(metricsTimeCondition);
-    const totalCost = parseFloat(String(totalCostResult[0]?.total || '0')) || 0;
 
-    const avgROI = totalCost > 0 ? parseFloat((((totalRevenue - totalCost) / totalCost) * 100).toFixed(2)) : 0;
-    const totalImpressionsResult = await db.select({ total: sum(metrics.impressions) }).from(metrics).where(metricsTimeCondition);
-    const impressions = parseFloat(String(totalImpressionsResult[0]?.total || '0')) || 0;
-    const totalClicksResult = await db.select({ total: sum(metrics.clicks) }).from(metrics).where(metricsTimeCondition);
-    const clicks = parseFloat(String(totalClicksResult[0]?.total || '0')) || 0;
-    const ctr = clicks > 0 && impressions > 0 ? parseFloat(((clicks / impressions) * 100).toFixed(2)) : 0;
-    const cpc = clicks > 0 && totalCost > 0 ? parseFloat((totalCost / clicks).toFixed(2)) : 0; // Usar totalCost do período
-    const metricsData = { activeCampaigns, totalSpent, totalCostPeriod: totalCost, conversions, avgROI, impressions, clicks, ctr, cpc };
-    const campaignsChange = parseFloat((Math.random() * 20 - 10).toFixed(1));
-    const spentChange = parseFloat((Math.random() * 20 - 10).toFixed(1));
-    const conversionsChange = parseFloat((Math.random() * 30 - 15).toFixed(1));
-    const roiChange = parseFloat((Math.random() * 10 - 5).toFixed(1));
-    const trends = { campaignsChange, spentChange, conversionsChange, roiChange, };
-    const recentCampaignsRaw = await db.select().from(campaigns).where(eq(campaigns.userId, userId)).orderBy(desc(campaigns.createdAt)).limit(3);
-    const recentCampaigns = recentCampaignsRaw.map(c => ({ id: c.id, name: c.name, description: c.description || 'Nenhuma descrição', status: c.status, platforms: c.platforms || [], budget: parseFloat(String(c.budget ?? '0')) || 0, spent: parseFloat(String(c.dailyBudget ?? '0')) || 0, performance: Math.floor(Math.random() * (95 - 60 + 1)) + 60 }));
-    const timeSeriesData = generateSimulatedLineChartData('Desempenho Geral', 1000, timeRange === '30d' ? 30 : 7, 50, chartColors.palette[0]);
-    const channelPerformanceData = generateSimulatedDoughnutChartData(['Meta Ads', 'Google Ads', 'LinkedIn', 'TikTok'], 20, 10, chartColors.palette);
-    const conversionData = generateSimulatedLineChartData('Conversões', 200, timeRange === '30d' ? 30 : 7, 30, chartColors.palette[1]);
-    const roiData = generateSimulatedBarChartData('ROI (%)', ['Meta Ads', 'Google Ads', 'LinkedIn', 'TikTok'], 250, 100, chartColors.palette);
-    return { metrics: metricsData, recentCampaigns, alertCount: (await db.select({ count: count() }).from(alerts).where(and(eq(alerts.userId, userId), eq(alerts.isRead, false))))[0]?.count || 0, trends, timeSeriesData, channelPerformanceData, conversionData, roiData, };
+  async updateLandingPage(userId: number, pageId: number, pageData: Partial<InferInsertModel<typeof landingPagesTable>>): Promise<InferSelectModel<typeof landingPagesTable> | null> {
+    const result = await db.update(landingPagesTable)
+      .set({ ...pageData, updatedAt: new Date() })
+      .where(and(eq(landingPagesTable.id, pageId), eq(landingPagesTable.userId, userId)))
+      .returning();
+    return result[0] || null;
+  }
+
+  async deleteLandingPage(userId: number, pageId: number): Promise<{ success: boolean }> {
+    const result = await db.delete(landingPagesTable)
+      .where(and(eq(landingPagesTable.id, pageId), eq(landingPagesTable.userId, userId)))
+      .returning({ id: landingPagesTable.id });
+    return result.length > 0 ? { success: true } : { success: false };
+  }
+
+  // Chat MCP Methods
+  async createChatSession(userId: number, title: string): Promise<InferSelectModel<typeof chatSessionsTable> | null> {
+    const result = await db.insert(chatSessionsTable).values({ userId, title }).returning();
+    return result[0] || null;
+  }
+
+  async getChatSessions(userId: number): Promise<InferSelectModel<typeof chatSessionsTable>[]> {
+    return db.query.chatSessionsTable.findMany({
+      where: eq(chatSessionsTable.userId, userId),
+      orderBy: [desc(chatSessionsTable.updatedAt)],
+    });
+  }
+
+  async getChatSessionById(userId: number, sessionId: number): Promise<InferSelectModel<typeof chatSessionsTable> & { messages: InferSelectModel<typeof chatMessagesTable>[] } | null> {
+    return db.query.chatSessionsTable.findFirst({
+      where: and(eq(chatSessionsTable.id, sessionId), eq(chatSessionsTable.userId, userId)),
+      with: {
+        messages: {
+          orderBy: (messages, { asc }) => [asc(messages.timestamp)],
+        },
+      },
+    }) || null;
+  }
+
+  async addChatMessage(sessionId: number, sender: 'user' | 'mcp' | 'system', text: string, attachmentUrl?: string | null): Promise<InferSelectModel<typeof chatMessagesTable> | null> {
+    const result = await db.insert(chatMessagesTable).values({ sessionId, sender, text, attachmentUrl }).returning();
+    // Atualizar o updatedAt da sessão
+    await db.update(chatSessionsTable).set({ updatedAt: new Date() }).where(eq(chatSessionsTable.id, sessionId));
+    return result[0] || null;
+  }
+
+  async updateChatSessionTitle(userId: number, sessionId: number, newTitle: string): Promise<InferSelectModel<typeof chatSessionsTable> | null> {
+    const result = await db.update(chatSessionsTable)
+      .set({ title: newTitle, updatedAt: new Date() })
+      .where(and(eq(chatSessionsTable.id, sessionId), eq(chatSessionsTable.userId, userId)))
+      .returning();
+    return result[0] || null;
+  }
+
+  async deleteChatSession(userId: number, sessionId: number): Promise<{ success: boolean }> {
+    const result = await db.delete(chatSessionsTable)
+      .where(and(eq(chatSessionsTable.id, sessionId), eq(chatSessionsTable.userId, userId)))
+      .returning({ id: chatSessionsTable.id });
+    return result.length > 0 ? { success: true } : { success: false };
   }
 }
 
-// Exporta uma instância da classe para ser usada pelas rotas
-export const storage = new DatabaseStorage();
+export const storage: IStorage = new DatabaseStorage();
