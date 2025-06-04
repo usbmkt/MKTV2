@@ -2,154 +2,181 @@
 import { eq, and, or, isNull, desc, InferSelectModel, InferInsertModel } from 'drizzle-orm';
 import { db } from './db';
 import {
-  usersTable,
-  campaignsTable,
-  creativesTable,
-  metricsTable,
-  budgetsTable,
-  alertsTable,
-  copiesTable,
-  chatSessionsTable,
-  chatMessagesTable,
-  landingPagesTable,
-  funnelsTable,
-  funnelStagesTable,
-  flowsTable, // Adicionado para clareza, já deveria estar importado por '*' em db
-  NewFlow, // Assumindo que NewFlow é o tipo de inserção (InferInsertModel<typeof flowsTable>)
-  FlowData // Assumindo que FlowData é o tipo de seleção (InferSelectModel<typeof flowsTable>)
+  users, // Corrigido: usersTable -> users
+  campaigns, // Corrigido: campaignsTable -> campaigns
+  creatives, // Corrigido: creativesTable -> creatives
+  metrics, // Corrigido: metricsTable -> metrics (se existir, senão remover)
+  budgets, // Corrigido: budgetsTable -> budgets
+  alerts, // Corrigido: alertsTable -> alerts (se existir, senão remover)
+  copies, // Corrigido: copiesTable -> copies
+  chatSessions, // Corrigido: chatSessionsTable -> chatSessions
+  chatMessages, // Corrigido: chatMessagesTable -> chatMessages
+  landingPages, // Corrigido: landingPagesTable -> landingPages
+  funnels, // Corrigido: funnelsTable -> funnels
+  funnelStages, // Corrigido: funnelStagesTable -> funnelStages
+  flows, // Corrigido: flowsTable -> flows
+  // Zod schemas são importados separadamente ou via * em routes.ts
 } from '../shared/schema';
 import bcrypt from 'bcrypt';
 
-// Tipos inferidos para garantir consistência (ajuste os nomes se necessário)
-// type FlowData = InferSelectModel<typeof flowsTable>; // Já definido acima
-// type NewFlow = InferInsertModel<typeof flowsTable>; // Já definido acima
+// Tipos inferidos para Drizzle (usar diretamente ou como base para interfaces)
+type User = InferSelectModel<typeof users>;
+type NewUser = InferInsertModel<typeof users>;
+
+type Campaign = InferSelectModel<typeof campaigns>;
+type NewCampaign = InferInsertModel<typeof campaigns>;
+
+type Creative = InferSelectModel<typeof creatives>;
+type NewCreative = InferInsertModel<typeof creatives>;
+
+type Budget = InferSelectModel<typeof budgets>;
+type NewBudget = InferInsertModel<typeof budgets>;
+
+type Copy = InferSelectModel<typeof copies>;
+type NewCopy = InferInsertModel<typeof copies>;
+
+type ChatSession = InferSelectModel<typeof chatSessions>;
+type NewChatSession = InferInsertModel<typeof chatSessions>;
+type ChatMessage = InferSelectModel<typeof chatMessages>;
+type NewChatMessage = InferInsertModel<typeof chatMessages>;
+
+type LandingPage = InferSelectModel<typeof landingPages>;
+type NewLandingPage = InferInsertModel<typeof landingPages>;
+
+type Flow = InferSelectModel<typeof flows>; // Usaremos este como FlowData
+type NewFlow = InferInsertModel<typeof flows>;
 
 
-// Interface IStorage (simplificada para o contexto, mantenha a sua completa)
 interface IStorage {
-  // ... outras assinaturas de métodos ...
-  createUser(userData: InferInsertModel<typeof usersTable>): Promise<InferSelectModel<typeof usersTable> | null>;
-  getUser(email: string): Promise<InferSelectModel<typeof usersTable> | null>;
-  getUserById(id: number): Promise<InferSelectModel<typeof usersTable> | null>;
-  validatePassword(email: string, pass: string): Promise<InferSelectModel<typeof usersTable> | null>;
+  // User methods
+  createUser(userData: NewUser): Promise<User | null>;
+  getUser(email: string): Promise<User | null>;
+  getUserById(id: number): Promise<User | null>;
+  validatePassword(email: string, pass: string): Promise<User | null>;
   
-  createFlow(userId: number, flowData: NewFlow): Promise<FlowData | null>;
-  getFlows(userId: number, campaignIdParam?: string | null): Promise<FlowData[]>;
-  getFlowById(userId: number, flowId: number): Promise<FlowData | null>;
-  updateFlow(userId: number, flowId: number, flowData: Partial<Omit<NewFlow, 'userId' | 'id'>>): Promise<FlowData | null>;
+  // Flow Methods
+  createFlow(userId: number, flowData: Omit<NewFlow, 'userId' | 'id' | 'createdAt' | 'updatedAt'>): Promise<Flow | null>;
+  getFlows(userId: number, campaignIdParam?: string | null): Promise<Flow[]>;
+  getFlowById(userId: number, flowId: number): Promise<Flow | null>;
+  updateFlow(userId: number, flowId: number, flowData: Partial<Omit<NewFlow, 'userId' | 'id' | 'createdAt' | 'updatedAt'>>): Promise<Flow | null>;
   deleteFlow(userId: number, flowId: number): Promise<{ success: boolean; message?: string }>;
 
-  getCampaigns(userId: number): Promise<InferSelectModel<typeof campaignsTable>[]>;
-  getCampaignById(userId: number, campaignId: number): Promise<InferSelectModel<typeof campaignsTable> | null>;
-  createCampaign(userId: number, campaignData: InferInsertModel<typeof campaignsTable>): Promise<InferSelectModel<typeof campaignsTable> | null>;
-  updateCampaign(userId: number, campaignId: number, campaignData: Partial<InferInsertModel<typeof campaignsTable>>): Promise<InferSelectModel<typeof campaignsTable> | null>;
+  // Campaign Methods
+  getCampaigns(userId: number): Promise<Campaign[]>;
+  getCampaignById(userId: number, campaignId: number): Promise<Campaign | null>;
+  createCampaign(userId: number, campaignData: Omit<NewCampaign, 'userId' | 'id' | 'createdAt' | 'updatedAt'>): Promise<Campaign | null>;
+  updateCampaign(userId: number, campaignId: number, campaignData: Partial<Omit<NewCampaign, 'userId' | 'id' | 'createdAt' | 'updatedAt'>>): Promise<Campaign | null>;
   deleteCampaign(userId: number, campaignId: number): Promise<{ success: boolean }>;
 
-  getCreatives(userId: number, campaignId?: number): Promise<InferSelectModel<typeof creativesTable>[]>;
-  createCreative(userId: number, creativeData: InferInsertModel<typeof creativesTable>): Promise<InferSelectModel<typeof creativesTable> | null>;
-  updateCreative(userId: number, creativeId: number, creativeData: Partial<InferInsertModel<typeof creativesTable>>): Promise<InferSelectModel<typeof creativesTable> | null>;
+  // Creative Methods
+  getCreatives(userId: number, campaignId?: number): Promise<Creative[]>;
+  createCreative(userId: number, creativeData: Omit<NewCreative, 'userId' | 'id' | 'createdAt' | 'updatedAt'>): Promise<Creative | null>;
+  updateCreative(userId: number, creativeId: number, creativeData: Partial<Omit<NewCreative, 'userId' | 'id' | 'createdAt' | 'updatedAt'>>): Promise<Creative | null>;
   deleteCreative(userId: number, creativeId: number): Promise<{ success: boolean }>;
 
-  getBudgets(userId: number, campaignId?: number): Promise<InferSelectModel<typeof budgetsTable>[]>;
-  createBudget(userId: number, budgetData: InferInsertModel<typeof budgetsTable>): Promise<InferSelectModel<typeof budgetsTable> | null>;
-  updateBudget(userId: number, budgetId: number, budgetData: Partial<InferInsertModel<typeof budgetsTable>>): Promise<InferSelectModel<typeof budgetsTable> | null>;
+  // Budget Methods
+  getBudgets(userId: number, campaignId?: number): Promise<Budget[]>;
+  createBudget(userId: number, budgetData: Omit<NewBudget, 'userId' | 'id' | 'createdAt' | 'updatedAt'>): Promise<Budget | null>;
+  updateBudget(userId: number, budgetId: number, budgetData: Partial<Omit<NewBudget, 'userId' | 'id' | 'createdAt' | 'updatedAt'>>): Promise<Budget | null>;
   deleteBudget(userId: number, budgetId: number): Promise<{ success: boolean }>;
 
-  createCopy(userId: number, copyData: InferInsertModel<typeof copiesTable>): Promise<InferSelectModel<typeof copiesTable> | null>;
-  getCopies(userId: number, campaignId?: number): Promise<InferSelectModel<typeof copiesTable>[]>;
-  updateCopy(userId: number, copyId: number, copyData: Partial<InferInsertModel<typeof copiesTable>>): Promise<InferSelectModel<typeof copiesTable> | null>;
+  // Copy Methods
+  createCopy(userId: number, copyData: Omit<NewCopy, 'userId' | 'id' | 'createdAt'>): Promise<Copy | null>;
+  getCopies(userId: number, campaignId?: number): Promise<Copy[]>;
+  updateCopy(userId: number, copyId: number, copyData: Partial<Omit<NewCopy, 'userId' | 'id' | 'createdAt'>>): Promise<Copy | null>;
   deleteCopy(userId: number, copyId: number): Promise<{ success: boolean }>;
   
+  // Dashboard
   getDashboardData(userId: number): Promise<any>;
 
-  createLandingPage(userId: number, pageData: InferInsertModel<typeof landingPagesTable>): Promise<InferSelectModel<typeof landingPagesTable> | null>;
-  getLandingPages(userId: number): Promise<InferSelectModel<typeof landingPagesTable>[]>;
-  getLandingPageById(userId: number, pageId: number): Promise<InferSelectModel<typeof landingPagesTable> | null>;
-  getLandingPageBySlug(slug: string): Promise<InferSelectModel<typeof landingPagesTable> | null>;
-  getLandingPageByStudioProjectId(studioProjectId: string): Promise<InferSelectModel<typeof landingPagesTable> | null>;
-  updateLandingPage(userId: number, pageId: number, pageData: Partial<InferInsertModel<typeof landingPagesTable>>): Promise<InferSelectModel<typeof landingPagesTable> | null>;
+  // Landing Page Methods
+  createLandingPage(userId: number, pageData: Omit<NewLandingPage, 'userId' | 'id' | 'createdAt' | 'updatedAt' | 'publishedAt' | 'publicUrl'>): Promise<LandingPage | null>;
+  getLandingPages(userId: number): Promise<LandingPage[]>;
+  getLandingPageById(userId: number, pageId: number): Promise<LandingPage | null>;
+  getLandingPageBySlug(slug: string): Promise<LandingPage | null>;
+  getLandingPageByStudioProjectId(studioProjectId: string): Promise<LandingPage | null>;
+  updateLandingPage(userId: number, pageId: number, pageData: Partial<Omit<NewLandingPage, 'userId' | 'id' | 'createdAt' | 'updatedAt'>>): Promise<LandingPage | null>;
   deleteLandingPage(userId: number, pageId: number): Promise<{ success: boolean }>;
 
-  // Chat MCP
-  createChatSession(userId: number, title: string): Promise<InferSelectModel<typeof chatSessionsTable> | null>;
-  getChatSessions(userId: number): Promise<InferSelectModel<typeof chatSessionsTable>[]>;
-  getChatSessionById(userId: number, sessionId: number): Promise<InferSelectModel<typeof chatSessionsTable> & { messages: InferSelectModel<typeof chatMessagesTable>[] } | null>;
-  addChatMessage(sessionId: number, sender: 'user' | 'mcp' | 'system', text: string, attachmentUrl?: string | null): Promise<InferSelectModel<typeof chatMessagesTable> | null>;
-  updateChatSessionTitle(userId: number, sessionId: number, newTitle: string): Promise<InferSelectModel<typeof chatSessionsTable> | null>;
+  // Chat MCP Methods
+  createChatSession(userId: number, title: string): Promise<ChatSession | null>;
+  getChatSessions(userId: number): Promise<ChatSession[]>;
+  getChatSessionById(userId: number, sessionId: number): Promise<ChatSession & { messages: ChatMessage[] } | null>;
+  addChatMessage(sessionId: number, sender: 'user' | 'mcp' | 'system', text: string, attachmentUrl?: string | null): Promise<ChatMessage | null>;
+  updateChatSessionTitle(userId: number, sessionId: number, newTitle: string): Promise<ChatSession | null>;
   deleteChatSession(userId: number, sessionId: number): Promise<{ success: boolean }>;
 }
 
 
 export class DatabaseStorage implements IStorage {
-  async createUser(userData: InferInsertModel<typeof usersTable>): Promise<InferSelectModel<typeof usersTable> | null> {
+  async createUser(userData: NewUser): Promise<User | null> {
     if (!userData.email || !userData.password || !userData.username) {
       throw new Error("Email, username, and password are required");
     }
     const hashedPassword = await bcrypt.hash(userData.password, 10);
-    const result = await db.insert(usersTable).values({ ...userData, password: hashedPassword }).returning();
+    const result = await db.insert(users).values({ ...userData, password: hashedPassword }).returning();
     return result[0] || null;
   }
 
-  async getUser(email: string): Promise<InferSelectModel<typeof usersTable> | null> {
-    return await db.query.usersTable.findFirst({ where: eq(usersTable.email, email) }) || null;
+  async getUser(email: string): Promise<User | null> {
+    return await db.query.users.findFirst({ where: eq(users.email, email) }) || null;
   }
 
-  async getUserById(id: number): Promise<InferSelectModel<typeof usersTable> | null> {
-    return await db.query.usersTable.findFirst({ where: eq(usersTable.id, id) }) || null;
+  async getUserById(id: number): Promise<User | null> {
+    return await db.query.users.findFirst({ where: eq(users.id, id) }) || null;
   }
 
-  async validatePassword(email: string, pass: string): Promise<InferSelectModel<typeof usersTable> | null> {
-    const user = await this.getUser(email);
-    if (!user || !user.password) return null;
-    const isValid = await bcrypt.compare(pass, user.password);
-    return isValid ? user : null;
+  async validatePassword(email: string, pass: string): Promise<User | null> {
+    const userRecord = await this.getUser(email); // Renomeado para userRecord para evitar conflito com a tabela 'users'
+    if (!userRecord || !userRecord.password) return null;
+    const isValid = await bcrypt.compare(pass, userRecord.password);
+    return isValid ? userRecord : null;
   }
 
   // --- Flow Methods ---
-  async createFlow(userId: number, flowData: NewFlow): Promise<FlowData | null> {
-    const result = await db.insert(flowsTable).values({ ...flowData, userId }).returning();
+  async createFlow(userId: number, flowData: Omit<NewFlow, 'userId' | 'id' | 'createdAt' | 'updatedAt'>): Promise<Flow | null> {
+    const result = await db.insert(flows).values({ ...flowData, userId }).returning();
     return result[0] || null;
   }
 
-  async getFlows(userId: number, campaignIdParam?: string | null): Promise<FlowData[]> {
-    const conditions = [eq(flowsTable.userId, userId)];
+  async getFlows(userId: number, campaignIdParam?: string | null): Promise<Flow[]> {
+    const conditions = [eq(flows.userId, userId)];
     if (campaignIdParam) {
-      if (campaignIdParam === 'null') {
-        conditions.push(isNull(flowsTable.campaignId));
+      if (campaignIdParam === 'null' || campaignIdParam === '') { // Trata string 'null' ou vazia como ID de campanha nulo
+        conditions.push(isNull(flows.campaignId));
       } else {
         const numericCampaignId = parseInt(campaignIdParam, 10);
         if (!isNaN(numericCampaignId)) {
-          conditions.push(eq(flowsTable.campaignId, numericCampaignId));
+          conditions.push(eq(flows.campaignId, numericCampaignId));
         }
+        // Se não for 'null' nem numérico, pode optar por ignorar ou lançar erro
       }
     }
-    return db.query.flowsTable.findMany({
+    return db.query.flows.findMany({
       where: and(...conditions),
-      orderBy: [desc(flowsTable.updatedAt)],
+      orderBy: [desc(flows.updatedAt)],
     });
   }
 
-  async getFlowById(userId: number, flowId: number): Promise<FlowData | null> {
-    return await db.query.flowsTable.findFirst({
-      where: and(eq(flowsTable.id, flowId), eq(flowsTable.userId, userId)),
+  async getFlowById(userId: number, flowId: number): Promise<Flow | null> {
+    return await db.query.flows.findFirst({
+      where: and(eq(flows.id, flowId), eq(flows.userId, userId)),
     }) || null;
   }
 
-  async updateFlow(userId: number, flowId: number, flowData: Partial<Omit<NewFlow, 'userId' | 'id'>>): Promise<FlowData | null> {
-    // Garantir que 'elements' seja tratado como JSON, se necessário (Drizzle geralmente lida com isso para colunas jsonb)
+  async updateFlow(userId: number, flowId: number, flowData: Partial<Omit<NewFlow, 'userId' | 'id' | 'createdAt' | 'updatedAt'>>): Promise<Flow | null> {
     const dataToUpdate = { ...flowData, updatedAt: new Date() };
-
-    const result = await db.update(flowsTable)
+    const result = await db.update(flows)
       .set(dataToUpdate)
-      .where(and(eq(flowsTable.id, flowId), eq(flowsTable.userId, userId)))
+      .where(and(eq(flows.id, flowId), eq(flows.userId, userId)))
       .returning();
     return result[0] || null;
   }
 
   async deleteFlow(userId: number, flowId: number): Promise<{ success: boolean; message?: string }> {
-    const result = await db.delete(flowsTable)
-      .where(and(eq(flowsTable.id, flowId), eq(flowsTable.userId, userId)))
-      .returning({ id: flowsTable.id });
+    const result = await db.delete(flows)
+      .where(and(eq(flows.id, flowId), eq(flows.userId, userId)))
+      .returning({ id: flows.id });
     if (result.length > 0) {
       return { success: true };
     }
@@ -157,241 +184,238 @@ export class DatabaseStorage implements IStorage {
   }
 
   // --- Campaign Methods ---
-  async getCampaigns(userId: number): Promise<InferSelectModel<typeof campaignsTable>[]> {
-    return db.query.campaignsTable.findMany({
-      where: eq(campaignsTable.userId, userId),
-      orderBy: [desc(campaignsTable.updatedAt)],
+  async getCampaigns(userId: number): Promise<Campaign[]> {
+    return db.query.campaigns.findMany({
+      where: eq(campaigns.userId, userId),
+      orderBy: [desc(campaigns.updatedAt)],
     });
   }
 
-  async getCampaignById(userId: number, campaignId: number): Promise<InferSelectModel<typeof campaignsTable> | null> {
-    return db.query.campaignsTable.findFirst({
-      where: and(eq(campaignsTable.id, campaignId), eq(campaignsTable.userId, userId)),
+  async getCampaignById(userId: number, campaignId: number): Promise<Campaign | null> {
+    return db.query.campaigns.findFirst({
+      where: and(eq(campaigns.id, campaignId), eq(campaigns.userId, userId)),
     }) || null;
   }
 
-  async createCampaign(userId: number, campaignData: InferInsertModel<typeof campaignsTable>): Promise<InferSelectModel<typeof campaignsTable> | null> {
-    const result = await db.insert(campaignsTable).values({ ...campaignData, userId }).returning();
+  async createCampaign(userId: number, campaignData: Omit<NewCampaign, 'userId' | 'id' | 'createdAt' | 'updatedAt'>): Promise<Campaign | null> {
+    const result = await db.insert(campaigns).values({ ...campaignData, userId }).returning();
     return result[0] || null;
   }
 
-  async updateCampaign(userId: number, campaignId: number, campaignData: Partial<InferInsertModel<typeof campaignsTable>>): Promise<InferSelectModel<typeof campaignsTable> | null> {
-    const result = await db.update(campaignsTable)
+  async updateCampaign(userId: number, campaignId: number, campaignData: Partial<Omit<NewCampaign, 'userId' | 'id' | 'createdAt' | 'updatedAt'>>): Promise<Campaign | null> {
+    const result = await db.update(campaigns)
       .set({ ...campaignData, updatedAt: new Date() })
-      .where(and(eq(campaignsTable.id, campaignId), eq(campaignsTable.userId, userId)))
+      .where(and(eq(campaigns.id, campaignId), eq(campaigns.userId, userId)))
       .returning();
     return result[0] || null;
   }
 
   async deleteCampaign(userId: number, campaignId: number): Promise<{ success: boolean }> {
-    const result = await db.delete(campaignsTable)
-      .where(and(eq(campaignsTable.id, campaignId), eq(campaignsTable.userId, userId)))
-      .returning({ id: campaignsTable.id });
+    const result = await db.delete(campaigns)
+      .where(and(eq(campaigns.id, campaignId), eq(campaigns.userId, userId)))
+      .returning({ id: campaigns.id });
     return result.length > 0 ? { success: true } : { success: false };
   }
 
   // --- Creative Methods ---
-  async getCreatives(userId: number, campaignId?: number): Promise<InferSelectModel<typeof creativesTable>[]> {
-    const conditions = [eq(creativesTable.userId, userId)];
+  async getCreatives(userId: number, campaignId?: number): Promise<Creative[]> {
+    const conditions = [eq(creatives.userId, userId)];
     if (campaignId) {
-      conditions.push(eq(creativesTable.campaignId, campaignId));
+      conditions.push(eq(creatives.campaignId, campaignId));
     }
-    return db.query.creativesTable.findMany({
+    return db.query.creatives.findMany({
       where: and(...conditions),
-      orderBy: [desc(creativesTable.updatedAt)],
+      orderBy: [desc(creatives.updatedAt)],
     });
   }
-  async createCreative(userId: number, creativeData: InferInsertModel<typeof creativesTable>): Promise<InferSelectModel<typeof creativesTable> | null> {
-    const result = await db.insert(creativesTable).values({ ...creativeData, userId }).returning();
+  async createCreative(userId: number, creativeData: Omit<NewCreative, 'userId' | 'id' | 'createdAt' | 'updatedAt'>): Promise<Creative | null> {
+    const result = await db.insert(creatives).values({ ...creativeData, userId }).returning();
     return result[0] || null;
   }
-  async updateCreative(userId: number, creativeId: number, creativeData: Partial<InferInsertModel<typeof creativesTable>>): Promise<InferSelectModel<typeof creativesTable> | null> {
-    const result = await db.update(creativesTable)
+  async updateCreative(userId: number, creativeId: number, creativeData: Partial<Omit<NewCreative, 'userId' | 'id' | 'createdAt' | 'updatedAt'>>): Promise<Creative | null> {
+    const result = await db.update(creatives)
       .set({ ...creativeData, updatedAt: new Date() })
-      .where(and(eq(creativesTable.id, creativeId), eq(creativesTable.userId, userId)))
+      .where(and(eq(creatives.id, creativeId), eq(creatives.userId, userId)))
       .returning();
     return result[0] || null;
   }
   async deleteCreative(userId: number, creativeId: number): Promise<{ success: boolean }> {
-    const result = await db.delete(creativesTable)
-      .where(and(eq(creativesTable.id, creativeId), eq(creativesTable.userId, userId)))
-      .returning({ id: creativesTable.id });
+    const result = await db.delete(creatives)
+      .where(and(eq(creatives.id, creativeId), eq(creatives.userId, userId)))
+      .returning({ id: creatives.id });
     return result.length > 0 ? { success: true } : { success: false };
   }
 
   // --- Budget Methods ---
-  async getBudgets(userId: number, campaignId?: number): Promise<InferSelectModel<typeof budgetsTable>[]> {
-    const conditions = [eq(budgetsTable.userId, userId)];
+  async getBudgets(userId: number, campaignId?: number): Promise<Budget[]> {
+    const conditions = [eq(budgets.userId, userId)];
     if (campaignId) {
-      conditions.push(eq(budgetsTable.campaignId, campaignId));
+      conditions.push(eq(budgets.campaignId, campaignId));
     }
-    return db.query.budgetsTable.findMany({ where: and(...conditions) });
+    return db.query.budgets.findMany({ where: and(...conditions) });
   }
-  async createBudget(userId: number, budgetData: InferInsertModel<typeof budgetsTable>): Promise<InferSelectModel<typeof budgetsTable> | null> {
-    const result = await db.insert(budgetsTable).values({ ...budgetData, userId }).returning();
+  async createBudget(userId: number, budgetData: Omit<NewBudget, 'userId' | 'id' | 'createdAt' | 'updatedAt'>): Promise<Budget | null> {
+    const result = await db.insert(budgets).values({ ...budgetData, userId }).returning();
     return result[0] || null;
   }
-  async updateBudget(userId: number, budgetId: number, budgetData: Partial<InferInsertModel<typeof budgetsTable>>): Promise<InferSelectModel<typeof budgetsTable> | null> {
-    const result = await db.update(budgetsTable)
-      .set(budgetData)
-      .where(and(eq(budgetsTable.id, budgetId), eq(budgetsTable.userId, userId)))
+  async updateBudget(userId: number, budgetId: number, budgetData: Partial<Omit<NewBudget, 'userId' | 'id' | 'createdAt' | 'updatedAt'>>): Promise<Budget | null> {
+    const result = await db.update(budgets)
+      .set(budgetData) // updatedAt é opcional para orçamentos, pode ser atualizado explicitamente se necessário
+      .where(and(eq(budgets.id, budgetId), eq(budgets.userId, userId)))
       .returning();
     return result[0] || null;
   }
   async deleteBudget(userId: number, budgetId: number): Promise<{ success: boolean }> {
-    const result = await db.delete(budgetsTable)
-      .where(and(eq(budgetsTable.id, budgetId), eq(budgetsTable.userId, userId)))
-      .returning({ id: budgetsTable.id });
+    const result = await db.delete(budgets)
+      .where(and(eq(budgets.id, budgetId), eq(budgets.userId, userId)))
+      .returning({ id: budgets.id });
     return result.length > 0 ? { success: true } : { success: false };
   }
   
   // --- Copy Methods ---
-  async createCopy(userId: number, copyData: InferInsertModel<typeof copiesTable>): Promise<InferSelectModel<typeof copiesTable> | null> {
-    const result = await db.insert(copiesTable).values({ ...copyData, userId }).returning();
+  async createCopy(userId: number, copyData: Omit<NewCopy, 'userId' | 'id' | 'createdAt'>): Promise<Copy | null> {
+    const result = await db.insert(copies).values({ ...copyData, userId }).returning();
     return result[0] || null;
   }
-  async getCopies(userId: number, campaignId?: number): Promise<InferSelectModel<typeof copiesTable>[]> {
-    const conditions = [eq(copiesTable.userId, userId)];
+  async getCopies(userId: number, campaignId?: number): Promise<Copy[]> {
+    const conditions = [eq(copies.userId, userId)];
     if (campaignId) {
-      conditions.push(eq(copiesTable.campaignId, campaignId));
+      conditions.push(eq(copies.campaignId, campaignId));
     }
-    return db.query.copiesTable.findMany({ where: and(...conditions) });
+    return db.query.copies.findMany({ where: and(...conditions) });
   }
-  async updateCopy(userId: number, copyId: number, copyData: Partial<InferInsertModel<typeof copiesTable>>): Promise<InferSelectModel<typeof copiesTable> | null> {
-    const result = await db.update(copiesTable)
-      .set(copyData)
-      .where(and(eq(copiesTable.id, copyId), eq(copiesTable.userId, userId)))
+  async updateCopy(userId: number, copyId: number, copyData: Partial<Omit<NewCopy, 'userId' | 'id' | 'createdAt'>>): Promise<Copy | null> {
+    const result = await db.update(copies)
+      .set(copyData) // Assumindo que 'updatedAt' não é gerenciado aqui, mas pelo DB ou schema
+      .where(and(eq(copies.id, copyId), eq(copies.userId, userId)))
       .returning();
     return result[0] || null;
   }
   async deleteCopy(userId: number, copyId: number): Promise<{ success: boolean }> {
-    const result = await db.delete(copiesTable)
-      .where(and(eq(copiesTable.id, copyId), eq(copiesTable.userId, userId)))
-      .returning({ id: copiesTable.id });
+    const result = await db.delete(copies)
+      .where(and(eq(copies.id, copyId), eq(copies.userId, userId)))
+      .returning({ id: copies.id });
     return result.length > 0 ? { success: true } : { success: false };
   }
 
   // --- Dashboard Data ---
   async getDashboardData(userId: number): Promise<any> {
-    // Implementar lógica real para buscar dados agregados
-    // Exemplo (simulado):
-    const activeCampaigns = await db.query.campaignsTable.findMany({
-      where: and(eq(campaignsTable.userId, userId), eq(campaignsTable.status, 'active'))
+    const activeCampaignsResult = await db.query.campaigns.findMany({
+      where: and(eq(campaigns.userId, userId), eq(campaigns.status, 'active'))
     });
-    // ... outras métricas ...
+    const recentCampaignsResult = await db.query.campaigns.findMany({
+        where: eq(campaigns.userId, userId),
+        orderBy: [desc(campaigns.createdAt)],
+        limit: 5,
+    });
+    // Adicionar mais lógicas de agregação conforme necessário
     return {
       metrics: {
-        activeCampaigns: activeCampaigns.length,
-        totalSpent: 0, // Calcular
-        totalCostPeriod: 0, // Calcular
-        conversions: 0, // Calcular
-        avgROI: 0, // Calcular
-        impressions: 0,
-        clicks: 0,
-        ctr: 0,
-        cpc: 0,
+        activeCampaigns: activeCampaignsResult.length,
+        totalSpent: 0, // TODO: Calcular
+        totalCostPeriod: 0, // TODO: Calcular
+        conversions: 0, // TODO: Calcular
+        avgROI: 0, // TODO: Calcular
+        impressions: 0, // TODO: Calcular
+        clicks: 0, // TODO: Calcular
+        ctr: 0, // TODO: Calcular
+        cpc: 0, // TODO: Calcular
       },
-      recentCampaigns: await db.query.campaignsTable.findMany({
-        where: eq(campaignsTable.userId, userId),
-        orderBy: [desc(campaignsTable.createdAt)],
-        limit: 5,
-      }),
-      performanceChartData: { labels: [], datasets: [] }, // Popular com dados reais
+      recentCampaigns: recentCampaignsResult,
+      performanceChartData: { labels: [], datasets: [] }, 
       channelDistributionData: { labels: [], datasets: [] },
       conversionByMonthData: { labels: [], datasets: [] },
       roiByPlatformData: { labels: [], datasets: [] },
     };
   }
   // --- Landing Page Methods ---
-  async createLandingPage(userId: number, pageData: InferInsertModel<typeof landingPagesTable>): Promise<InferSelectModel<typeof landingPagesTable> | null> {
-    const result = await db.insert(landingPagesTable).values({ ...pageData, userId }).returning();
+  async createLandingPage(userId: number, pageData: Omit<NewLandingPage, 'userId' | 'id' | 'createdAt' | 'updatedAt' | 'publishedAt' | 'publicUrl'>): Promise<LandingPage | null> {
+    const result = await db.insert(landingPages).values({ ...pageData, userId }).returning();
     return result[0] || null;
   }
 
-  async getLandingPages(userId: number): Promise<InferSelectModel<typeof landingPagesTable>[]> {
-    return db.query.landingPagesTable.findMany({
-      where: eq(landingPagesTable.userId, userId),
-      orderBy: [desc(landingPagesTable.updatedAt)],
+  async getLandingPages(userId: number): Promise<LandingPage[]> {
+    return db.query.landingPages.findMany({
+      where: eq(landingPages.userId, userId),
+      orderBy: [desc(landingPages.updatedAt)],
     });
   }
 
-  async getLandingPageById(userId: number, pageId: number): Promise<InferSelectModel<typeof landingPagesTable> | null> {
-    return db.query.landingPagesTable.findFirst({
-      where: and(eq(landingPagesTable.id, pageId), eq(landingPagesTable.userId, userId)),
+  async getLandingPageById(userId: number, pageId: number): Promise<LandingPage | null> {
+    return db.query.landingPages.findFirst({
+      where: and(eq(landingPages.id, pageId), eq(landingPages.userId, userId)),
     }) || null;
   }
 
-  async getLandingPageBySlug(slug: string): Promise<InferSelectModel<typeof landingPagesTable> | null> {
-    return db.query.landingPagesTable.findFirst({
-      where: eq(landingPagesTable.slug, slug),
+  async getLandingPageBySlug(slug: string): Promise<LandingPage | null> {
+    return db.query.landingPages.findFirst({
+      where: eq(landingPages.slug, slug),
     }) || null;
   }
   
-  async getLandingPageByStudioProjectId(studioProjectId: string): Promise<InferSelectModel<typeof landingPagesTable> | null> {
-    return db.query.landingPagesTable.findFirst({
-        where: eq(landingPagesTable.studioProjectId, studioProjectId),
+  async getLandingPageByStudioProjectId(studioProjectId: string): Promise<LandingPage | null> {
+    return db.query.landingPages.findFirst({
+        where: eq(landingPages.studioProjectId, studioProjectId),
     }) || null;
   }
 
-
-  async updateLandingPage(userId: number, pageId: number, pageData: Partial<InferInsertModel<typeof landingPagesTable>>): Promise<InferSelectModel<typeof landingPagesTable> | null> {
-    const result = await db.update(landingPagesTable)
+  async updateLandingPage(userId: number, pageId: number, pageData: Partial<Omit<NewLandingPage, 'userId' | 'id' | 'createdAt' | 'updatedAt'>>): Promise<LandingPage | null> {
+    const result = await db.update(landingPages)
       .set({ ...pageData, updatedAt: new Date() })
-      .where(and(eq(landingPagesTable.id, pageId), eq(landingPagesTable.userId, userId)))
+      .where(and(eq(landingPages.id, pageId), eq(landingPages.userId, userId)))
       .returning();
     return result[0] || null;
   }
 
   async deleteLandingPage(userId: number, pageId: number): Promise<{ success: boolean }> {
-    const result = await db.delete(landingPagesTable)
-      .where(and(eq(landingPagesTable.id, pageId), eq(landingPagesTable.userId, userId)))
-      .returning({ id: landingPagesTable.id });
+    const result = await db.delete(landingPages)
+      .where(and(eq(landingPages.id, pageId), eq(landingPages.userId, userId)))
+      .returning({ id: landingPages.id });
     return result.length > 0 ? { success: true } : { success: false };
   }
 
   // Chat MCP Methods
-  async createChatSession(userId: number, title: string): Promise<InferSelectModel<typeof chatSessionsTable> | null> {
-    const result = await db.insert(chatSessionsTable).values({ userId, title }).returning();
+  async createChatSession(userId: number, title: string): Promise<ChatSession | null> {
+    const result = await db.insert(chatSessions).values({ userId, title }).returning();
     return result[0] || null;
   }
 
-  async getChatSessions(userId: number): Promise<InferSelectModel<typeof chatSessionsTable>[]> {
-    return db.query.chatSessionsTable.findMany({
-      where: eq(chatSessionsTable.userId, userId),
-      orderBy: [desc(chatSessionsTable.updatedAt)],
+  async getChatSessions(userId: number): Promise<ChatSession[]> {
+    return db.query.chatSessions.findMany({
+      where: eq(chatSessions.userId, userId),
+      orderBy: [desc(chatSessions.updatedAt)],
     });
   }
 
-  async getChatSessionById(userId: number, sessionId: number): Promise<InferSelectModel<typeof chatSessionsTable> & { messages: InferSelectModel<typeof chatMessagesTable>[] } | null> {
-    return db.query.chatSessionsTable.findFirst({
-      where: and(eq(chatSessionsTable.id, sessionId), eq(chatSessionsTable.userId, userId)),
+  async getChatSessionById(userId: number, sessionId: number): Promise<ChatSession & { messages: ChatMessage[] } | null> {
+    return db.query.chatSessions.findFirst({
+      where: and(eq(chatSessions.id, sessionId), eq(chatSessions.userId, userId)),
       with: {
         messages: {
-          orderBy: (messages, { asc }) => [asc(messages.timestamp)],
+          orderBy: (msgs, { asc }) => [asc(msgs.timestamp)], // Corrigido para 'msgs'
         },
       },
     }) || null;
   }
 
-  async addChatMessage(sessionId: number, sender: 'user' | 'mcp' | 'system', text: string, attachmentUrl?: string | null): Promise<InferSelectModel<typeof chatMessagesTable> | null> {
-    const result = await db.insert(chatMessagesTable).values({ sessionId, sender, text, attachmentUrl }).returning();
-    // Atualizar o updatedAt da sessão
-    await db.update(chatSessionsTable).set({ updatedAt: new Date() }).where(eq(chatSessionsTable.id, sessionId));
+  async addChatMessage(sessionId: number, sender: 'user' | 'mcp' | 'system', text: string, attachmentUrl?: string | null): Promise<ChatMessage | null> {
+    const result = await db.insert(chatMessages).values({ sessionId, sender, text, attachmentUrl }).returning();
+    await db.update(chatSessions).set({ updatedAt: new Date() }).where(eq(chatSessions.id, sessionId));
     return result[0] || null;
   }
 
-  async updateChatSessionTitle(userId: number, sessionId: number, newTitle: string): Promise<InferSelectModel<typeof chatSessionsTable> | null> {
-    const result = await db.update(chatSessionsTable)
+  async updateChatSessionTitle(userId: number, sessionId: number, newTitle: string): Promise<ChatSession | null> {
+    const result = await db.update(chatSessions)
       .set({ title: newTitle, updatedAt: new Date() })
-      .where(and(eq(chatSessionsTable.id, sessionId), eq(chatSessionsTable.userId, userId)))
+      .where(and(eq(chatSessions.id, sessionId), eq(chatSessions.userId, userId)))
       .returning();
     return result[0] || null;
   }
 
   async deleteChatSession(userId: number, sessionId: number): Promise<{ success: boolean }> {
-    const result = await db.delete(chatSessionsTable)
-      .where(and(eq(chatSessionsTable.id, sessionId), eq(chatSessionsTable.userId, userId)))
-      .returning({ id: chatSessionsTable.id });
+    const result = await db.delete(chatSessions)
+      .where(and(eq(chatSessions.id, sessionId), eq(chatSessions.userId, userId)))
+      .returning({ id: chatSessions.id });
     return result.length > 0 ? { success: true } : { success: false };
   }
 }
