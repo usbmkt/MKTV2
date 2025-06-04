@@ -14,7 +14,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/api';
 import { useAuthStore } from '@/lib/auth';
 import { useLocation } from "wouter";
-
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 // ADICIONADO IMPORT QUE FALTAVA
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
