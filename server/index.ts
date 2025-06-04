@@ -3,7 +3,7 @@ import 'dotenv/config';
 import express, { Request, Response, NextFunction } from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import apiRoutes from "./routes"; // Importação default
+import apiRoutes from "./routes"; // Corrigido para importação default
 import { setupVite } from './vite';
 import { PORT } from './config';
 import fs from 'fs/promises';
@@ -34,31 +34,32 @@ const ensureUploadsDirs = async () => {
     for (const dir of dirsToCreate) {
         try {
             await fs.mkdir(dir, { recursive: true });
-            console.log(`[FS] Diretório criado ou já existente: ${dir}`);
+            // Removido o log daqui para reduzir verbosidade nos logs de deploy, já que é chamado a cada inicialização.
+            // console.log(`[FS] Diretório criado ou já existente: ${dir}`); 
         } catch (error) {
             console.error(`[FS_ERROR] Falha ao criar diretório ${dir}:`, error);
         }
     }
 };
 
-app.use(apiRoutes); // Uso do router importado
+app.use(apiRoutes); // Corrigido: Usando o router importado como default
 
 const serveStaticFiles = async () => {
     await ensureUploadsDirs();
     app.use('/uploads', express.static(uploadsDir));
-    console.log(`[Static Server] Servindo '/uploads' de ${uploadsDir}`);
+    // console.log(`[Static Server] Servindo '/uploads' de ${uploadsDir}`); // Removido para reduzir logs
 
     if (process.env.NODE_ENV === 'production') {
         const clientBuildPath = path.join(__dirname, 'public'); 
-        console.log(`[Static Server] Tentando servir arquivos estáticos de produção de: ${clientBuildPath}`);
+        // console.log(`[Static Server] Tentando servir arquivos estáticos de produção de: ${clientBuildPath}`); // Removido
         try {
             await fs.access(clientBuildPath); 
             app.use(express.static(clientBuildPath));
-            console.log(`[Static Server] Servindo arquivos estáticos de ${clientBuildPath}`);
+            // console.log(`[Static Server] Servindo arquivos estáticos de ${clientBuildPath}`); // Removido
             app.get('*', (req, res) => {
                 res.sendFile(path.resolve(clientBuildPath, 'index.html'));
             });
-            console.log(`[Static Server] Rota fallback '*' configurada para servir index.html de ${clientBuildPath}`);
+            // console.log(`[Static Server] Rota fallback '*' configurada para servir index.html de ${clientBuildPath}`); // Removido
         } catch (error) {
             console.error(`[Static Server ERROR] Diretório de build do cliente (${clientBuildPath}) não encontrado.`);
             app.get('*', (req, res) => {
@@ -66,7 +67,7 @@ const serveStaticFiles = async () => {
             });
         }
     } else {
-        console.log('[Dev Server] Vite irá servir os arquivos do cliente em modo de desenvolvimento.');
+        // console.log('[Dev Server] Vite irá servir os arquivos do cliente em modo de desenvolvimento.'); // Removido
         setupVite(app);
     }
 };
