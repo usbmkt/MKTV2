@@ -3,15 +3,15 @@ import { Router, Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { storage } from './storage';
 import { JWT_SECRET, GEMINI_API_KEY } from './config';
-import * as schema from '../shared/schema'; // Importar tudo como 'schema'
+import * as schema from '../shared/schema'; 
 import { z, ZodError } from 'zod';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs/promises';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
-import { MCPHandler } from './mcp_handler'; // Esta importação precisa funcionar
+import MCPHandler from './mcp_handler'; // Corrigido para importação default
 
-const mcpHandler = new MCPHandler(storage);
+const mcpHandler = new MCPHandler(/* Removido storage daqui, pois o construtor de MCPHandler foi alterado */);
 
 interface AuthenticatedRequest extends Request {
   user: {
@@ -124,10 +124,10 @@ router.post('/api/auth/register', async (req: Request, res: Response, next: Next
     res.json({ user: { id: userRecord.id, username: userRecord.username, email: userRecord.email }, token });
   } catch (error: any) {
     if (error instanceof ZodError) return handleZodError(error, req, res, next);
-    if (error.code === 'SQLITE_CONSTRAINT' && error.message.includes('UNIQUE constraint failed: users.email')) {
+    if (error.code === 'SQLITE_CONSTRAINT' && error.message.includes('UNIQUE constraint failed: users.email')) { // Ajustar para erro PostgreSQL se mudar o dialeto
         return res.status(409).json({ error: "Este e-mail já está em uso." });
     }
-    if (error.code === 'SQLITE_CONSTRAINT' && error.message.includes('UNIQUE constraint failed: users.username')) {
+    if (error.code === 'SQLITE_CONSTRAINT' && error.message.includes('UNIQUE constraint failed: users.username')) { // Ajustar para erro PostgreSQL
         return res.status(409).json({ error: "Este nome de usuário já está em uso." });
     }
     next(error);
@@ -306,7 +306,6 @@ router.delete('/api/creatives/:id', authenticateToken, async (req: Authenticated
 const partialCopySchema = schema.insertCopySchema.partial().omit({ userId: true, id: true, createdAt: true});
 router.post('/api/copies', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
-        // Removendo userId da validação Zod aqui, pois será pego de req.user.id
         const copyData = schema.insertCopySchema.omit({ userId: true, id: true, createdAt:true}).parse(req.body);
         const newCopy = await storage.createCopy(req.user.id, copyData);
         res.status(201).json(newCopy);
@@ -328,12 +327,11 @@ router.get('/api/copies', authenticateToken, async (req: AuthenticatedRequest, r
 });
 
 // Flows Routes (WhatsApp Flows)
-// Usando schema.insertFlowSchema que agora deve estar definido e exportado corretamente
 const partialFlowUpdateSchema = schema.insertFlowSchema.partial().extend({
   elements: z.object({
     nodes: z.array(z.any()),
     edges: z.array(z.any()),
-    viewport: z.any().optional(), // Adicionado viewport
+    viewport: z.any().optional(),
   }).nullable().optional(),
 }).omit({ userId: true, id: true, createdAt: true, updatedAt: true });
 
