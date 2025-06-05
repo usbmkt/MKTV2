@@ -79,7 +79,7 @@ const handleError = (err: any, req: Request, res: Response, next: NextFunction) 
   const statusCode = err.statusCode || 500;
   const message = err.message || "Erro interno do servidor.";
   res.status(statusCode).json({ error: message });
-}; // <--- Este é o fechamento da função handleError
+}; 
 
 let genAI: GoogleGenerativeAI | null = null;
 if (GEMINI_API_KEY && GEMINI_API_KEY !== "SUA_CHAVE_API_GEMINI_AQUI" && GEMINI_API_KEY.length > 10) {
@@ -136,7 +136,20 @@ async function doRegisterRoutes(app: Express): Promise<HttpServer> {
   app.put('/api/chat/sessions/:sessionId/title', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => { try { if (!req.user?.id) return res.status(401).json({error: 'Não autenticado'}); const sessionId = parseInt(req.params.sessionId); if (isNaN(sessionId)) return res.status(400).json({ error: 'ID da sessão inválido.' }); const userId = req.user.id; const { title } = req.body; if (!title || typeof title !== 'string' || title.trim() === '') return res.status(400).json({ error: 'Título inválido.'}); const updated = await storage.updateChatSessionTitle(sessionId, userId, title); if (!updated) return res.status(404).json({ error: 'Sessão não encontrada.'}); res.json(updated); } catch (error) { next(error); }});
   app.delete('/api/chat/sessions/:sessionId', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => { try { if (!req.user?.id) return res.status(401).json({error: 'Não autenticado'}); const sessionId = parseInt(req.params.sessionId); if (isNaN(sessionId)) return res.status(400).json({ error: 'ID da sessão inválido.' }); const userId = req.user.id; const success = await storage.deleteChatSession(sessionId, userId); if (!success) return res.status(404).json({ error: 'Sessão não encontrada.'}); res.status(200).json({ message: 'Sessão excluída.' }); } catch (error) { next(error); }});
   app.get('/api/flows', authenticateToken, async (req: AuthenticatedRequest, res, next) => { try { if (!req.user?.id) return res.status(401).json({ error: 'Não autenticado' }); const userId = req.user.id; const campaignIdQuery = req.query.campaignId as string | undefined; let campaignId: number | null | undefined = undefined; if (req.query.id) { const flowId = parseInt(req.query.id as string); if (isNaN(flowId)) return res.status(400).json({ error: 'ID do Fluxo inválido.' }); const flow = await storage.getFlow(flowId, userId); if (!flow) return res.status(404).json({ error: 'Fluxo não encontrado.' }); return res.json(flow); } if (campaignIdQuery === 'null' || campaignIdQuery === '') { campaignId = null; } else if (campaignIdQuery) { const parsedId = parseInt(campaignIdQuery); if (isNaN(parsedId)) return res.status(400).json({ error: 'ID da Campanha inválido.' }); campaignId = parsedId; } res.json(await storage.getFlows(userId, campaignId)); } catch (e) { next(e); }});
-  app.post('/api/flows', authenticateToken, async (req: AuthenticatedRequest, res, next) => { try { if (!req.user?.id) return res.status(401).json({ error: 'Não autenticado' }); const dataToValidate = { ...req.body, userId: req.user.id }; const validatedData = schemaShared.insertFlowSchema.parse(dataToValidate); const newFlow = await storage.createFlow(validatedData); res.status(201).json(newFlow); } catch (e) { next(e); }});
+  
+  // CORREÇÃO: Adicionar userId ao criar o fluxo
+  app.post('/api/flows', authenticateToken, async (req: AuthenticatedRequest, res, next) => { 
+    try { 
+      if (!req.user?.id) return res.status(401).json({ error: 'Não autenticado' }); 
+      const dataToValidate = { ...req.body, userId: req.user.id }; // Incluir userId aqui
+      const validatedData = schemaShared.insertFlowSchema.parse(dataToValidate); 
+      const newFlow = await storage.createFlow(validatedData); 
+      res.status(201).json(newFlow); 
+    } catch (e) { 
+      next(e); 
+    }
+  });
+
   app.put('/api/flows', authenticateToken, async (req: AuthenticatedRequest, res, next) => { try { if (!req.user?.id) return res.status(401).json({ error: 'Não autenticado' }); const flowId = parseInt(req.query.id as string); if (isNaN(flowId)) return res.status(400).json({ error: 'ID do Fluxo é obrigatório na query string.' }); const { userId, id, createdAt, updatedAt, ...updateData } = req.body; const validatedData = schemaShared.insertFlowSchema.partial().parse(updateData); const updatedFlow = await storage.updateFlow(flowId, validatedData, req.user.id); if (!updatedFlow) return res.status(404).json({ error: 'Fluxo não encontrado ou não pertence ao usuário.' }); res.json(updatedFlow); } catch (e) { next(e); }});
   app.delete('/api/flows', authenticateToken, async (req: AuthenticatedRequest, res, next) => { try { if (!req.user?.id) return res.status(401).json({ error: 'Não autenticado' }); const flowId = parseInt(req.query.id as string); if (isNaN(flowId)) return res.status(400).json({ error: 'ID do Fluxo é obrigatório na query string.' }); const success = await storage.deleteFlow(flowId, req.user.id); if (!success) return res.status(404).json({ error: 'Fluxo não encontrado ou não pertence ao usuário.' }); res.status(200).json({ message: 'Fluxo excluído com sucesso.' }); } catch (e) { next(e); }});
   app.post('/api/whatsapp/reload-flow', authenticateToken, async (req, res, next) => { console.log('[API] Solicitação para recarregar fluxo do WhatsApp recebida.'); res.json({ message: "Recarga de fluxo do WhatsApp solicitada (implementação pendente no bot)." }); });
