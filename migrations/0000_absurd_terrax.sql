@@ -326,3 +326,18 @@ DO $$ BEGIN
 EXCEPTION
  WHEN duplicate_object THEN null;
 END $$;
+--> statement-breakpoint
+
+-- Adicionar a coluna 'status' à tabela 'campaigns' somente se ela não existir
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'campaigns' AND table_schema = 'public') THEN
+        IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'campaigns' AND column_name = 'status'
+        ) THEN
+            ALTER TABLE "public"."campaigns" ADD COLUMN "status" "campaign_status" DEFAULT 'draft' NOT NULL;
+        END IF;
+    END IF;
+END
+$$;
