@@ -137,13 +137,19 @@ async function doRegisterRoutes(app: Express): Promise<HttpServer> {
   app.delete('/api/chat/sessions/:sessionId', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => { try { if (!req.user?.id) return res.status(401).json({error: 'Não autenticado'}); const sessionId = parseInt(req.params.sessionId); if (isNaN(sessionId)) return res.status(400).json({ error: 'ID da sessão inválido.' }); const userId = req.user.id; const success = await storage.deleteChatSession(sessionId, userId); if (!success) return res.status(404).json({ error: 'Sessão não encontrada.'}); res.status(200).json({ message: 'Sessão excluída.' }); } catch (error) { next(error); }});
   app.get('/api/flows', authenticateToken, async (req: AuthenticatedRequest, res, next) => { try { if (!req.user?.id) return res.status(401).json({ error: 'Não autenticado' }); const userId = req.user.id; const campaignIdQuery = req.query.campaignId as string | undefined; let campaignId: number | null | undefined = undefined; if (req.query.id) { const flowId = parseInt(req.query.id as string); if (isNaN(flowId)) return res.status(400).json({ error: 'ID do Fluxo inválido.' }); const flow = await storage.getFlow(flowId, userId); if (!flow) return res.status(404).json({ error: 'Fluxo não encontrado.' }); return res.json(flow); } if (campaignIdQuery === 'null' || campaignIdQuery === '') { campaignId = null; } else if (campaignIdQuery) { const parsedId = parseInt(campaignIdQuery); if (isNaN(parsedId)) return res.status(400).json({ error: 'ID da Campanha inválido.' }); campaignId = parsedId; } res.json(await storage.getFlows(userId, campaignId)); } catch (e) { next(e); }});
   
-  // CORREÇÃO: Adicionar userId ao criar o fluxo
+  // ROTA CORRIGIDA:
   app.post('/api/flows', authenticateToken, async (req: AuthenticatedRequest, res, next) => { 
     try { 
-      if (!req.user?.id) return res.status(401).json({ error: 'Não autenticado' }); 
-      const dataToValidate = { ...req.body, userId: req.user.id }; // Incluir userId aqui
-      const validatedData = schemaShared.insertFlowSchema.parse(dataToValidate); 
-      const newFlow = await storage.createFlow(validatedData); 
+      if (!req.user?.id) return res.status(401).json({ error: 'Não autenticado' });
+      const clientData = { ...req.body };
+      // Validar os dados do cliente (sem userId) usando o schema que omite userId
+      const validatedClientData = schemaShared.insertFlowSchema.parse(clientData);
+      // Adicionar o userId do usuário autenticado DEPOIS da validação dos dados do cliente
+      const dataForStorage: schemaShared.InsertFlow = {
+        ...validatedClientData,
+        userId: req.user.id, // Adiciona o userId aqui
+      };
+      const newFlow = await storage.createFlow(dataForStorage); 
       res.status(201).json(newFlow); 
     } catch (e) { 
       next(e); 
