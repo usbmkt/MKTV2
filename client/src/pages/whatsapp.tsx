@@ -56,10 +56,11 @@ import {
     GoToFlowNodeData,
     TagContactNodeData,
     AllNodeDataTypes
-} from '@/types/zapTypes';
-import NodeContextMenuComponent from '@/components/flow/NodeContextMenu';
-import { IconWithGlow, NEON_COLOR, NEON_GREEN, NEON_RED, baseButtonSelectStyle, baseCardStyle, baseInputInsetStyle, popoverContentStyle, customScrollbarStyle } from '@/components/flow/utils';
-import WhatsAppConnection from '@/components/whatsapp-connection';
+} from '@/types/zapTypes'; // Cite: usbmkt/mktv2/MKTV2-mktv5/client/src/types/zapTypes.ts
+import NodeContextMenuComponent from '@/components/flow/NodeContextMenu'; // Cite: usbmkt/mktv2/MKTV2-mktv5/client/src/components/flow/NodeContextMenu.tsx
+import { IconWithGlow, NEON_COLOR, NEON_GREEN, NEON_RED, baseButtonSelectStyle, baseCardStyle, baseInputInsetStyle, popoverContentStyle, customScrollbarStyle } from '@/components/flow/utils'; // Cite: usbmkt/mktv2/MKTV2-mktv5/client/src/components/flow/utils.ts
+import WhatsAppConnection from '@/components/whatsapp-connection'; // Cite: usbmkt/mktv2/MKTV2-mktv5/client/src/components/whatsapp-connection.tsx
+
 
 interface WhatsAppMessage {
   id: number;
@@ -129,19 +130,17 @@ const globalNodeOrigin: NodeOrigin = [0.5, 0.5];
 
 interface FlowEditorInnerProps {
   activeFlowId?: string | null;
-  // Adicionar campaignList como prop para FlowEditorInner
-  campaignList: CampaignSelectItem[];
+  campaignList: CampaignSelectItem[]; // Recebe a lista de campanhas como prop
 }
 
 function FlowEditorInner({ activeFlowId, campaignList }: FlowEditorInnerProps) {
     const [nodes, setNodes, onNodesChange] = useNodesState<AllNodeDataTypes>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-    const reactFlowInstance = useReactFlow<AllNodeDataTypes, any>(); // Mantido, pois getNodes/getEdges pode ser útil para outras coisas
+    const reactFlowInstance = useReactFlow<AllNodeDataTypes, any>();
     const { toast } = useToast();
     const queryClientInternal = useQueryClient();
     const authStore = useAuthStore();
 
-    // Removido estado local campaignList e fetchCampaigns daqui
     const [selectedFlow, setSelectedFlow] = useState<FlowData | null>(null);
     const [flowNameInput, setFlowNameInput] = useState('');
     const [selectedCampaignIdForFlow, setSelectedCampaignIdForFlow] = useState<string | null>(null);
@@ -175,13 +174,18 @@ function FlowEditorInner({ activeFlowId, campaignList }: FlowEditorInnerProps) {
                       return;
                   }
                   const flowDetails: FlowData = await response.json();
-                  setSelectedFlow(flowDetails); setFlowNameInput(flowDetails.name); setSelectedCampaignIdForFlow(String(flowDetails.campaign_id || 'none')); 
+                  console.log('[DEBUG loadFullFlowData] flowDetails recebido da API:', JSON.stringify(flowDetails, null, 2));
+
+                  setSelectedFlow(flowDetails); 
+                  setFlowNameInput(flowDetails.name); 
+                  setSelectedCampaignIdForFlow(String(flowDetails.campaign_id || 'none')); 
+                  
                   const flowElements = flowDetails.elements || { nodes: [], edges: [] };
+                  console.log(`[DEBUG loadFullFlowData] Flow ID: ${activeFlowId}, Elements da API para setNodes/setEdges:`, JSON.stringify(flowElements, null, 2));
+                  
                   setNodes(flowElements.nodes.map(n => ({ ...n, dragHandle: '.node-header' }))); 
                   setEdges(flowElements.edges);
-                  // Adicionando um log para verificar os nós carregados
-                  console.log('[DEBUG FlowEditorInner loadFullFlowData] Nós carregados:', JSON.stringify(flowElements.nodes, null, 2));
-                  console.log('[DEBUG FlowEditorInner loadFullFlowData] Arestas carregadas:', JSON.stringify(flowElements.edges, null, 2));
+                  
                   setTimeout(() => reactFlowInstance.fitView({ duration: 300, padding: 0.2 }), 100);
               } catch (error: any) {
                   toast({ title: "Erro Detalhes Fluxo", description: error.message, variant: "destructive" });
@@ -194,19 +198,17 @@ function FlowEditorInner({ activeFlowId, campaignList }: FlowEditorInnerProps) {
       loadFullFlowData();
     }, [activeFlowId, authStore.isAuthenticated, reactFlowInstance, setNodes, setEdges, toast]);
 
-    // Removido useEffect que chamava fetchCampaigns local
-
     const saveFlow = useCallback(async () => {
-      if (!selectedFlow || !flowNameInput.trim() || !authStore.isAuthenticated) { // reactFlowInstance não é mais necessário aqui se usamos os estados
+      if (!selectedFlow || !flowNameInput.trim() || !authStore.isAuthenticated) {
         console.warn('[Client saveFlow] Condições para salvar não atendidas:', {selectedFlow, flowNameInput, isAuthenticated: authStore.isAuthenticated});
         toast({ title: "Atenção", description: "Nome do fluxo é obrigatório e um fluxo deve estar selecionado.", variant: "default" });
         return;
       }
       setIsSaving(true);
       try {
-          // CORREÇÃO: Usar os estados 'nodes' e 'edges' diretamente
-          const currentNodesToSave = nodes.map(({ dragHandle, ...node }) => node); // Remove dragHandle se ainda estiver presente
-          const currentEdgesToSave = edges;
+          // Usa os estados 'nodes' e 'edges' que são atualizados por onNodesChange/onEdgesChange
+          const currentNodesToSave = nodes.map(({ dragHandle, selected, ...node }) => node); // Remove dragHandle e selected
+          const currentEdgesToSave = edges.map(({selected, ...edge}) => edge); // Remove selected
 
           console.log('[DEBUG Client saveFlow] Nós atuais do ESTADO (currentNodesToSave):', JSON.stringify(currentNodesToSave, null, 2));
           console.log('[DEBUG Client saveFlow] Arestas atuais do ESTADO (currentEdgesToSave):', JSON.stringify(currentEdgesToSave, null, 2));
@@ -217,7 +219,7 @@ function FlowEditorInner({ activeFlowId, campaignList }: FlowEditorInnerProps) {
               name: flowNameInput.trim(), 
               campaign_id: campaignIdToSend ? Number(campaignIdToSend) : null, 
               status: selectedFlow.status || 'draft', 
-              elements: { nodes: currentNodesToSave, edges: currentEdgesToSave } // Usar os estados
+              elements: { nodes: currentNodesToSave, edges: currentEdgesToSave }
           };
           
           console.log('[DEBUG Client saveFlow] Objeto flowToSave sendo enviado para API:', JSON.stringify(flowToSave, null, 2));
@@ -225,28 +227,30 @@ function FlowEditorInner({ activeFlowId, campaignList }: FlowEditorInnerProps) {
           const response = await apiRequest('PUT', `/api/flows?id=${selectedFlow.id}`, flowToSave);
           if (!response.ok) { 
             const errText = await response.text();
-            console.error("Erro ao salvar fluxo (texto):", errText);
+            console.error("Erro ao salvar fluxo (texto da resposta):", errText);
             try {
               const errJson = JSON.parse(errText);
-              throw new Error(errJson.message || errJson.error || 'Falha ao salvar fluxo (JSON)');
+              throw new Error(errJson.message || errJson.error || 'Falha ao salvar fluxo (JSON parseado)');
             } catch {
               throw new Error(errText || `Falha ao salvar fluxo (status ${response.status})`);
             }
           }
           const updatedFlow: FlowData = await response.json();
           toast({ title: "Fluxo Salvo!" }); 
-          // Atualiza o estado local com os dados retornados, incluindo elements
+          
           setSelectedFlow(updatedFlow); 
-          setNodes(updatedFlow.elements?.nodes.map(n => ({ ...n, dragHandle: '.node-header' })) || []);
-          setEdges(updatedFlow.elements?.edges || []);
+          // Atualiza o estado local do editor com os dados retornados pela API
+          const updatedElements = updatedFlow.elements || { nodes: [], edges: [] };
+          setNodes(updatedElements.nodes.map(n => ({ ...n, dragHandle: '.node-header' })));
+          setEdges(updatedElements.edges);
 
           queryClientInternal.invalidateQueries({ queryKey: ['flows'] }); 
           queryClientInternal.invalidateQueries({ queryKey: ['flowDetails', updatedFlow.id] });
       } catch (error: any) { 
         console.error("Erro detalhado em saveFlow:", error);
-        toast({ title: "Erro ao Salvar", description: error.message || "Ocorreu um erro desconhecido.", variant: "destructive" });
+        toast({ title: "Erro ao Salvar Fluxo", description: error.message || "Ocorreu um erro desconhecido.", variant: "destructive" });
       } finally { setIsSaving(false); }
-    }, [selectedFlow, flowNameInput, selectedCampaignIdForFlow, authStore.isAuthenticated, queryClientInternal, toast, nodes, edges, setNodes, setEdges]); // Adicionado nodes, edges, setNodes, setEdges como dependências
+    }, [selectedFlow, flowNameInput, selectedCampaignIdForFlow, authStore.isAuthenticated, queryClientInternal, toast, nodes, edges, setNodes, setEdges]);
     
     const toggleFlowStatus = useCallback(async () => {
       if (!selectedFlow || !authStore.isAuthenticated) return;
@@ -274,7 +278,18 @@ function FlowEditorInner({ activeFlowId, campaignList }: FlowEditorInnerProps) {
       } finally { setIsTogglingStatus(false); }
     }, [selectedFlow, toast, authStore.isAuthenticated, queryClientInternal]);
 
-    const onConnect: OnConnect = useCallback((connection) => { const sourceNode = reactFlowInstance.getNode(connection.source!); const sourceHandleId = connection.sourceHandle || 'source-bottom'; const isSingleOutputHandle = !['buttonMessage', 'listMessage', 'condition', 'loopNode', 'timeCondition', 'waitInput', 'apiCall', 'webhookCall', 'gptQuery'].includes(sourceNode?.type || ''); setEdges((eds) => { let newEdges = eds; if (isSingleOutputHandle && sourceNode?.type !== 'condition' && sourceHandleId !== 'source-error' && sourceHandleId !== 'source-timeout' && sourceHandleId !== 'source-false' && sourceHandleId !== 'source-outside' && sourceHandleId !== 'source-finished' ) { newEdges = eds.filter(edge => !(edge.source === connection.source && edge.sourceHandle === sourceHandleId)); } return addEdge({ ...connection, markerEnd: { type: MarkerType.ArrowClosed, color: NEON_COLOR }, style: { stroke: NEON_COLOR, strokeWidth: 1.5, opacity: 0.8 } }, newEdges); }); }, [setEdges, reactFlowInstance]);
+    const onConnect: OnConnect = useCallback((connection) => { 
+      const sourceNode = reactFlowInstance.getNode(connection.source!); 
+      const sourceHandleId = connection.sourceHandle || 'source-bottom'; 
+      const isSingleOutputHandle = !['buttonMessage', 'listMessage', 'condition', 'loopNode', 'timeCondition', 'waitInput', 'apiCall', 'webhookCall', 'gptQuery'].includes(sourceNode?.type || ''); 
+      setEdges((eds) => { 
+        let newEdges = eds; 
+        if (isSingleOutputHandle && sourceNode?.type !== 'condition' && sourceHandleId !== 'source-error' && sourceHandleId !== 'source-timeout' && sourceHandleId !== 'source-false' && sourceHandleId !== 'source-outside' && sourceHandleId !== 'source-finished' ) { 
+          newEdges = eds.filter(edge => !(edge.source === connection.source && edge.sourceHandle === sourceHandleId)); 
+        } 
+        return addEdge({ ...connection, markerEnd: { type: MarkerType.ArrowClosed, color: NEON_COLOR }, style: { stroke: NEON_COLOR, strokeWidth: 1.5, opacity: 0.8 } }, newEdges); 
+      }); 
+    }, [setEdges, reactFlowInstance]);
     const handleNodeContextMenu = useCallback((event: React.MouseEvent, node: Node) => { event.preventDefault(); setContextMenu({ id: node.id, top: event.clientY, left: event.clientX, nodeType: node.type }); }, []);
     const handlePaneClick = useCallback(() => setContextMenu(null), []);
     const handleDeleteNode = useCallback((nodeId: string) => { setNodes((nds) => nds.filter((node) => node.id !== nodeId)); setEdges((eds) => eds.filter((edge) => edge.source !== nodeId && edge.target !== nodeId)); setContextMenu(null); }, [setNodes, setEdges]);
@@ -308,10 +323,9 @@ function FlowEditorInner({ activeFlowId, campaignList }: FlowEditorInnerProps) {
             default: newNodeData = {}; break;
         }
         const nodeToAdd: Node<AllNodeDataTypes> = { id: newNodeId, type, position, data: newNodeData as AllNodeDataTypes, dragHandle: '.node-header' }; 
-        // Usa setNodes para atualizar o estado, que é a fonte da verdade
         setNodes((nds) => nds.concat(nodeToAdd)); 
         setTimeout(() => { reactFlowInstance.setCenter(position.x, position.y, { zoom: reactFlowInstance.getZoom(), duration: 200 }); }, 50);
-    }, [reactFlowInstance, selectedFlow, toast, nodeTypes, setNodes]); // Adicionado setNodes
+    }, [reactFlowInstance, selectedFlow, toast, nodeTypes, setNodes]); 
 
     const isLoadingEditor = isLoadingFlowDetails || isSaving || isTogglingStatus;
 
@@ -486,7 +500,7 @@ const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
       if (!auth.isAuthenticated) return [];
       const response = await apiRequest('GET', '/api/campaigns');
       if (!response.ok) {
-        console.error("Falha ao buscar campanhas para filtro, status:", response.status)
+        console.error("[DEBUG Client campaignsForFlowAndEditor] Falha ao buscar campanhas, status:", response.status)
         throw new Error('Falha ao buscar campanhas para filtro');
       }
       const data: any[] = await response.json();
