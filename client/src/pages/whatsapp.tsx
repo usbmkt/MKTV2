@@ -13,11 +13,9 @@ import { cn } from "@/lib/utils";
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/api';
 import { useAuthStore } from '@/lib/auth';
-// Removido useLocation, pois não estava sendo usado diretamente na lógica principal de WhatsApp
-import { ScrollArea } from "@/components/ui/scroll-area"; // Removido ScrollBar, não usado
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-// Removido Dialog, DialogContent, etc. pois o modal de criar fluxo não está implementado visualmente
 import {
     MessageSquare, ListChecks, Trash2 as IconTrash, Image as ImageIcon, Clock, Variable, Waypoints, HelpCircle, Settings, Plus, RefreshCw, Send, RadioTower, UserCheck, LogOut, Save, Play, Square, Filter as FilterIcon, Layers, Activity, Workflow, Target, Mic, FileText as FileIcon, MapPin, Repeat, Webhook, Sparkles, ArrowLeft, X, AlertTriangle, Bot, FileTerminal, Clock10, Tag, Shuffle,
     MessageCircle as MsgIcon, Phone, Search, MoreVertical, Check, CheckCheck, Paperclip, Smile, Users, TrendingUp, Download, Upload,
@@ -62,7 +60,6 @@ import {
 import NodeContextMenuComponent from '@/components/flow/NodeContextMenu';
 import { IconWithGlow, NEON_COLOR, NEON_GREEN, NEON_RED, baseButtonSelectStyle, baseCardStyle, baseInputInsetStyle, popoverContentStyle, customScrollbarStyle } from '@/components/flow/utils';
 import WhatsAppConnection from '@/components/whatsapp-connection';
-
 
 interface WhatsAppMessage {
   id: number;
@@ -132,18 +129,19 @@ const globalNodeOrigin: NodeOrigin = [0.5, 0.5];
 
 interface FlowEditorInnerProps {
   activeFlowId?: string | null;
-  onFlowSelect?: (flowId: string) => void;
+  // Adicionar campaignList como prop para FlowEditorInner
+  campaignList: CampaignSelectItem[];
 }
 
-function FlowEditorInner({ activeFlowId }: FlowEditorInnerProps) { // Removido onFlowSelect não utilizado
+function FlowEditorInner({ activeFlowId, campaignList }: FlowEditorInnerProps) {
     const [nodes, setNodes, onNodesChange] = useNodesState<AllNodeDataTypes>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-    const reactFlowInstance = useReactFlow<AllNodeDataTypes, any>();
+    const reactFlowInstance = useReactFlow<AllNodeDataTypes, any>(); // Mantido, pois getNodes/getEdges pode ser útil para outras coisas
     const { toast } = useToast();
     const queryClientInternal = useQueryClient();
     const authStore = useAuthStore();
 
-    const [campaignList, setCampaignList] = useState<CampaignSelectItem[]>([]);
+    // Removido estado local campaignList e fetchCampaigns daqui
     const [selectedFlow, setSelectedFlow] = useState<FlowData | null>(null);
     const [flowNameInput, setFlowNameInput] = useState('');
     const [selectedCampaignIdForFlow, setSelectedCampaignIdForFlow] = useState<string | null>(null);
@@ -165,18 +163,6 @@ function FlowEditorInner({ activeFlowId }: FlowEditorInnerProps) { // Removido o
         assignAgent: AssignAgentNode, endFlow: EndFlowNode,
     }), []);
 
-    const fetchCampaigns = useCallback(async () => { 
-      if (!authStore.isAuthenticated) return;
-      try { 
-        const response = await apiRequest('GET','/api/campaigns');
-        const data: any[] = await response.json(); 
-        const campaignItems: CampaignSelectItem[] = data.map(c => ({ id: String(c.id), name: c.name }));
-        setCampaignList(campaignItems); 
-      } catch (error: any) { 
-        toast({ title: "Erro ao buscar campanhas para o editor", description: error.message, variant: "destructive" }); 
-      } 
-    }, [toast, authStore.isAuthenticated]);
-
     useEffect(() => {
       const loadFullFlowData = async () => {
           if (activeFlowId && authStore.isAuthenticated) {
@@ -189,11 +175,13 @@ function FlowEditorInner({ activeFlowId }: FlowEditorInnerProps) { // Removido o
                       return;
                   }
                   const flowDetails: FlowData = await response.json();
-                  setSelectedFlow(flowDetails); setFlowNameInput(flowDetails.name); setSelectedCampaignIdForFlow(String(flowDetails.campaign_id || 'none')); // Garante que 'none' seja string
+                  setSelectedFlow(flowDetails); setFlowNameInput(flowDetails.name); setSelectedCampaignIdForFlow(String(flowDetails.campaign_id || 'none')); 
                   const flowElements = flowDetails.elements || { nodes: [], edges: [] };
-                  // Adiciona dragHandle a nós carregados
                   setNodes(flowElements.nodes.map(n => ({ ...n, dragHandle: '.node-header' }))); 
                   setEdges(flowElements.edges);
+                  // Adicionando um log para verificar os nós carregados
+                  console.log('[DEBUG FlowEditorInner loadFullFlowData] Nós carregados:', JSON.stringify(flowElements.nodes, null, 2));
+                  console.log('[DEBUG FlowEditorInner loadFullFlowData] Arestas carregadas:', JSON.stringify(flowElements.edges, null, 2));
                   setTimeout(() => reactFlowInstance.fitView({ duration: 300, padding: 0.2 }), 100);
               } catch (error: any) {
                   toast({ title: "Erro Detalhes Fluxo", description: error.message, variant: "destructive" });
@@ -206,22 +194,22 @@ function FlowEditorInner({ activeFlowId }: FlowEditorInnerProps) { // Removido o
       loadFullFlowData();
     }, [activeFlowId, authStore.isAuthenticated, reactFlowInstance, setNodes, setEdges, toast]);
 
-    useEffect(() => { if (authStore.isAuthenticated) fetchCampaigns(); }, [fetchCampaigns, authStore.isAuthenticated]);
+    // Removido useEffect que chamava fetchCampaigns local
 
     const saveFlow = useCallback(async () => {
-      if (!selectedFlow || !flowNameInput.trim() || !reactFlowInstance || !authStore.isAuthenticated) {
-        console.warn('[Client saveFlow] Condições para salvar não atendidas:', {selectedFlow, flowNameInput, reactFlowInstance, isAuthenticated: authStore.isAuthenticated});
+      if (!selectedFlow || !flowNameInput.trim() || !authStore.isAuthenticated) { // reactFlowInstance não é mais necessário aqui se usamos os estados
+        console.warn('[Client saveFlow] Condições para salvar não atendidas:', {selectedFlow, flowNameInput, isAuthenticated: authStore.isAuthenticated});
         toast({ title: "Atenção", description: "Nome do fluxo é obrigatório e um fluxo deve estar selecionado.", variant: "default" });
         return;
       }
       setIsSaving(true);
       try {
-          const currentNodes = reactFlowInstance.getNodes().map(({ dragHandle, ...node }) => node);
-          const currentEdges = reactFlowInstance.getEdges();
+          // CORREÇÃO: Usar os estados 'nodes' e 'edges' diretamente
+          const currentNodesToSave = nodes.map(({ dragHandle, ...node }) => node); // Remove dragHandle se ainda estiver presente
+          const currentEdgesToSave = edges;
 
-          console.log('[DEBUG Client saveFlow] reactFlowInstance:', reactFlowInstance);
-          console.log('[DEBUG Client saveFlow] Nós atuais do editor (currentNodes):', JSON.stringify(currentNodes, null, 2));
-          console.log('[DEBUG Client saveFlow] Arestas atuais do editor (currentEdges):', JSON.stringify(currentEdges, null, 2));
+          console.log('[DEBUG Client saveFlow] Nós atuais do ESTADO (currentNodesToSave):', JSON.stringify(currentNodesToSave, null, 2));
+          console.log('[DEBUG Client saveFlow] Arestas atuais do ESTADO (currentEdgesToSave):', JSON.stringify(currentEdgesToSave, null, 2));
           
           const campaignIdToSend = selectedCampaignIdForFlow === 'none' ? null : selectedCampaignIdForFlow;
 
@@ -229,7 +217,7 @@ function FlowEditorInner({ activeFlowId }: FlowEditorInnerProps) { // Removido o
               name: flowNameInput.trim(), 
               campaign_id: campaignIdToSend ? Number(campaignIdToSend) : null, 
               status: selectedFlow.status || 'draft', 
-              elements: { nodes: currentNodes, edges: currentEdges } 
+              elements: { nodes: currentNodesToSave, edges: currentEdgesToSave } // Usar os estados
           };
           
           console.log('[DEBUG Client saveFlow] Objeto flowToSave sendo enviado para API:', JSON.stringify(flowToSave, null, 2));
@@ -247,14 +235,18 @@ function FlowEditorInner({ activeFlowId }: FlowEditorInnerProps) { // Removido o
           }
           const updatedFlow: FlowData = await response.json();
           toast({ title: "Fluxo Salvo!" }); 
+          // Atualiza o estado local com os dados retornados, incluindo elements
           setSelectedFlow(updatedFlow); 
+          setNodes(updatedFlow.elements?.nodes.map(n => ({ ...n, dragHandle: '.node-header' })) || []);
+          setEdges(updatedFlow.elements?.edges || []);
+
           queryClientInternal.invalidateQueries({ queryKey: ['flows'] }); 
           queryClientInternal.invalidateQueries({ queryKey: ['flowDetails', updatedFlow.id] });
       } catch (error: any) { 
         console.error("Erro detalhado em saveFlow:", error);
         toast({ title: "Erro ao Salvar", description: error.message || "Ocorreu um erro desconhecido.", variant: "destructive" });
       } finally { setIsSaving(false); }
-    }, [selectedFlow, flowNameInput, selectedCampaignIdForFlow, reactFlowInstance, toast, authStore.isAuthenticated, queryClientInternal]);
+    }, [selectedFlow, flowNameInput, selectedCampaignIdForFlow, authStore.isAuthenticated, queryClientInternal, toast, nodes, edges, setNodes, setEdges]); // Adicionado nodes, edges, setNodes, setEdges como dependências
     
     const toggleFlowStatus = useCallback(async () => {
       if (!selectedFlow || !authStore.isAuthenticated) return;
@@ -316,9 +308,10 @@ function FlowEditorInner({ activeFlowId }: FlowEditorInnerProps) { // Removido o
             default: newNodeData = {}; break;
         }
         const nodeToAdd: Node<AllNodeDataTypes> = { id: newNodeId, type, position, data: newNodeData as AllNodeDataTypes, dragHandle: '.node-header' }; 
-        reactFlowInstance.addNodes([nodeToAdd]); 
+        // Usa setNodes para atualizar o estado, que é a fonte da verdade
+        setNodes((nds) => nds.concat(nodeToAdd)); 
         setTimeout(() => { reactFlowInstance.setCenter(position.x, position.y, { zoom: reactFlowInstance.getZoom(), duration: 200 }); }, 50);
-    }, [reactFlowInstance, selectedFlow, toast, nodeTypes]);
+    }, [reactFlowInstance, selectedFlow, toast, nodeTypes, setNodes]); // Adicionado setNodes
 
     const isLoadingEditor = isLoadingFlowDetails || isSaving || isTogglingStatus;
 
@@ -368,6 +361,7 @@ function FlowEditorInner({ activeFlowId }: FlowEditorInnerProps) { // Removido o
                                     </SelectTrigger>
                                     <SelectContent className={cn(popoverContentStyle)}>
                                         <SelectItem value="none" className="text-xs text-muted-foreground hover:!bg-[rgba(30,144,255,0.2)] focus:!bg-[rgba(30,144,255,0.2)]">Sem Campanha</SelectItem>
+                                        {/* Usa campaignList passada como prop */}
                                         {campaignList.map(c => (<SelectItem key={c.id} value={c.id.toString()} className="text-xs hover:!bg-[rgba(30,144,255,0.2)] focus:!bg-[rgba(30,144,255,0.2)]">{c.name}</SelectItem>))}
                                     </SelectContent>
                                 </Select>
@@ -439,6 +433,7 @@ const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
   const [activeFlowIdForEditor, setActiveFlowIdForEditor] = useState<string | null>(null);
   const [isInitialFlowLoad, setIsInitialFlowLoad] = useState(true);
 
+  // Mock data para a aba "Conversas" (manter por enquanto, até integração real)
   const [selectedContact, setSelectedContact] = useState<string | null>(null);
   const [currentChatMessage, setCurrentChatMessage] = useState('');
   const [searchTermContacts, setSearchTermContacts] = useState('');
@@ -451,6 +446,7 @@ const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
   const sendChatMessage = () => { if (!currentChatMessage.trim() || !selectedContact) return; console.log('Enviando mensagem:', currentChatMessage, 'para:', selectedContact); setCurrentChatMessage(''); };
   const handleChatKeyPress = (e: React.KeyboardEvent) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChatMessage(); }};
 
+  // Query para buscar fluxos
   const { data: fetchedFlowsList, isLoading: isLoadingFlowsList, error: flowsListError, refetch: refetchFlowsForList } = useQuery<FlowData[]>({
     queryKey: ['flows', filterCampaignIdForList],
     queryFn: async () => {
@@ -483,8 +479,9 @@ const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
     }
   });
 
+  // Query para buscar campanhas (usada para filtros e para passar ao editor)
   const { data: fetchedCampaignsForFilter, isLoading: isLoadingCampaignsForFilter } = useQuery<CampaignSelectItem[]>({
-    queryKey: ['campaignsForFlowFilter'],
+    queryKey: ['campaignsForFlowAndEditor'], // Chave unificada
     queryFn: async () => {
       if (!auth.isAuthenticated) return [];
       const response = await apiRequest('GET', '/api/campaigns');
@@ -493,17 +490,20 @@ const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
         throw new Error('Falha ao buscar campanhas para filtro');
       }
       const data: any[] = await response.json();
-      console.log("[DEBUG Client campaignsForFlowFilter] Campanhas recebidas da API:", data);
+      console.log("[DEBUG Client campaignsForFlowAndEditor] Campanhas recebidas da API:", data);
       const mappedData = data.map(c => ({ id: String(c.id), name: c.name }));
-      console.log("[DEBUG Client campaignsForFlowFilter] Campanhas mapeadas:", mappedData);
+      console.log("[DEBUG Client campaignsForFlowAndEditor] Campanhas mapeadas:", mappedData);
       return mappedData;
     },
     enabled: auth.isAuthenticated,
     onSuccess: (data) => {
-        console.log("[DEBUG Client campaignsForFlowFilter] onSuccess, dados para setCampaignListForFilter:", data);
-        setCampaignListForFilter(data)
+        console.log("[DEBUG Client campaignsForFlowAndEditor] onSuccess, dados para setCampaignListForFilter:", data);
+        setCampaignListForFilter(data || []); // Garante que seja um array
     },
-    onError: (error: any) => toast({ title: "Erro Campanhas (Filtro)", description: error.message, variant: "destructive" })
+    onError: (error: any) => {
+      toast({ title: "Erro Campanhas (Filtro)", description: error.message, variant: "destructive" });
+      setCampaignListForFilter([]); // Define como array vazio em caso de erro
+    }
   });
 
   const createNewFlowMutation = useMutation<FlowData, Error, { name: string, campaign_id: string | null }>({
@@ -517,7 +517,7 @@ const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
     },
     onSuccess: (createdFlow) => {
       toast({ title: "Fluxo Criado!" });
-      queryClient.invalidateQueries({ queryKey: ['flows', filterCampaignIdForList] });
+      queryClient.invalidateQueries({ queryKey: ['flows', filterCampaignIdForList] }); // Invalida a lista de fluxos
       setActiveFlowIdForEditor(String(createdFlow.id));
       setActiveTab('flow-builder');
     },
@@ -545,6 +545,8 @@ const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
       queryClient.invalidateQueries({ queryKey: ['flows', filterCampaignIdForList] });
       if (activeFlowIdForEditor === deletedId) {
         setActiveFlowIdForEditor(null);
+        // Opcional: mudar para a aba de lista de fluxos se o fluxo ativo foi deletado
+        // setActiveTab('flows'); 
       }
     },
     onError: (error: any) => toast({ title: "Erro ao Deletar Fluxo", description: error.message, variant: "destructive" })
@@ -556,13 +558,12 @@ const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
     deleteFlowMutation.mutate(flowId);
   }, [flowsList, deleteFlowMutation, activeFlowIdForEditor]);
 
-  // Log para verificar o estado de campaignListForFilter
   useEffect(() => {
     console.log("[DEBUG Client WhatsAppPage] campaignListForFilter atualizado:", campaignListForFilter);
   }, [campaignListForFilter]);
 
   return (
-    <div className="space-y-6 p-4 md:p-6"> {/* Adicionado padding geral */}
+    <div className="space-y-6 p-4 md:p-6">
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">WhatsApp Business</h1>
@@ -586,6 +587,7 @@ const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
         </TabsContent>
 
         <TabsContent value="conversations" className="space-y-4">
+          {/* ... (código da aba conversas inalterado, continua mocado) ... */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-250px)]">
             <Card className="neu-card">
               <CardHeader className="pb-3">
@@ -685,8 +687,9 @@ const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
                                 (Array.isArray(campaignListForFilter) && campaignListForFilter.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>))}
                             </SelectContent>
                         </Select>
-                        <Button onClick={createNewFlowForList} className="neu-button w-full sm:w-auto">
-                            <Plus className="w-4 h-4 mr-2" /> Novo Fluxo
+                        <Button onClick={createNewFlowForList} className="neu-button w-full sm:w-auto" disabled={createNewFlowMutation.isPending}>
+                            {createNewFlowMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Plus className="w-4 h-4 mr-2" />} 
+                            Novo Fluxo
                         </Button>
                     </div>
                 </CardHeader>
@@ -712,13 +715,18 @@ const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
                                             </Badge>
                                         </div>
                                         <CardDescription className="text-xs line-clamp-1 h-4 mt-0.5">
-                                            {flow.campaign_id ? `Campanha: ${campaignListForFilter.find(c => c.id === String(flow.campaign_id))?.name || 'N/A'}` : 'Sem campanha'}
+                                            {flow.campaign_id ? `Campanha: ${ (Array.isArray(campaignListForFilter) ? campaignListForFilter.find(c => c.id === String(flow.campaign_id))?.name : 'N/A') || 'Inválida'}` : 'Sem campanha'}
                                         </CardDescription>
                                     </CardHeader>
                                     <CardContent className="text-xs text-muted-foreground pt-1 pb-2 px-3">
                                         <p>Atualizado: {flow.updated_at ? new Date(flow.updated_at).toLocaleDateString('pt-BR', {day:'2-digit', month:'short'}) : 'N/A'}</p>
                                         <div className="mt-1 flex justify-end">
-                                           <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:text-destructive-foreground hover:bg-destructive/10" onClick={(e) => { e.stopPropagation(); deleteFlowFromList(String(flow.id));}}><IconTrash className="w-3 h-3" /></Button>
+                                           <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:text-destructive-foreground hover:bg-destructive/10" 
+                                           onClick={(e) => { e.stopPropagation(); deleteFlowFromList(String(flow.id));}}
+                                           disabled={deleteFlowMutation.isPending && deleteFlowMutation.variables === String(flow.id)}
+                                           >
+                                            {deleteFlowMutation.isPending && deleteFlowMutation.variables === String(flow.id) ? <Loader2 className="w-3 h-3 animate-spin"/> : <IconTrash className="w-3 h-3" />}
+                                           </Button>
                                         </div>
                                     </CardContent>
                                 </Card>
@@ -729,13 +737,12 @@ const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
             </Card>
         </TabsContent>
 
-
         <TabsContent value="flow-builder" className="space-y-0 h-[calc(100vh-200px)]">
           <ReactFlowProvider> 
             <TooltipProvider>
               <FlowEditorInner 
                 activeFlowId={activeFlowIdForEditor}
-                // onFlowSelect não é mais necessário aqui se a seleção é feita na aba 'flows'
+                campaignList={campaignListForFilter} // Passa a lista de campanhas para o editor
               />
             </TooltipProvider>
           </ReactFlowProvider>
