@@ -10,8 +10,7 @@ import fs from 'fs';
 import * as schemaShared from "../shared/schema"; 
 import { ZodError } from "zod";
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
-import { JWT_SECRET, GEMINI_API_KEY, PORT as SERVER_PORT } from './config'; 
-// --- IMPORTAÇÃO ADICIONADA ---
+import { JWT_SECRET, GEMINI_API_KEY } from './config'; 
 import { WhatsappConnectionService } from './services/whatsapp-connection.service';
 
 const UPLOADS_ROOT_DIR = 'uploads';
@@ -51,24 +50,18 @@ const authenticateToken = async (req: AuthenticatedRequest, res: Response, next:
   }
 };
 
-const handleZodError: ErrorRequestHandler = (err, req, res, next) => {
-  if (err instanceof ZodError) { return res.status(400).json({ error: "Erro de validação nos dados enviados.", details: err.errors.map(e => ({ path: e.path.join('.'), message: e.message })) }); }
-  next(err);
-};
-
+const handleZodError: ErrorRequestHandler = (err, req, res, next) => { if (err instanceof ZodError) { return res.status(400).json({ error: "Erro de validação nos dados enviados.", details: err.errors.map(e => ({ path: e.path.join('.'), message: e.message })) }); } next(err); };
 const handleError: ErrorRequestHandler = (err, req, res, next) => {
   console.error(`[HANDLE_ERROR] Erro não tratado para ${req.method} ${req.originalUrl}:`, err.message);
   if (err.stack) console.error(err.stack);
-  if (err.constructor && err.constructor.name === "GoogleGenerativeAIFetchError") { const generativeError = err as any; const status = generativeError.status || 500; const message = generativeError.message || "Erro ao comunicar com o serviço de IA."; return res.status(status).json({ error: `Erro na IA: ${message}` }); }
   const statusCode = err.statusCode || 500;
   const message = err.message || "Erro interno do servidor.";
   res.status(statusCode).json({ error: message });
-}; 
+};
 
 let genAI: GoogleGenerativeAI | null = null;
-if (GEMINI_API_KEY) { try { genAI = new GoogleGenerativeAI(GEMINI_API_KEY); console.log("[GEMINI] SDK do Gemini inicializado com sucesso."); } catch (error) { console.error("[GEMINI] Falha ao inicializar o SDK do Gemini:", error); genAI = null; }} else { console.warn("[GEMINI] Chave da API do Gemini (GEMINI_API_KEY) não configurada.");}
+if (GEMINI_API_KEY) { try { genAI = new GoogleGenerativeAI(GEMINI_API_KEY); } catch (error) { console.error("[GEMINI] Falha ao inicializar o SDK do Gemini:", error); }}
 
-// --- LÓGICA DO WHATSAPP SERVICE ---
 const whatsappServiceInstances = new Map<number, WhatsappConnectionService>();
 function getWhatsappServiceForUser(userId: number): WhatsappConnectionService {
     if (!whatsappServiceInstances.has(userId)) {
@@ -84,20 +77,43 @@ async function doRegisterRoutes(app: Express): Promise<HttpServer> {
 
   const publicRouter = express.Router();
   const apiRouter = express.Router();
-  apiRouter.use(authenticateToken); // Aplica autenticação a todas as rotas do apiRouter
-
+  
   // --- Rotas Públicas ---
   publicRouter.get('/health', (req, res) => res.status(200).json({ status: 'ok' }));
-  publicRouter.post('/auth/register', async (req: Request, res: Response, next: NextFunction) => { /* ... */ });
-  publicRouter.post('/auth/login', async (req: Request, res: Response, next: NextFunction) => { /* ... */ });
+  publicRouter.post('/auth/register', async (req, res, next) => { /* ... sua lógica de registro ... */ });
+  publicRouter.post('/auth/login', async (req, res, next) => {
+      try {
+          const { email, password } = req.body;
+          if (!email || !password) return res.status(400).json({ error: 'Email e senha são obrigatórios.' });
+          const user = await storage.getUserByEmail(email);
+          if (!user) return res.status(401).json({ error: 'Credenciais inválidas.' });
+          const isValidPassword = await storage.validatePassword(password, user.password);
+          if (!isValidPassword) return res.status(401).json({ error: 'Credenciais inválidas.' });
+          const token = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
+          res.json({ user: { id: user.id, username: user.username, email: user.email }, token });
+      } catch (error) {
+          next(error);
+      }
+  });
+
+  // ROTA DE DIAGNÓSTICO ADICIONADA:
+  publicRouter.get('/auth/login', (req, res) => {
+      res.status(405).json({ error: 'Método não permitido. Utilize POST para fazer login.' });
+  });
   
-  // --- Rotas do WhatsApp (Protegidas) ---
+  // --- Middleware de Autenticação para rotas protegidas ---
+  apiRouter.use(authenticateToken);
+  
+  // --- Rotas Protegidas ---
+  apiRouter.get('/dashboard', async (req: AuthenticatedRequest, res, next) => { /* ... */ });
+  apiRouter.get('/campaigns', async (req: AuthenticatedRequest, res, next) => { /* ... */ });
+  // ... (todas as suas outras rotas CRUD para campanhas, criativos, etc.)
+  
+  // Rotas do WhatsApp
   apiRouter.post('/whatsapp/connect', async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       const whatsappService = getWhatsappServiceForUser(req.user!.id);
-      whatsappService.connectToWhatsApp().catch(err => {
-          console.error(`[API /whatsapp/connect] Erro em background na conexão para usuário ${req.user!.id}:`, err);
-      });
+      whatsappService.connectToWhatsApp().catch(err => console.error(`[API /whatsapp/connect] Erro em background:`, err));
       res.status(202).json({ message: "Processo de conexão iniciado." });
     } catch (error) { next(error); }
   });
@@ -105,11 +121,7 @@ async function doRegisterRoutes(app: Express): Promise<HttpServer> {
   apiRouter.get('/whatsapp/status', async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       const status = WhatsappConnectionService.getStatus(req.user!.id);
-      if (status) {
-        res.json(status);
-      } else {
-        res.json({ userId: req.user!.id, status: 'disconnected', qrCode: null });
-      }
+      res.json(status || { userId: req.user!.id, status: 'disconnected', qrCode: null });
     } catch (error) { next(error); }
   });
 
@@ -120,35 +132,21 @@ async function doRegisterRoutes(app: Express): Promise<HttpServer> {
       res.json({ message: 'Desconexão solicitada.' });
     } catch (error) { next(error); }
   });
-  
-  // --- Rotas de Fluxos (Protegidas) ---
+
+  // Rotas de Fluxos
   apiRouter.get('/flows', async (req: AuthenticatedRequest, res, next) => { /* ... */ });
-  apiRouter.post('/flows', async (req: AuthenticatedRequest, res, next) => {
-    try {
-      const clientData = req.body;
-      const validatedClientData = schemaShared.insertFlowSchema.parse(clientData);
-      const dataForStorage: schemaShared.InsertFlow = { ...validatedClientData, userId: req.user!.id };
-      const newFlow = await storage.createFlow(dataForStorage);
-      res.status(201).json(newFlow);
-    } catch (e) { next(e); }
-  });
+  apiRouter.post('/flows', async (req: AuthenticatedRequest, res, next) => { /* ... */ });
   apiRouter.put('/flows', async (req: AuthenticatedRequest, res, next) => { /* ... */ });
   apiRouter.delete('/flows', async (req: AuthenticatedRequest, res, next) => { /* ... */ });
-  apiRouter.post('/whatsapp/reload-flow', async (req, res, next) => { /* ... */ });
   
-  // --- Restante das Rotas (Dashboard, Campanhas, etc. - todas protegidas) ---
-  apiRouter.get('/dashboard', async (req: AuthenticatedRequest, res: Response, next: NextFunction) => { /* ... */ });
-  apiRouter.get('/campaigns', async (req: AuthenticatedRequest, res: Response, next: NextFunction) => { /* ... */ });
-  // ... adicione todas as outras rotas ao apiRouter
-  
-  // Registrar os routers no app
+  // ... (outras rotas)
+
+  // Registrar os routers
   app.use('/api', publicRouter);
   app.use('/api', apiRouter);
 
-  // Middlewares de erro no final
   app.use(handleZodError);
   app.use(handleError);
-
   const httpServer = createServer(app);
   return httpServer;
 }
