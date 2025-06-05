@@ -70,7 +70,7 @@ export interface IStorage {
   getFlows(userId: number, campaignId?: number | null): Promise<schema.Flow[]>;
   getFlow(id: number, userId: number): Promise<schema.Flow | undefined>;
   createFlow(flowData: schema.InsertFlow): Promise<schema.Flow>;
-  updateFlow(id: number, flowData: Partial<Omit<schema.InsertFlow, 'userId' | 'campaignId'>>, userId: number): Promise<schema.Flow | undefined>;
+  updateFlow(id: number, flowData: Partial<Omit<schema.InsertFlow, 'userId' | 'campaignId'>>, userId: number): Promise<schema.Flow | undefined>; // Ajustado tipo de flowData
   deleteFlow(id: number, userId: number): Promise<boolean>;
 }
 
@@ -130,12 +130,76 @@ export class DatabaseStorage implements IStorage {
   async createFunnelStage(stageData: schema.InsertFunnelStage): Promise<schema.FunnelStage> { const [newStage] = await db.insert(schema.funnelStages).values(stageData).returning(); if (!newStage) throw new Error("Falha ao criar etapa do funil."); return newStage; }
   async updateFunnelStage(id: number, stageData: Partial<Omit<schema.InsertFunnelStage, 'funnelId'>>, userId: number): Promise<schema.FunnelStage | undefined> { const existingStage = await db.query.funnelStages.findFirst({ where: eq(schema.funnelStages.id, id), with: { funnel: { columns: { userId: true } } } }); if (!existingStage || existingStage.funnel?.userId !== userId) { throw new Error("Etapa do funil não encontrada ou não pertence ao usuário."); } const [updatedStage] = await db.update(schema.funnelStages) .set({ ...stageData, updatedAt: new Date() }) .where(eq(schema.funnelStages.id, id)) .returning(); return updatedStage; }
   async deleteFunnelStage(id: number, userId: number): Promise<boolean> { const existingStage = await db.query.funnelStages.findFirst({ where: eq(schema.funnelStages.id, id), with: { funnel: { columns: { userId: true } } } }); if (!existingStage || existingStage.funnel?.userId !== userId) { console.warn(`Tentativa de deletar etapa ${id} não encontrada ou não pertencente ao usuário ${userId}.`); return false;  } const result = await db.delete(schema.funnelStages).where(eq(schema.funnelStages.id, id)); return (result.rowCount ?? 0) > 0; }
-  async getFlows(userId: number, campaignId?: number | null): Promise<schema.Flow[]> { const conditions: any[] = [eq(schema.flows.userId, userId)]; if (campaignId !== undefined) { conditions.push(campaignId === null ? isNull(schema.flows.campaignId) : eq(schema.flows.campaignId, campaignId)); } return db.select().from(schema.flows).where(and(...conditions)).orderBy(desc(schema.flows.createdAt)); }
-  async getFlow(id: number, userId: number): Promise<schema.Flow | undefined> { const [flow] = await db.select().from(schema.flows).where(and(eq(schema.flows.id, id), eq(schema.flows.userId, userId))).limit(1); return flow;}
-  async createFlow(flowData: schema.InsertFlow): Promise<schema.Flow> { const dataToInsert = { ...flowData, elements: flowData.elements || { nodes: [], edges: [] } }; const [newFlow] = await db.insert(schema.flows).values(dataToInsert).returning(); if (!newFlow) throw new Error("Falha ao criar fluxo."); return newFlow;}
-  async updateFlow(id: number, flowData: Partial<Omit<schema.InsertFlow, 'userId' | 'campaignId'>>, userId: number): Promise<schema.Flow | undefined> { const dataToSet: Partial<schema.Flow & { campaignId?: number | null }> = { ...flowData, updatedAt: new Date() }; if (flowData.hasOwnProperty('campaignId')) { dataToSet.campaignId = flowData.campaignId; } if (flowData.elements && (typeof flowData.elements !== 'object' || flowData.elements === null)) { console.warn(`[storage.updateFlow] Tentativa de salvar 'elements' com tipo inválido: ${typeof flowData.elements}. Resetando para default.`); dataToSet.elements = { nodes: [], edges: [] }; } else if (flowData.elements) { dataToSet.elements = flowData.elements; } const [updatedFlow] = await db.update(schema.flows).set(dataToSet).where(and(eq(schema.flows.id, id), eq(schema.flows.userId, userId))).returning(); return updatedFlow;}
-  async deleteFlow(id: number, userId: number): Promise<boolean> { const result = await db.delete(schema.flows).where(and(eq(schema.flows.id, id), eq(schema.flows.userId, userId))); return (result.rowCount ?? 0) > 0; }
+  
+  async getFlows(userId: number, campaignId?: number | null): Promise<schema.Flow[]> { 
+    const conditions: any[] = [eq(schema.flows.userId, userId)]; 
+    if (campaignId !== undefined) { 
+      conditions.push(campaignId === null ? isNull(schema.flows.campaignId) : eq(schema.flows.campaignId, campaignId)); 
+    } 
+    return db.select().from(schema.flows).where(and(...conditions)).orderBy(desc(schema.flows.createdAt)); 
+  }
+  
+  async getFlow(id: number, userId: number): Promise<schema.Flow | undefined> { 
+    const [flow] = await db.select().from(schema.flows).where(and(eq(schema.flows.id, id), eq(schema.flows.userId, userId))).limit(1); 
+    return flow;
+  }
+  
+  async createFlow(flowData: schema.InsertFlow): Promise<schema.Flow> { 
+    // userId já deve estar em flowData, vindo da rota que o adiciona.
+    console.log('[DEBUG storage.createFlow] flowData recebido:', JSON.stringify(flowData));
+    const dataToInsert = { 
+      ...flowData, 
+      elements: flowData.elements || { nodes: [], edges: [] } 
+    }; 
+    const [newFlow] = await db.insert(schema.flows).values(dataToInsert).returning(); 
+    if (!newFlow) throw new Error("Falha ao criar fluxo."); 
+    console.log('[DEBUG storage.createFlow] newFlow criado:', JSON.stringify(newFlow));
+    return newFlow;
+  }
+
+  async updateFlow(id: number, flowData: Partial<Omit<schema.InsertFlow, 'userId' | 'campaignId'>>, userId: number): Promise<schema.Flow | undefined> {
+    // Construir dataToSet explicitamente para maior clareza
+    const dataToSet: Partial<schema.Flow> & { campaign_id?: number | null } = {
+      updatedAt: new Date()
+    };
+    
+    if (flowData.name !== undefined) dataToSet.name = flowData.name;
+    if (flowData.status !== undefined) dataToSet.status = flowData.status;
+    
+    // campaign_id vem de flowData. O schema de insert tem preprocessamento para ele.
+    // Se flowData tiver campaign_id, ele será usado.
+    if (flowData.hasOwnProperty('campaignId')) {
+        dataToSet.campaign_id = flowData.campaignId === undefined ? null : flowData.campaignId;
+    }
+
+    console.log('[DEBUG storage.updateFlow] flowData.elements recebido:', JSON.stringify(flowData.elements));
+
+    if (flowData.elements && typeof flowData.elements === 'object' && flowData.elements !== null && 'nodes' in flowData.elements && 'edges' in flowData.elements) {
+      dataToSet.elements = flowData.elements;
+      console.log('[DEBUG storage.updateFlow] dataToSet.elements atribuído com sucesso.');
+    } else if (flowData.hasOwnProperty('elements')) { 
+      // Se a chave 'elements' existe mas é inválida (ex: null, string, etc.)
+      console.warn(`[storage.updateFlow] Tentativa de salvar 'elements' com tipo inválido ou estrutura incorreta: ${typeof flowData.elements}. Resetando para default.`);
+      dataToSet.elements = { nodes: [], edges: [] };
+    }
+    // Se flowData.elements for completamente undefined (chave não presente), a coluna 'elements' não será atualizada no banco.
+
+    console.log('[DEBUG storage.updateFlow] dataToSet ANTES da atualização no DB:', JSON.stringify(dataToSet));
+
+    const [updatedFlow] = await db.update(schema.flows)
+      .set(dataToSet)
+      .where(and(eq(schema.flows.id, id), eq(schema.flows.userId, userId)))
+      .returning();
+      
+    console.log('[DEBUG storage.updateFlow] updatedFlow RETORNADO do DB:', JSON.stringify(updatedFlow));
+    return updatedFlow;
+  }
+
+  async deleteFlow(id: number, userId: number): Promise<boolean> { 
+    const result = await db.delete(schema.flows).where(and(eq(schema.flows.id, id), eq(schema.flows.userId, userId))); 
+    return (result.rowCount ?? 0) > 0; 
+  }
 }
 
-// Alteração: Revertendo para exportação nomeada
+// Exportação nomeada
 export const storage = new DatabaseStorage();
