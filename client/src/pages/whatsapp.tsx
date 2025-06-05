@@ -130,7 +130,7 @@ const globalNodeOrigin: NodeOrigin = [0.5, 0.5];
 
 interface FlowEditorInnerProps {
   activeFlowId?: string | null;
-  campaignList: CampaignSelectItem[]; // Recebe a lista de campanhas como prop
+  campaignList: CampaignSelectItem[]; 
 }
 
 function FlowEditorInner({ activeFlowId, campaignList }: FlowEditorInnerProps) {
@@ -174,14 +174,14 @@ function FlowEditorInner({ activeFlowId, campaignList }: FlowEditorInnerProps) {
                       return;
                   }
                   const flowDetails: FlowData = await response.json();
-                  console.log('[DEBUG loadFullFlowData] flowDetails recebido da API:', JSON.stringify(flowDetails, null, 2));
+                  console.log('[DEBUG loadFullFlowData] Flow ID:', activeFlowId, '- Detalhes COMPLETOS recebidos da API:', JSON.stringify(flowDetails, null, 2));
 
                   setSelectedFlow(flowDetails); 
                   setFlowNameInput(flowDetails.name); 
                   setSelectedCampaignIdForFlow(String(flowDetails.campaign_id || 'none')); 
                   
                   const flowElements = flowDetails.elements || { nodes: [], edges: [] };
-                  console.log(`[DEBUG loadFullFlowData] Flow ID: ${activeFlowId}, Elements da API para setNodes/setEdges:`, JSON.stringify(flowElements, null, 2));
+                  console.log(`[DEBUG loadFullFlowData] Flow ID: ${activeFlowId} - Elements da API para setNodes/setEdges:`, JSON.stringify(flowElements, null, 2));
                   
                   setNodes(flowElements.nodes.map(n => ({ ...n, dragHandle: '.node-header' }))); 
                   setEdges(flowElements.edges);
@@ -206,9 +206,8 @@ function FlowEditorInner({ activeFlowId, campaignList }: FlowEditorInnerProps) {
       }
       setIsSaving(true);
       try {
-          // Usa os estados 'nodes' e 'edges' que são atualizados por onNodesChange/onEdgesChange
-          const currentNodesToSave = nodes.map(({ dragHandle, selected, ...node }) => node); // Remove dragHandle e selected
-          const currentEdgesToSave = edges.map(({selected, ...edge}) => edge); // Remove selected
+          const currentNodesToSave = nodes.map(({ dragHandle, selected, ...node }) => node); 
+          const currentEdgesToSave = edges.map(({selected, ...edge}) => edge); 
 
           console.log('[DEBUG Client saveFlow] Nós atuais do ESTADO (currentNodesToSave):', JSON.stringify(currentNodesToSave, null, 2));
           console.log('[DEBUG Client saveFlow] Arestas atuais do ESTADO (currentEdgesToSave):', JSON.stringify(currentEdgesToSave, null, 2));
@@ -239,7 +238,6 @@ function FlowEditorInner({ activeFlowId, campaignList }: FlowEditorInnerProps) {
           toast({ title: "Fluxo Salvo!" }); 
           
           setSelectedFlow(updatedFlow); 
-          // Atualiza o estado local do editor com os dados retornados pela API
           const updatedElements = updatedFlow.elements || { nodes: [], edges: [] };
           setNodes(updatedElements.nodes.map(n => ({ ...n, dragHandle: '.node-header' })));
           setEdges(updatedElements.edges);
@@ -376,7 +374,7 @@ function FlowEditorInner({ activeFlowId, campaignList }: FlowEditorInnerProps) {
                                     <SelectContent className={cn(popoverContentStyle)}>
                                         <SelectItem value="none" className="text-xs text-muted-foreground hover:!bg-[rgba(30,144,255,0.2)] focus:!bg-[rgba(30,144,255,0.2)]">Sem Campanha</SelectItem>
                                         {/* Usa campaignList passada como prop */}
-                                        {campaignList.map(c => (<SelectItem key={c.id} value={c.id.toString()} className="text-xs hover:!bg-[rgba(30,144,255,0.2)] focus:!bg-[rgba(30,144,255,0.2)]">{c.name}</SelectItem>))}
+                                        {(Array.isArray(campaignList) && campaignList.map(c => (<SelectItem key={c.id} value={c.id.toString()} className="text-xs hover:!bg-[rgba(30,144,255,0.2)] focus:!bg-[rgba(30,144,255,0.2)]">{c.name}</SelectItem>)))}
                                     </SelectContent>
                                 </Select>
                                 <Input 
@@ -447,7 +445,6 @@ const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
   const [activeFlowIdForEditor, setActiveFlowIdForEditor] = useState<string | null>(null);
   const [isInitialFlowLoad, setIsInitialFlowLoad] = useState(true);
 
-  // Mock data para a aba "Conversas" (manter por enquanto, até integração real)
   const [selectedContact, setSelectedContact] = useState<string | null>(null);
   const [currentChatMessage, setCurrentChatMessage] = useState('');
   const [searchTermContacts, setSearchTermContacts] = useState('');
@@ -460,7 +457,6 @@ const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
   const sendChatMessage = () => { if (!currentChatMessage.trim() || !selectedContact) return; console.log('Enviando mensagem:', currentChatMessage, 'para:', selectedContact); setCurrentChatMessage(''); };
   const handleChatKeyPress = (e: React.KeyboardEvent) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChatMessage(); }};
 
-  // Query para buscar fluxos
   const { data: fetchedFlowsList, isLoading: isLoadingFlowsList, error: flowsListError, refetch: refetchFlowsForList } = useQuery<FlowData[]>({
     queryKey: ['flows', filterCampaignIdForList],
     queryFn: async () => {
@@ -475,7 +471,9 @@ const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
       }
       const response = await apiRequest('GET', url);
       if (!response.ok) throw new Error('Falha ao buscar fluxos');
-      return response.json();
+      const data = await response.json();
+      console.log("[DEBUG WhatsAppPage onSuccess fetchedFlowsList] Dados de fluxos recebidos da API:", JSON.stringify(data, null, 2));
+      return data;
     },
     enabled: auth.isAuthenticated,
     onSuccess: (data) => {
@@ -493,17 +491,16 @@ const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
     }
   });
 
-  // Query para buscar campanhas (usada para filtros e para passar ao editor)
   const { data: fetchedCampaignsForFilter, isLoading: isLoadingCampaignsForFilter } = useQuery<CampaignSelectItem[]>({
-    queryKey: ['campaignsForFlowAndEditor'], // Chave unificada
+    queryKey: ['campaignsForFlowAndEditor'], 
     queryFn: async () => {
       if (!auth.isAuthenticated) return [];
       const response = await apiRequest('GET', '/api/campaigns');
       if (!response.ok) {
-        console.error("[DEBUG Client campaignsForFlowAndEditor] Falha ao buscar campanhas, status:", response.status)
+        console.error("[DEBUG Client campaignsForFlowAndEditor] Falha ao buscar campanhas, status:", response.status);
         throw new Error('Falha ao buscar campanhas para filtro');
       }
-      const data: any[] = await response.json();
+      const data: CampaignType[] = await response.json(); // Tipar como CampaignType[]
       console.log("[DEBUG Client campaignsForFlowAndEditor] Campanhas recebidas da API:", data);
       const mappedData = data.map(c => ({ id: String(c.id), name: c.name }));
       console.log("[DEBUG Client campaignsForFlowAndEditor] Campanhas mapeadas:", mappedData);
@@ -512,11 +509,16 @@ const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
     enabled: auth.isAuthenticated,
     onSuccess: (data) => {
         console.log("[DEBUG Client campaignsForFlowAndEditor] onSuccess, dados para setCampaignListForFilter:", data);
-        setCampaignListForFilter(data || []); // Garante que seja um array
+        if (Array.isArray(data)) { // Adiciona verificação se data é array
+            setCampaignListForFilter(data);
+        } else {
+            console.warn("[DEBUG Client campaignsForFlowAndEditor] onSuccess: dados recebidos não são um array, resetando para []. Dados:", data);
+            setCampaignListForFilter([]);
+        }
     },
     onError: (error: any) => {
       toast({ title: "Erro Campanhas (Filtro)", description: error.message, variant: "destructive" });
-      setCampaignListForFilter([]); // Define como array vazio em caso de erro
+      setCampaignListForFilter([]); 
     }
   });
 
@@ -531,7 +533,7 @@ const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
     },
     onSuccess: (createdFlow) => {
       toast({ title: "Fluxo Criado!" });
-      queryClient.invalidateQueries({ queryKey: ['flows', filterCampaignIdForList] }); // Invalida a lista de fluxos
+      queryClient.invalidateQueries({ queryKey: ['flows', filterCampaignIdForList] }); 
       setActiveFlowIdForEditor(String(createdFlow.id));
       setActiveTab('flow-builder');
     },
@@ -559,8 +561,6 @@ const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
       queryClient.invalidateQueries({ queryKey: ['flows', filterCampaignIdForList] });
       if (activeFlowIdForEditor === deletedId) {
         setActiveFlowIdForEditor(null);
-        // Opcional: mudar para a aba de lista de fluxos se o fluxo ativo foi deletado
-        // setActiveTab('flows'); 
       }
     },
     onError: (error: any) => toast({ title: "Erro ao Deletar Fluxo", description: error.message, variant: "destructive" })
@@ -573,7 +573,9 @@ const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
   }, [flowsList, deleteFlowMutation, activeFlowIdForEditor]);
 
   useEffect(() => {
-    console.log("[DEBUG Client WhatsAppPage] campaignListForFilter atualizado:", campaignListForFilter);
+    // Este log pode executar antes do onSuccess da query, por isso pode mostrar [] inicialmente.
+    // Os logs dentro do onSuccess são mais importantes para diagnosticar o setCampaignListForFilter.
+    console.log("[DEBUG Client WhatsAppPage] campaignListForFilter Estado ATUALIZADO:", campaignListForFilter);
   }, [campaignListForFilter]);
 
   return (
@@ -756,7 +758,7 @@ const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
             <TooltipProvider>
               <FlowEditorInner 
                 activeFlowId={activeFlowIdForEditor}
-                campaignList={campaignListForFilter} // Passa a lista de campanhas para o editor
+                campaignList={campaignListForFilter} 
               />
             </TooltipProvider>
           </ReactFlowProvider>
