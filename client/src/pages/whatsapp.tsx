@@ -13,13 +13,13 @@ import { cn } from "@/lib/utils";
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/api';
 import { useAuthStore } from '@/lib/auth';
-import { useLocation } from "wouter";
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+// Removido useLocation, pois não estava sendo usado diretamente na lógica principal de WhatsApp
+import { ScrollArea } from "@/components/ui/scroll-area"; // Removido ScrollBar, não usado
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"; // DialogFooter é comum, incluí por precaução
+// Removido Dialog, DialogContent, etc. pois o modal de criar fluxo não está implementado visualmente
 import {
-    MessageSquare, ListChecks, Trash2 as IconTrash, Image as ImageIcon, Clock, Variable, Waypoints, HelpCircle, Settings, Plus, RefreshCw, Send, RadioTower, UserCheck, LogOut, Save, Play, Square, Filter, Layers, Activity, Workflow, Target, Mic, FileText as FileIcon, MapPin, Repeat, Webhook, Sparkles, ArrowLeft, X, AlertTriangle, Bot, FileTerminal, Clock10, Tag, Shuffle,
+    MessageSquare, ListChecks, Trash2 as IconTrash, Image as ImageIcon, Clock, Variable, Waypoints, HelpCircle, Settings, Plus, RefreshCw, Send, RadioTower, UserCheck, LogOut, Save, Play, Square, Filter as FilterIcon, Layers, Activity, Workflow, Target, Mic, FileText as FileIcon, MapPin, Repeat, Webhook, Sparkles, ArrowLeft, X, AlertTriangle, Bot, FileTerminal, Clock10, Tag, Shuffle,
     MessageCircle as MsgIcon, Phone, Search, MoreVertical, Check, CheckCheck, Paperclip, Smile, Users, TrendingUp, Download, Upload,
     Loader2
 } from 'lucide-react';
@@ -29,7 +29,6 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-// Usando o novo caminho para os tipos
 import {
     FlowData,
     CampaignSelectItem,
@@ -60,13 +59,11 @@ import {
     TagContactNodeData,
     AllNodeDataTypes
 } from '@/types/zapTypes';
-// Usando os novos caminhos para componentes e utils do fluxo
 import NodeContextMenuComponent from '@/components/flow/NodeContextMenu';
 import { IconWithGlow, NEON_COLOR, NEON_GREEN, NEON_RED, baseButtonSelectStyle, baseCardStyle, baseInputInsetStyle, popoverContentStyle, customScrollbarStyle } from '@/components/flow/utils';
 import WhatsAppConnection from '@/components/whatsapp-connection';
 
 
-// --- INTERFACES MOCK (MANTIDAS DO SEU CÓDIGO ORIGINAL PARA A ABA CONVERSAS) ---
 interface WhatsAppMessage {
   id: number;
   contactNumber: string;
@@ -89,8 +86,6 @@ interface Contact {
   isBot?: boolean;
 }
 
-
-// --- INÍCIO DOS COMPONENTES DE NÓ E FUNÇÕES AUXILIARES DO FLOW.TSX (adaptado) ---
 const NodeInput = (props: React.ComponentProps<typeof Input>) => <Input {...props} className={cn(baseInputInsetStyle, "text-[11px] h-7 px-1.5 py-1 rounded", props.className)} />;
 const NodeLabel = (props: React.ComponentProps<typeof Label>) => <Label {...props} className={cn("text-[10px] text-gray-400 mb-0.5 block font-normal", props.className)} style={{ textShadow: `0 0 3px ${NEON_COLOR}30` }}/>;
 const NodeButton = (props: React.ComponentProps<typeof Button>) => <Button variant="outline" {...props} className={cn(baseButtonSelectStyle, `text-[10px] h-6 w-full rounded-sm px-2`, props.className)} style={{ textShadow: `0 0 4px ${NEON_COLOR}` }} />;
@@ -134,17 +129,13 @@ function GoToFlowNode({ id, data }: NodeProps<GoToFlowNodeData>) { const { setNo
 function AssignAgentNode({ id, data }: NodeProps<AssignAgentNodeData>) { const { setNodes } = useReactFlow(); const [department, setDepartment] = useState(data?.department || ''); const [message, setMessage] = useState(data?.message || ''); const update = (field: string, val: any) => setNodes(nds => nds.map(n => n.id === id ? { ...n, data: { ...n.data, [field]: val } } : n)); return ( <Card className={cn(baseCardStyle, NODE_CARD_BASE_CLASSES, "w-56")}> <Handle type="target" position={Position.Top} id="target-top" className={NODE_HANDLE_BASE_CLASSES}/> <CardHeader className={NODE_HEADER_CLASSES}><div className="flex items-center text-xs"><IconWithGlow icon={UserCheck} className="mr-1.5 h-3.5 w-3.5"/> Atribuir a Agente</div></CardHeader> <CardContent className={NODE_CONTENT_CLASSES}> <NodeLabel>Departamento (Opcional)</NodeLabel> <NodeInput value={department} onChange={e => {setDepartment(e.target.value); update('department', e.target.value)}} placeholder="Ex: Vendas, Suporte"/> <NodeLabel className="mt-1">Mensagem para Agente (Opcional)</NodeLabel> <NodeTextarea value={message} onChange={e => {setMessage(e.target.value); update('message', e.target.value)}} placeholder="Contexto para o agente..."/> </CardContent> </Card> );}
 function EndFlowNode({ id, data }: NodeProps<EndFlowNodeData>) { const { setNodes } = useReactFlow(); const [reason, setReason] = useState(data?.reason || ''); const update = (field: string, val: any) => setNodes(nds => nds.map(n => n.id === id ? { ...n, data: { ...n.data, [field]: val } } : n)); return ( <Card className={cn(baseCardStyle, NODE_CARD_BASE_CLASSES, "w-48 !border-red-500/50")}> <Handle type="target" position={Position.Top} id="target-top" className={NODE_HANDLE_BASE_CLASSES}/> <CardHeader className={cn(NODE_HEADER_CLASSES, "!text-red-400")}><div className="flex items-center text-xs"><IconWithGlow icon={LogOut} className="mr-1.5 h-3.5 w-3.5" color={NEON_RED}/> Encerrar Fluxo</div></CardHeader> <CardContent className={NODE_CONTENT_CLASSES}> <NodeLabel>Motivo do Encerramento (Opcional)</NodeLabel> <NodeInput value={reason} onChange={e => {setReason(e.target.value); update('reason', e.target.value)}} placeholder="Ex: Cliente satisfeito"/> </CardContent> </Card> );}
 const globalNodeOrigin: NodeOrigin = [0.5, 0.5];
-// --- FIM DOS COMPONENTES DE NÓ ---
 
-
-// --- INÍCIO DO EDITOR DE FLUXO INTERNO (ADAPTADO DE FLOW.TSX) ---
-// Corrigido o nome da interface aqui
 interface FlowEditorInnerProps {
   activeFlowId?: string | null;
   onFlowSelect?: (flowId: string) => void;
 }
 
-function FlowEditorInner({ activeFlowId, onFlowSelect }: FlowEditorInnerProps) { // Corrigido aqui
+function FlowEditorInner({ activeFlowId }: FlowEditorInnerProps) { // Removido onFlowSelect não utilizado
     const [nodes, setNodes, onNodesChange] = useNodesState<AllNodeDataTypes>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
     const reactFlowInstance = useReactFlow<AllNodeDataTypes, any>();
@@ -198,9 +189,11 @@ function FlowEditorInner({ activeFlowId, onFlowSelect }: FlowEditorInnerProps) {
                       return;
                   }
                   const flowDetails: FlowData = await response.json();
-                  setSelectedFlow(flowDetails); setFlowNameInput(flowDetails.name); setSelectedCampaignIdForFlow(flowDetails.campaign_id || null);
+                  setSelectedFlow(flowDetails); setFlowNameInput(flowDetails.name); setSelectedCampaignIdForFlow(String(flowDetails.campaign_id || 'none')); // Garante que 'none' seja string
                   const flowElements = flowDetails.elements || { nodes: [], edges: [] };
-                  setNodes(flowElements.nodes.map(n => ({ ...n, dragHandle: '.node-header' }))); setEdges(flowElements.edges);
+                  // Adiciona dragHandle a nós carregados
+                  setNodes(flowElements.nodes.map(n => ({ ...n, dragHandle: '.node-header' }))); 
+                  setEdges(flowElements.edges);
                   setTimeout(() => reactFlowInstance.fitView({ duration: 300, padding: 0.2 }), 100);
               } catch (error: any) {
                   toast({ title: "Erro Detalhes Fluxo", description: error.message, variant: "destructive" });
@@ -216,19 +209,50 @@ function FlowEditorInner({ activeFlowId, onFlowSelect }: FlowEditorInnerProps) {
     useEffect(() => { if (authStore.isAuthenticated) fetchCampaigns(); }, [fetchCampaigns, authStore.isAuthenticated]);
 
     const saveFlow = useCallback(async () => {
-      if (!selectedFlow || !flowNameInput.trim() || !reactFlowInstance || !authStore.isAuthenticated) return;
+      if (!selectedFlow || !flowNameInput.trim() || !reactFlowInstance || !authStore.isAuthenticated) {
+        console.warn('[Client saveFlow] Condições para salvar não atendidas:', {selectedFlow, flowNameInput, reactFlowInstance, isAuthenticated: authStore.isAuthenticated});
+        toast({ title: "Atenção", description: "Nome do fluxo é obrigatório e um fluxo deve estar selecionado.", variant: "default" });
+        return;
+      }
       setIsSaving(true);
       try {
           const currentNodes = reactFlowInstance.getNodes().map(({ dragHandle, ...node }) => node);
           const currentEdges = reactFlowInstance.getEdges();
-          const flowToSave = { name: flowNameInput.trim(), campaign_id: selectedCampaignIdForFlow || null, status: selectedFlow.status || 'draft', elements: { nodes: currentNodes, edges: currentEdges } };
+
+          console.log('[DEBUG Client saveFlow] reactFlowInstance:', reactFlowInstance);
+          console.log('[DEBUG Client saveFlow] Nós atuais do editor (currentNodes):', JSON.stringify(currentNodes, null, 2));
+          console.log('[DEBUG Client saveFlow] Arestas atuais do editor (currentEdges):', JSON.stringify(currentEdges, null, 2));
+          
+          const campaignIdToSend = selectedCampaignIdForFlow === 'none' ? null : selectedCampaignIdForFlow;
+
+          const flowToSave = { 
+              name: flowNameInput.trim(), 
+              campaign_id: campaignIdToSend ? Number(campaignIdToSend) : null, 
+              status: selectedFlow.status || 'draft', 
+              elements: { nodes: currentNodes, edges: currentEdges } 
+          };
+          
+          console.log('[DEBUG Client saveFlow] Objeto flowToSave sendo enviado para API:', JSON.stringify(flowToSave, null, 2));
+
           const response = await apiRequest('PUT', `/api/flows?id=${selectedFlow.id}`, flowToSave);
-          if (!response.ok) { const err = await response.json(); throw new Error(err.message || 'Falha ao salvar fluxo'); }
+          if (!response.ok) { 
+            const errText = await response.text();
+            console.error("Erro ao salvar fluxo (texto):", errText);
+            try {
+              const errJson = JSON.parse(errText);
+              throw new Error(errJson.message || errJson.error || 'Falha ao salvar fluxo (JSON)');
+            } catch {
+              throw new Error(errText || `Falha ao salvar fluxo (status ${response.status})`);
+            }
+          }
           const updatedFlow: FlowData = await response.json();
-          toast({ title: "Fluxo Salvo!" }); setSelectedFlow(updatedFlow); 
+          toast({ title: "Fluxo Salvo!" }); 
+          setSelectedFlow(updatedFlow); 
           queryClientInternal.invalidateQueries({ queryKey: ['flows'] }); 
           queryClientInternal.invalidateQueries({ queryKey: ['flowDetails', updatedFlow.id] });
-      } catch (error: any) { toast({ title: "Erro ao Salvar", description: error.message, variant: "destructive" });
+      } catch (error: any) { 
+        console.error("Erro detalhado em saveFlow:", error);
+        toast({ title: "Erro ao Salvar", description: error.message || "Ocorreu um erro desconhecido.", variant: "destructive" });
       } finally { setIsSaving(false); }
     }, [selectedFlow, flowNameInput, selectedCampaignIdForFlow, reactFlowInstance, toast, authStore.isAuthenticated, queryClientInternal]);
     
@@ -333,7 +357,11 @@ function FlowEditorInner({ activeFlowId, onFlowSelect }: FlowEditorInnerProps) {
                     <div className="flex items-center gap-1.5 flex-grow">
                         {selectedFlow && !isLoadingFlowDetails && (
                             <>
-                                <Select value={selectedCampaignIdForFlow || 'none'} onValueChange={(v) => setSelectedCampaignIdForFlow(v === 'none' ? null : v)} disabled={isLoadingEditor}>
+                                <Select 
+                                    value={selectedCampaignIdForFlow || 'none'} 
+                                    onValueChange={(v) => setSelectedCampaignIdForFlow(v === 'none' ? null : v)} 
+                                    disabled={isLoadingEditor}
+                                >
                                     <SelectTrigger className={cn(baseButtonSelectStyle, "w-[160px] h-8 px-2 text-xs rounded")}>
                                         <Layers className='h-3 w-3 mr-1.5 text-gray-400' style={{ filter: `drop-shadow(0 0 3px ${NEON_COLOR}50)` }}/>
                                         <SelectValue placeholder="Vincular Campanha..." />
@@ -343,7 +371,13 @@ function FlowEditorInner({ activeFlowId, onFlowSelect }: FlowEditorInnerProps) {
                                         {campaignList.map(c => (<SelectItem key={c.id} value={c.id.toString()} className="text-xs hover:!bg-[rgba(30,144,255,0.2)] focus:!bg-[rgba(30,144,255,0.2)]">{c.name}</SelectItem>))}
                                     </SelectContent>
                                 </Select>
-                                <Input value={flowNameInput} onChange={(e) => setFlowNameInput(e.target.value)} placeholder="Nome do Fluxo" className={cn(baseInputInsetStyle, "h-8 text-xs w-[180px] rounded px-2")} disabled={isLoadingEditor} />
+                                <Input 
+                                    value={flowNameInput} 
+                                    onChange={(e) => setFlowNameInput(e.target.value)} 
+                                    placeholder="Nome do Fluxo" 
+                                    className={cn(baseInputInsetStyle, "h-8 text-xs w-[180px] rounded px-2")} 
+                                    disabled={isLoadingEditor} 
+                                />
                             </>
                         )}
                     </div>
@@ -390,13 +424,11 @@ function FlowEditorInner({ activeFlowId, onFlowSelect }: FlowEditorInnerProps) {
         </div>
     );
 }
-// --- FIM DO EDITOR DE FLUXO INTERNO ---
 
-
-interface WhatsAppPageActualProps {} // Renomeado para evitar conflito com o export default
+interface WhatsAppPageActualProps {}
 
 const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
-  const [activeTab, setActiveTab] = useState('connection'); // Iniciar na aba de conexão
+  const [activeTab, setActiveTab] = useState('connection');
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const auth = useAuthStore();
@@ -407,7 +439,6 @@ const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
   const [activeFlowIdForEditor, setActiveFlowIdForEditor] = useState<string | null>(null);
   const [isInitialFlowLoad, setIsInitialFlowLoad] = useState(true);
 
-  // Mock data e lógica para a aba "Conversas"
   const [selectedContact, setSelectedContact] = useState<string | null>(null);
   const [currentChatMessage, setCurrentChatMessage] = useState('');
   const [searchTermContacts, setSearchTermContacts] = useState('');
@@ -457,12 +488,21 @@ const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
     queryFn: async () => {
       if (!auth.isAuthenticated) return [];
       const response = await apiRequest('GET', '/api/campaigns');
-      if (!response.ok) throw new Error('Falha ao buscar campanhas para filtro');
+      if (!response.ok) {
+        console.error("Falha ao buscar campanhas para filtro, status:", response.status)
+        throw new Error('Falha ao buscar campanhas para filtro');
+      }
       const data: any[] = await response.json();
-      return data.map(c => ({ id: String(c.id), name: c.name }));
+      console.log("[DEBUG Client campaignsForFlowFilter] Campanhas recebidas da API:", data);
+      const mappedData = data.map(c => ({ id: String(c.id), name: c.name }));
+      console.log("[DEBUG Client campaignsForFlowFilter] Campanhas mapeadas:", mappedData);
+      return mappedData;
     },
     enabled: auth.isAuthenticated,
-    onSuccess: (data) => setCampaignListForFilter(data),
+    onSuccess: (data) => {
+        console.log("[DEBUG Client campaignsForFlowFilter] onSuccess, dados para setCampaignListForFilter:", data);
+        setCampaignListForFilter(data)
+    },
     onError: (error: any) => toast({ title: "Erro Campanhas (Filtro)", description: error.message, variant: "destructive" })
   });
 
@@ -514,10 +554,15 @@ const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
     const flowToDelete = flowsList.find(f => String(f.id) === flowId);
     if (!flowToDelete || !window.confirm(`Deletar o fluxo "${flowToDelete.name}"?`)) return;
     deleteFlowMutation.mutate(flowId);
-  }, [flowsList, deleteFlowMutation, activeFlowIdForEditor]); // Adicionado activeFlowIdForEditor como dependência
+  }, [flowsList, deleteFlowMutation, activeFlowIdForEditor]);
+
+  // Log para verificar o estado de campaignListForFilter
+  useEffect(() => {
+    console.log("[DEBUG Client WhatsAppPage] campaignListForFilter atualizado:", campaignListForFilter);
+  }, [campaignListForFilter]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-4 md:p-6"> {/* Adicionado padding geral */}
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">WhatsApp Business</h1>
@@ -630,14 +675,14 @@ const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
                     <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
                         <Select value={filterCampaignIdForList} onValueChange={setFilterCampaignIdForList}>
                             <SelectTrigger className="w-full sm:w-[220px] neu-input text-xs">
-                                <Filter className="w-3 h-3 mr-1.5" />
+                                <FilterIcon className="w-3 h-3 mr-1.5" />
                                 <SelectValue placeholder="Filtrar por Campanha..." />
                             </SelectTrigger>
                             <SelectContent className="neu-card">
                                 <SelectItem value="all">Todas as Campanhas</SelectItem>
                                 <SelectItem value="none">Sem Campanha Associada</SelectItem>
                                 {isLoadingCampaignsForFilter ? <SelectItem value="loading" disabled>Carregando...</SelectItem> :
-                                campaignListForFilter.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                                (Array.isArray(campaignListForFilter) && campaignListForFilter.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>))}
                             </SelectContent>
                         </Select>
                         <Button onClick={createNewFlowForList} className="neu-button w-full sm:w-auto">
@@ -647,7 +692,7 @@ const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
                 </CardHeader>
                 <CardContent>
                     {isLoadingFlowsList ? <div className="text-center py-8"><Loader2 className="w-8 h-8 text-primary mx-auto animate-spin"/> Carregando fluxos...</div> :
-                    flowsListError ? <div className="text-center py-8 text-destructive"><AlertTriangle className="w-8 h-8 mx-auto mb-2"/>Erro ao carregar fluxos.</div> :
+                    flowsListError ? <div className="text-center py-8 text-destructive"><AlertTriangle className="w-8 h-8 mx-auto mb-2"/>Erro ao carregar fluxos. {(flowsListError as Error)?.message}</div> :
                     flowsList.length === 0 ? (
                         <p className="text-muted-foreground text-center py-8">Nenhum fluxo encontrado. Crie um novo para começar.</p>
                     ) : (
@@ -656,18 +701,18 @@ const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
                                 <Card 
                                     key={flow.id} 
                                     className={cn("neu-card hover:shadow-primary/20 cursor-pointer", activeFlowIdForEditor === String(flow.id) && "ring-2 ring-primary shadow-primary/20")}
-                                    onClick={() => setActiveFlowIdForEditor(String(flow.id))}
+                                    onClick={() => { setActiveFlowIdForEditor(String(flow.id)); setActiveTab('flow-builder');}}
                                 >
                                     <CardHeader className="pb-2 pt-3 px-3">
                                         <div className="flex justify-between items-start">
                                             <CardTitle className="text-sm font-semibold leading-tight line-clamp-2">{flow.name}</CardTitle>
                                             <Badge variant={flow.status === 'active' ? 'default' : 'outline'} 
-                                                   className={cn("text-xs px-1.5 py-0.5", flow.status === 'active' ? 'bg-green-500/80 border-green-400/50 text-white' : 'bg-muted')}>
+                                                  className={cn("text-xs px-1.5 py-0.5", flow.status === 'active' ? 'bg-green-500/80 border-green-400/50 text-white' : 'bg-muted')}>
                                                 {flow.status === 'active' ? 'Ativo' : flow.status === 'inactive' ? 'Inativo' : 'Rascunho'}
                                             </Badge>
                                         </div>
                                         <CardDescription className="text-xs line-clamp-1 h-4 mt-0.5">
-                                            {flow.campaign_id ? `Campanha: ${campaignListForFilter.find(c => c.id === flow.campaign_id)?.name || 'N/A'}` : 'Sem campanha'}
+                                            {flow.campaign_id ? `Campanha: ${campaignListForFilter.find(c => c.id === String(flow.campaign_id))?.name || 'N/A'}` : 'Sem campanha'}
                                         </CardDescription>
                                     </CardHeader>
                                     <CardContent className="text-xs text-muted-foreground pt-1 pb-2 px-3">
@@ -690,10 +735,7 @@ const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
             <TooltipProvider>
               <FlowEditorInner 
                 activeFlowId={activeFlowIdForEditor}
-                onFlowSelect={(flowId) => {
-                  setActiveFlowIdForEditor(flowId);
-                  setActiveTab('flow-builder'); 
-                }}
+                // onFlowSelect não é mais necessário aqui se a seleção é feita na aba 'flows'
               />
             </TooltipProvider>
           </ReactFlowProvider>
