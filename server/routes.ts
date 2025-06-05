@@ -140,7 +140,7 @@ function handleError(err: any, req: Request, res: Response, next: NextFunction) 
     res.status(statusCode).json({ error: message });
 }
 
-let genAI: GoogleGenerativeAI | null = null;
+let genAI: GoogleGenerativeAI | null = null; 
 if (GEMINI_API_KEY) { 
     try { 
         genAI = new GoogleGenerativeAI(GEMINI_API_KEY); 
