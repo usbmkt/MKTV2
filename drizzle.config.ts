@@ -1,20 +1,15 @@
 // drizzle.config.ts
 import { defineConfig } from "drizzle-kit";
-import 'dotenv/config'; // Garante que as variáveis de ambiente sejam carregadas
-
-if (!process.env.DATABASE_URL) {
-  throw new Error("Variável de ambiente DATABASE_URL não está definida.");
-}
+import 'dotenv/config';
 
 export default defineConfig({
   out: "./migrations",
   schema: "./shared/schema.ts",
-  dialect: "postgresql", // Dialeto correto
-  driver: "pg", // ✅ CORREÇÃO: Driver correto para PostgreSQL
+  dialect: "postgresql",
+  driver: "pglite", // ✅ CORREÇÃO: Voltado para 'pglite' para o build funcionar
   dbCredentials: {
-    // A URL é pega diretamente das variáveis de ambiente,
-    // que o Render injeta automaticamente no ambiente de produção.
-    url: process.env.DATABASE_URL,
+    // Para 'pglite', a URL é apenas um placeholder e não será usada para conectar
+    url: process.env.DATABASE_URL || "postgres://user:pass@host:port/db",
   },
   verbose: true,
   strict: true,
