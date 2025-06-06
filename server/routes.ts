@@ -2,15 +2,15 @@
 import type { Express, Request, Response, NextFunction, ErrorRequestHandler } from "express";
 import express from "express";
 import { createServer, type Server as HttpServer } from "http";
-import { storage } from "./storage.js"; 
+import { storage } from "./storage.js";
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-import * as schemaShared from "../shared/schema.js"; 
+import * as schemaShared from "../shared/schema.js";
 import { ZodError } from "zod";
-import { JWT_SECRET } from './config.js'; 
+import { JWT_SECRET } from './config.js';
 import { WhatsappConnectionService } from './services/whatsapp-connection.service.js';
 import { handleMCPConversation } from "./mcp_handler.js";
 import { logger } from "./logger.js";
@@ -25,53 +25,53 @@ const MCP_ATTACHMENTS_DIR = path.resolve(UPLOADS_ROOT_DIR, 'mcp-attachments');
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
 
-const creativesUpload = multer({ 
-    storage: multer.diskStorage({ 
-        destination: (req, file, cb) => cb(null, CREATIVES_ASSETS_DIR), 
-        filename: (req, file, cb) => { 
-            const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9); 
-            cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname)); 
-        } 
-    }), 
-    limits: { fileSize: 15 * 1024 * 1024 } 
+const creativesUpload = multer({
+    storage: multer.diskStorage({
+        destination: (req, file, cb) => cb(null, CREATIVES_ASSETS_DIR),
+        filename: (req, file, cb) => {
+            const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+            cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+        }
+    }),
+    limits: { fileSize: 15 * 1024 * 1024 }
 });
 
-const lpAssetUpload = multer({ 
-    storage: multer.diskStorage({ 
-        destination: (req, file, cb) => cb(null, LP_ASSETS_DIR), 
-        filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname.replace(/\s+/g, '_').toLowerCase()) 
-    }), 
-    limits: { fileSize: 5 * 1024 * 1024 } 
+const lpAssetUpload = multer({
+    storage: multer.diskStorage({
+        destination: (req, file, cb) => cb(null, LP_ASSETS_DIR),
+        filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname.replace(/\s+/g, '_').toLowerCase())
+    }),
+    limits: { fileSize: 5 * 1024 * 1024 }
 });
 
-const mcpAttachmentUpload = multer({ 
-    storage: multer.diskStorage({ 
-        destination: (req, file, cb) => cb(null, MCP_ATTACHMENTS_DIR), 
-        filename: (req, file, cb) => { 
-            const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9); 
-            cb(null, 'mcp-attachment-' + uniqueSuffix + path.extname(file.originalname)); 
-        } 
-    }), 
-    limits: { fileSize: 5 * 1024 * 1024 } 
+const mcpAttachmentUpload = multer({
+    storage: multer.diskStorage({
+        destination: (req, file, cb) => cb(null, MCP_ATTACHMENTS_DIR),
+        filename: (req, file, cb) => {
+            const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+            cb(null, 'mcp-attachment-' + uniqueSuffix + path.extname(file.originalname));
+        }
+    }),
+    limits: { fileSize: 5 * 1024 * 1024 }
 });
 
-export interface AuthenticatedRequest extends Request { 
-    user?: schemaShared.User; 
+export interface AuthenticatedRequest extends Request {
+    user?: schemaShared.User;
 }
 
 const authenticateToken = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
-        if (process.env.FORCE_AUTH_BYPASS === 'true') { 
+        if (process.env.FORCE_AUTH_BYPASS === 'true') {
             const user = await storage.getUser(1);
-            req.user = user || { 
-                id: 1, 
-                username: 'admin_bypass', 
-                email: 'admin@usbmkt.com', 
-                password: '', 
-                createdAt: new Date(), 
-                updatedAt: new Date() 
-            }; 
-            return next(); 
+            req.user = user || {
+                id: 1,
+                username: 'admin_bypass',
+                email: 'admin@usbmkt.com',
+                password: '',
+                createdAt: new Date(),
+                updatedAt: new Date()
+            };
+            return next();
         }
         
         const authHeader = req.headers['authorization'];
@@ -134,13 +134,13 @@ export function registerRoutes(app: Express): HttpServer {
             const user = await storage.createUser(data);
             const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
             
-            res.status(201).json({ 
-                user: { 
-                    id: user.id, 
-                    username: user.username, 
-                    email: user.email 
-                }, 
-                token 
+            res.status(201).json({
+                user: {
+                    id: user.id,
+                    username: user.username,
+                    email: user.email
+                },
+                token
             });
         } catch (e) {
             next(e);
@@ -167,13 +167,13 @@ export function registerRoutes(app: Express): HttpServer {
             
             const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
             
-            res.json({ 
-                user: { 
-                    id: user.id, 
-                    username: user.username, 
-                    email: user.email 
-                }, 
-                token 
+            res.json({
+                user: {
+                    id: user.id,
+                    username: user.username,
+                    email: user.email
+                },
+                token
             });
         } catch (e) {
             next(e);
@@ -387,10 +387,10 @@ export function registerRoutes(app: Express): HttpServer {
             }
             const { campaignId, phase, purpose, search } = req.query;
             const copies = await storage.getCopies(
-                req.user.id, 
-                campaignId ? Number(campaignId) : undefined, 
-                phase as string, 
-                purpose as string, 
+                req.user.id,
+                campaignId ? Number(campaignId) : undefined,
+                phase as string,
+                purpose as string,
                 search as string
             );
             res.json(copies);
@@ -743,7 +743,7 @@ export function registerRoutes(app: Express): HttpServer {
         }
     });
     
-apiRouter.post('/whatsapp/messages', async (req: AuthenticatedRequest, res, next) => {
+    apiRouter.post('/whatsapp/messages', async (req: AuthenticatedRequest, res, next) => {
         try {
             if (!req.user) {
                 return res.status(401).json({ error: 'Usuário não autenticado.' });
@@ -753,8 +753,8 @@ apiRouter.post('/whatsapp/messages', async (req: AuthenticatedRequest, res, next
                 .parse(req.body);
             
             const service = getWhatsappServiceForUser(req.user.id);
-            const fullJid = contactNumber.endsWith('@s.whatsapp.net') 
-                ? contactNumber 
+            const fullJid = contactNumber.endsWith('@s.whatsapp.net')
+                ? contactNumber
                 : `${contactNumber}@s.whatsapp.net`;
             
             await service.sendMessage(fullJid, { text: message });
@@ -796,9 +796,9 @@ apiRouter.post('/whatsapp/messages', async (req: AuthenticatedRequest, res, next
                 return res.status(401).json({ error: 'Usuário não autenticado.' });
             }
             const data = schemaShared.insertWhatsappMessageTemplateSchema.parse(req.body);
-            const newTemplate = await storage.createWhatsappTemplate({ 
-                ...data, 
-                userId: req.user.id 
+            const newTemplate = await storage.createWhatsappTemplate({
+                ...data,
+                userId: req.user.id
             });
             res.status(201).json(newTemplate);
         } catch (e) {
@@ -852,14 +852,14 @@ apiRouter.post('/whatsapp/messages', async (req: AuthenticatedRequest, res, next
                 return res.status(401).json({ error: 'Usuário não autenticado.' });
             }
             const { message, sessionId } = req.body;
-            const attachmentUrl = req.file ? 
-                `/${UPLOADS_ROOT_DIR}/mcp-attachments/${req.file.filename}` : 
+            const attachmentUrl = req.file ?
+                `/${UPLOADS_ROOT_DIR}/mcp-attachments/${req.file.filename}` :
                 undefined;
             
             const payload = await handleMCPConversation(
-                req.user.id, 
-                message, 
-                sessionId ? parseInt(sessionId) : undefined, 
+                req.user.id,
+                message,
+                sessionId ? parseInt(sessionId) : undefined,
                 attachmentUrl
             );
             res.json(payload);
@@ -947,4 +947,6 @@ apiRouter.post('/whatsapp/messages', async (req: AuthenticatedRequest, res, next
         } catch (e) {
             next(e);
         }
-    }});
+    });
+    
+// FIM DO CÓDIGO - As linhas de log abaixo desta foram removidas.
