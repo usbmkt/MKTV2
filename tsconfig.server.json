@@ -9,8 +9,6 @@
     "sourceMap": true,
     "declaration": false,
     "isolatedModules": false,
-
-
     "allowImportingTsExtensions": false,
     "types": ["node"]
   },
