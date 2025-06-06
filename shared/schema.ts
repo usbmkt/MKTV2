@@ -1,4 +1,3 @@
-// shared/schema.ts
 import { pgTable, text, serial, integer, boolean, timestamp, decimal, jsonb, varchar, pgEnum, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
