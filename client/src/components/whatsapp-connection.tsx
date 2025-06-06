@@ -6,9 +6,8 @@ import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Smartphone, QrCode, CheckCircle, AlertCircle, RefreshCw, Loader2, Power, PowerOff } from 'lucide-react';
+import { Smartphone, QrCode, CheckCircle, AlertCircle, Power, PowerOff, Loader2 } from 'lucide-react';
 
-// Tipagem para o status vindo do backend
 interface ConnectionStatus {
   status: 'disconnected' | 'connecting' | 'connected' | 'qr_code_needed' | 'auth_failure' | 'error' | 'disconnected_logged_out';
   qrCode: string | null;
@@ -16,11 +15,16 @@ interface ConnectionStatus {
   lastError?: string;
 }
 
-const WhatsAppConnection: React.FC = () => {
+interface WhatsAppConnectionProps {
+  onConnectionChange?: (status: ConnectionStatus) => void;
+}
+
+// ALTERAÇÃO: Mudança para exportação nomeada (named export)
+export const WhatsAppConnection: React.FC<WhatsAppConnectionProps> = ({ onConnectionChange }) => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: status, isLoading, isError, error, refetch } = useQuery<ConnectionStatus>({
+  const { data: status, isLoading: isLoadingStatus } = useQuery<ConnectionStatus>({
     queryKey: ['whatsappConnectionStatus'],
     queryFn: async () => {
       const response = await apiRequest('GET', '/api/whatsapp/status');
@@ -30,15 +34,16 @@ const WhatsAppConnection: React.FC = () => {
       }
       return response.json();
     },
-    refetchInterval: (data) => {
-      // Se estiver esperando QR Code ou conectando, busca mais rápido.
-      if (data?.status === 'qr_code_needed' || data?.status === 'connecting') {
-        return 5000; // a cada 5 segundos
-      }
-      return 30000; // a cada 30 segundos
-    },
+    refetchInterval: (data) => (data?.status === 'qr_code_needed' || data?.status === 'connecting') ? 5000 : 30000,
     refetchOnWindowFocus: true,
   });
+  
+  useEffect(() => {
+    if(status) {
+        onConnectionChange?.(status);
+    }
+  }, [status, onConnectionChange]);
+
 
   const connectMutation = useMutation({
     mutationFn: () => apiRequest('POST', '/api/whatsapp/connect'),
@@ -64,7 +69,7 @@ const WhatsAppConnection: React.FC = () => {
 
   const getStatusInfo = () => {
     switch (status?.status) {
-      case 'connected': return { icon: <CheckCircle className="w-5 h-5 text-green-500" />, text: `Conectado como ${status.connectedPhoneNumber}`, color: "text-green-500" };
+      case 'connected': return { icon: <CheckCircle className="w-5 h-5 text-green-500" />, text: `Conectado: ${status.connectedPhoneNumber}`, color: "text-green-500" };
       case 'connecting': return { icon: <Loader2 className="w-5 h-5 animate-spin text-yellow-500" />, text: 'Conectando...', color: "text-yellow-500" };
       case 'qr_code_needed': return { icon: <QrCode className="w-5 h-5 text-blue-500" />, text: 'Aguardando leitura do QR Code', color: "text-blue-500" };
       case 'disconnected_logged_out': return { icon: <AlertCircle className="w-5 h-5 text-red-500" />, text: 'Desconectado. Faça a leitura novamente.', color: "text-red-500" };
@@ -74,43 +79,38 @@ const WhatsAppConnection: React.FC = () => {
   };
 
   const statusInfo = getStatusInfo();
+  const isLoading = isLoadingStatus || connectMutation.isPending || disconnectMutation.isPending;
 
   return (
     <Card>
       <CardHeader>
         <div className="flex justify-between items-center">
-          <div>
-            <CardTitle>Conexão com WhatsApp</CardTitle>
-            <CardDescription>Gerencie a conexão do seu número de WhatsApp com a plataforma.</CardDescription>
-          </div>
-          <div className="flex items-center space-x-2">
+            <div>
+                <CardTitle>Conexão com WhatsApp</CardTitle>
+                <CardDescription>Gerencie a conexão do seu número com a plataforma.</CardDescription>
+            </div>
             <div className={`flex items-center gap-2 p-2 rounded-md bg-muted ${statusInfo.color}`}>
               {statusInfo.icon}
               <span className="font-semibold text-sm">{statusInfo.text}</span>
             </div>
-          </div>
         </div>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent>
         {status?.status === 'connected' ? (
           <div className="text-center p-8">
             <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
-            <p>A plataforma está conectada ao número <strong>{status.connectedPhoneNumber}</strong>.</p>
-            <Button className="mt-4" variant="destructive" onClick={() => disconnectMutation.mutate()} disabled={disconnectMutation.isPending}>
-              {disconnectMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <PowerOff className="w-4 h-4 mr-2" />}
+            <Button variant="destructive" onClick={() => disconnectMutation.mutate()} disabled={isLoading}>
+              {isLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <PowerOff className="w-4 h-4 mr-2" />}
               Desconectar
             </Button>
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="flex flex-col items-center justify-center p-4 border rounded-lg bg-card-foreground/5">
+            <div className="flex flex-col items-center justify-center p-4 border rounded-lg bg-card-foreground/5 min-h-[280px]">
               {isLoading && <Loader2 className="w-16 h-16 animate-spin text-primary" />}
-              {isError && <AlertTriangle className="w-16 h-16 text-destructive" />}
               {status?.status === 'qr_code_needed' && status.qrCode && (
                 <img src={status.qrCode} alt="WhatsApp QR Code" className="w-64 h-64 rounded-lg shadow-lg" />
               )}
-               {status?.status === 'connecting' && <p>Aguardando conexão...</p>}
-               {status?.status === 'disconnected_logged_out' && <p>Sessão expirada. Conecte novamente.</p>}
             </div>
             <div>
               <Alert>
@@ -118,19 +118,14 @@ const WhatsAppConnection: React.FC = () => {
                 <AlertTitle>Como conectar</AlertTitle>
                 <AlertDescription>
                   <ol className="list-decimal list-inside space-y-1 mt-2">
-                    <li>Clique no botão "Conectar / Gerar QR Code".</li>
-                    <li>Abra o WhatsApp Business no seu celular.</li>
-                    <li>Vá em 'Configurações' &gt; 'Dispositivos conectados'.</li>
+                    <li>Clique em "Conectar / Gerar QR Code".</li>
+                    <li>No seu celular, vá em WhatsApp &gt; Dispositivos conectados.</li>
                     <li>Toque em "Conectar um dispositivo" e escaneie o código.</li>
                   </ol>
                 </AlertDescription>
               </Alert>
-              <Button 
-                className="w-full mt-4" 
-                onClick={() => connectMutation.mutate()} 
-                disabled={connectMutation.isPending || isLoading}
-              >
-                {connectMutation.isPending || isLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Power className="w-4 h-4 mr-2" />}
+              <Button className="w-full mt-4" onClick={() => connectMutation.mutate()} disabled={isLoading}>
+                {isLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Power className="w-4 h-4 mr-2" />}
                 Conectar / Gerar QR Code
               </Button>
             </div>
