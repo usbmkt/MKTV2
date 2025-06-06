@@ -17,7 +17,6 @@ const __dirname = path.dirname(__filename);
 const app = express();
 app.use(cors({ origin: '*' }));
 
-// --- Inicialização do Servidor ---
 async function startServer() {
   const httpServer = registerRoutes(app);
 
