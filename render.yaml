@@ -1,11 +1,27 @@
+# render.yaml
 services:
   - type: web
     name: mktv5-render
     env: node
     plan: free
     region: oregon
-    buildCommand: npm install && npm run build
-    startCommand: npm start
+    healthCheckPath: /api/health
+    # ✅ INÍCIO DA CORREÇÃO: Adiciona as dependências de sistema para o QR Code funcionar
+    build:
+      apt:
+        packages:
+          - libnss3
+          - libatk-bridge2.0-0
+          - libcups2
+          - libgtk-3-0
+          - libxkbcommon0
+          - libxss1
+          - libasound2
+          - libgbm1
+          - chromium-browser
+    # FIM DA CORREÇÃO
+    buildCommand: "npm install && npm run build && npm run db:generate"
+    startCommand: "npm run migrate:deploy && npm start"
     envVars:
       - key: NODE_ENV
         value: production
@@ -25,8 +41,9 @@ services:
         fromDatabase:
           name: mktv5-render-db
           property: connectionString
-    healthCheckPath: /api/health
-    
+      - key: PUPPETEER_EXECUTABLE_PATH # ✅ Aponta para o Chromium instalado
+        value: /usr/bin/chromium-browser
+
 databases:
   - name: mktv5-render-db
     plan: free
