@@ -1,0 +1,22 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "noEmit": false,
+    "composite": true,
+    "sourceMap": true,
+    "declaration": true,
+    "isolatedModules": false
+  },
+  "include": [
+    "server/**/*.ts",
+    "shared/**/*.ts",
+    "migrate-deploy.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "client"
+  ]
+}
