@@ -1,5 +1,5 @@
 // server/services/external-data.service.ts
-import { logger } from '../logger'; // Supondo que você tenha um logger centralizado
+import { logger } from '../logger.js';
 
 interface ApiRequestOptions {
   method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
@@ -26,7 +26,6 @@ class ExternalDataService {
           headers['Content-Type'] = 'application/json';
           bodyPayload = JSON.stringify(options.body);
         } else {
-          // Se for texto, assume que o Content-Type já foi definido nos headers
           bodyPayload = options.body;
         }
       }
@@ -64,7 +63,6 @@ class ExternalDataService {
 
     } catch (error: any) {
       logger.error({ url, error: error.message }, 'Erro crítico ao executar chamada de API externa');
-      // Re-throw para que o FlowEngine possa tratar a falha
       throw error;
     }
   }
