@@ -102,14 +102,16 @@ export class WhatsappConnectionService {
           else if (connection === 'connecting') this.updateGlobalStatus({ status: 'connecting' });
         });
 
-        // ✅ NOVO HANDLER DE MENSAGENS
         this.sock.ev.on('messages.upsert', async (update) => {
             for (const m of update.messages) {
                 if (!m.key || m.key.fromMe || !m.key.remoteJid || isJidGroup(m.key.remoteJid) || !m.message) {
                     continue;
                 }
 
-                const messageText = m.message.conversation || m.message.extendedTextMessage?.text || '';
+                const messageText = m.message.conversation || 
+                                    m.message.extendedTextMessage?.text || 
+                                    m.message.buttonsResponseMessage?.selectedDisplayText ||
+                                    '';
                 
                 if (messageText) {
                     logger.info({ userId: this.userId, from: m.key.remoteJid, text: messageText }, 'Mensagem recebida, encaminhando para o FlowEngine.');
