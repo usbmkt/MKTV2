@@ -1,67 +1,88 @@
 // server/index.ts
-import dotenv from "dotenv";
-dotenv.config(); 
+import express from 'express';
+import cors from 'cors';
+import { logger } from './logger.js';
+import { PORT } from './config.js';
+import { registerRoutes } from './routes.js';
+import { Server as SocketIOServer } from 'socket.io';
+import jwt from 'jsonwebtoken';
+import { JWT_SECRET } from './config.js';
+import { storage } from './storage.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-import express, { type Request, Response, NextFunction } from "express";
-import { RouterSetup } from "./routes"; 
-import { setupVite, serveStatic, log as serverLog } from "./vite"; 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
-app.use(express.json()); 
-app.use(express.urlencoded({ extended: false })); 
 
-app.use((req, res, next) => {
-  const start = Date.now();
-  const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
-  const originalResJson = res.json;
-  res.json = function (bodyJson: any, ...args: any[]) { 
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(this, [bodyJson, ...args as any]);
-  };
-  res.on("finish", () => {
-    const duration = Date.now() - start;
-    if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse && Object.keys(capturedJsonResponse).length > 0) { 
-        const summary = JSON.stringify(capturedJsonResponse).substring(0, 100);
-        logLine += ` :: ${summary}${summary.length === 100 ? '...' : ''}`;
-      }
-      if (logLine.length > 180) { logLine = logLine.slice(0, 179) + "…"; }
-      serverLog(logLine, 'api-server');
+app.use(cors({ origin: '*' }));
+app.use(express.json());
+
+// --- Inicialização do Servidor ---
+async function startServer() {
+  const httpServer = registerRoutes(app);
+
+  // Inicializa o Socket.IO e o anexa ao servidor HTTP
+  const io = new SocketIOServer(httpServer, {
+    cors: {
+      origin: "*", // Permite todas as origens
+      methods: ["GET", "POST"]
     }
   });
-  next();
-});
 
-(async () => {
-  try {
-    const server = await RouterSetup.registerRoutes(app); 
-    app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-      console.error("[GLOBAL_ERROR_HANDLER] Erro capturado:", err.message, err.stack ? `\nStack: ${err.stack}` : '');
-      const status = err.status || err.statusCode || 500;
-      const message = err.message || "Erro interno do servidor.";
-      if (!res.headersSent) { 
-        res.status(status).json({ error: message });
-      } else {
-        serverLog(`[GLOBAL_ERROR_HANDLER] Headers já enviados para ${status} ${message}`, 'error');
-      }
-    });
-
-    serverLog(`Environment: NODE_ENV=${process.env.NODE_ENV}, app.get("env")=${app.get("env")}`, 'server-init');
-    if (process.env.NODE_ENV === "development") {
-      serverLog(`[ViteDev] Configurando Vite em modo de desenvolvimento...`, 'server-init');
-      await setupVite(app, server); 
-    } else {
-      serverLog(`[StaticServing] Configurando para servir arquivos estáticos em produção...`, 'server-init');
-      serveStatic(app); 
+  // Middleware de autenticação para Socket.IO
+  io.use(async (socket, next) => {
+    const token = socket.handshake.auth.token;
+    if (!token) {
+      return next(new Error('Authentication error: Token not provided.'));
     }
-    const port = process.env.PORT || 5000;
-    server.listen({ port, host: "0.0.0.0", }, () => {
-      serverLog(`Servidor HTTP iniciado e escutando na porta ${port} em modo ${process.env.NODE_ENV || 'development'}`, 'server-init');
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET) as { userId: number };
+      const user = await storage.getUser(decoded.userId);
+      if (!user) {
+        return next(new Error('Authentication error: Invalid user.'));
+      }
+      (socket as any).user = user; // Anexa o usuário ao objeto do socket
+      next();
+    } catch (err) {
+      next(new Error('Authentication error: Invalid token.'));
+    }
+  });
+
+  // Lógica de conexão do Socket.IO
+  io.on('connection', (socket) => {
+    const user = (socket as any).user;
+    logger.info({ userId: user.id, socketId: socket.id }, 'Cliente conectado via WebSocket');
+
+    // Coloca o usuário em uma "sala" com base no seu ID
+    // Isso permite enviar mensagens apenas para aquele usuário
+    socket.join(`user_${user.id}`);
+
+    socket.on('disconnect', () => {
+      logger.info({ userId: user.id, socketId: socket.id }, 'Cliente desconectado do WebSocket');
     });
-  } catch (error) {
-    console.error("Falha crítica ao iniciar o servidor:", error);
-    process.exit(1);
-  }
-})();
+  });
+
+  // Servir arquivos estáticos do cliente (build de produção)
+  const clientBuildPath = path.join(__dirname, '../../client/dist');
+  app.use(express.static(clientBuildPath));
+  
+  // Rota "catch-all" para servir o index.html do React para qualquer rota não-API
+  app.get('*', (req, res) => {
+    if (!req.path.startsWith('/api/') && !req.path.startsWith('/uploads/')) {
+      res.sendFile(path.join(clientBuildPath, 'index.html'));
+    } else {
+        res.status(404).send('Not Found');
+    }
+  });
+
+  httpServer.listen(PORT, () => {
+    logger.info(`🚀 Servidor rodando na porta ${PORT}`);
+  });
+
+  // Exporta a instância do `io` para ser usada em outros módulos
+  return { app, io };
+}
+
+export const { io } = await startServer();
