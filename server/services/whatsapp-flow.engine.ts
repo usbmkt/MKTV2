@@ -13,10 +13,11 @@ export class WhatsappFlowEngine {
     let userState = await storage.getFlowUserState(userId, contactJid);
     let flow: schema.Flow | undefined;
 
+    // Se não há estado, é a primeira interação. Tenta iniciar um fluxo.
     if (!userState) {
         const triggerFlow = await storage.findTriggerFlow(userId, messageContent);
         if (!triggerFlow || !triggerFlow.elements || triggerFlow.elements.nodes.length === 0) {
-            console.warn(`[FlowEngine] Nenhum fluxo de gatilho ativo encontrado para ${userId}. Ignorando.`);
+            console.warn(`[FlowEngine] Nenhum fluxo de gatilho ativo ou válido encontrado para ${userId}. Ignorando.`);
             return;
         }
         flow = triggerFlow;
@@ -27,8 +28,16 @@ export class WhatsappFlowEngine {
         }
         userState = await storage.createFlowUserState({ userId, contactJid, activeFlowId: flow.id, currentNodeId: firstNode.id, flowVariables: {} });
         console.log(`[FlowEngine] Novo estado criado para ${contactJid}. Iniciando fluxo ${flow.id} no nó ${firstNode.id}`);
+        
+        // Como é uma nova interação, não há input a ser processado, então limpamos o messageContent
+        messageContent = ''; 
     } else {
-        flow = await storage.getFlow(userState.activeFlowId!, userId);
+        if (!userState.activeFlowId) {
+             await storage.deleteFlowUserState(userState.id);
+             console.error(`[FlowEngine] Estado de usuário órfão encontrado para ${contactJid}. Estado limpo.`);
+             return;
+        }
+        flow = await storage.getFlow(userState.activeFlowId, userId);
     }
     
     if (!flow || !userState.currentNodeId) {
@@ -43,7 +52,7 @@ export class WhatsappFlowEngine {
 
     if (currentNode && this.isWaitingNode(currentNode.type) && messageContent) {
         console.log(`[FlowEngine] Processando input "${messageContent}" para o nó de espera ${currentNode.id}`);
-        nextNodeId = await this.processInput(currentNode, flow.elements.edges, messageContent);
+        nextNodeId = await this.processInput(userState, currentNode, flow.elements.edges, messageContent);
     }
 
     // 3. Executa em loop todos os nós de ação sequenciais
@@ -61,33 +70,30 @@ export class WhatsappFlowEngine {
             return; // Pausa a execução e aguarda a próxima mensagem do usuário
         }
         
-        // É um nó de ação, executa e pega o próximo
         console.log(`[FlowEngine] Executando nó de ação ${nodeToExecute.id}`);
         nextNodeId = await this.executeActionNode(userState, nodeToExecute, flow.elements.edges);
     }
 
     // 4. Se o loop terminar, o fluxo chegou ao fim. Limpa o estado.
-    console.log(`[FlowEngine] Fim do fluxo para ${contactJid}.`);
-    await storage.deleteFlowUserState(userState.id);
+    if (!nextNodeId) {
+        console.log(`[FlowEngine] Fim do fluxo para ${contactJid}.`);
+        await storage.deleteFlowUserState(userState.id);
+    }
   }
 
-  // Identifica o nó inicial do fluxo (aquele que não é alvo de nenhuma aresta)
   private findStartNode(flow: schema.Flow): Node | undefined {
     return flow.elements.nodes.find(n => !flow.elements.edges.some(e => e.target === n.id));
   }
 
-  // Encontra um nó pelo ID dentro da definição do fluxo
   private findNodeById(flow: schema.Flow, nodeId: string): Node | undefined {
     return flow.elements.nodes.find(n => n.id === nodeId);
   }
 
-  // Verifica se um tipo de nó é de "espera" (pausa o fluxo)
   private isWaitingNode(type: string | undefined): boolean {
-    return type === 'buttonMessage'; // Futuramente: 'waitInput', 'listMessage', etc.
+    return type === 'buttonMessage' || type === 'waitInput';
   }
 
-  // Processa a mensagem do usuário para um nó de espera
-  private async processInput(node: Node, edges: Edge[], messageContent: string): Promise<string | null> {
+  private async processInput(userState: schema.WhatsappFlowUserState, node: Node, edges: Edge[], messageContent: string): Promise<string | null> {
     switch (node.type) {
         case 'buttonMessage':
             const button = node.data.buttons.find((b: any) => b.text === messageContent);
@@ -96,11 +102,20 @@ export class WhatsappFlowEngine {
                 return edge?.target || null;
             }
             break;
+        
+        case 'waitInput':
+            const variableName = node.data.variableName;
+            if (variableName) {
+                const newVariables = { ...userState.flowVariables, [variableName]: messageContent };
+                await storage.updateFlowUserState(userState.id, { flowVariables: newVariables });
+                console.log(`[FlowEngine] Variável "${variableName}" salva para ${userState.contactJid}.`);
+            }
+            const edge = edges.find(e => e.source === node.id); // 'waitInput' tem apenas uma saída
+            return edge?.target || null;
     }
-    return null; // Retorna nulo se o input não corresponder a nenhuma saída
+    return null;
   }
 
-  // Executa um nó que envia uma mensagem e pausa o fluxo
   private async executeWaitingNode(userState: schema.WhatsappFlowUserState, node: Node): Promise<void> {
     switch (node.type) {
       case 'buttonMessage':
@@ -116,10 +131,15 @@ export class WhatsappFlowEngine {
         };
         await WhatsappConnectionService.sendMessageForUser(userState.userId, userState.contactJid, buttonPayload);
         break;
+      
+      case 'waitInput':
+        if (node.data.message) {
+            await WhatsappConnectionService.sendMessageForUser(userState.userId, userState.contactJid, { text: node.data.message });
+        }
+        break;
     }
   }
 
-  // Executa um nó de ação que não pausa o fluxo e retorna o ID do próximo nó
   private async executeActionNode(userState: schema.WhatsappFlowUserState, node: Node, edges: Edge[]): Promise<string | null> {
     switch (node.type) {
       case 'textMessage':
@@ -128,6 +148,6 @@ export class WhatsappFlowEngine {
         const edge = edges.find(e => e.source === node.id);
         return edge?.target || null;
     }
-    return null; // Se o tipo de ação não for implementado, o fluxo para.
+    return null;
   }
 }
