@@ -1,4 +1,3 @@
-// server/storage.ts
 import { db } from './db';
 import * as schema from '../shared/schema';
 import { eq, count, sum, desc, and, or, gte, isNull, asc, ilike } from 'drizzle-orm';
