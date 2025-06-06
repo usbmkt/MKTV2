@@ -122,15 +122,14 @@ function FlowEditorInner({ activeFlowId, onFlowSelect }: FlowEditorInnerProps) {
     const [isSaving, setIsSaving] = useState(false);
     const [isTogglingStatus, setIsTogglingStatus] = useState(false);
 
-    // ✅ CORREÇÃO: Query para buscar os detalhes do fluxo ativo.
-    const { data: selectedFlow, isLoading: isLoadingFlowDetails, error: flowDetailsError } = useQuery<FlowData>({
+    const { data: selectedFlow, isLoading: isLoadingFlowDetails } = useQuery<FlowData>({
         queryKey: ['flowDetails', activeFlowId],
         queryFn: async () => {
             const response = await apiRequest('GET', `/api/flows?id=${activeFlowId}`);
             if (!response.ok) {
                 if (response.status === 404) {
                     toast({ title: "Aviso", description: `Fluxo ID ${activeFlowId} não encontrado.`, variant: "default" });
-                    onFlowSelect(0); // Um ID inválido para limpar a seleção
+                    onFlowSelect(0);
                     return null;
                 }
                 throw new Error('Falha ao carregar detalhes do fluxo');
@@ -138,10 +137,9 @@ function FlowEditorInner({ activeFlowId, onFlowSelect }: FlowEditorInnerProps) {
             return response.json();
         },
         enabled: !!activeFlowId,
-        staleTime: 1000 * 60, // Cache de 1 minuto
+        staleTime: 1000 * 60,
     });
     
-    // ✅ CORREÇÃO: Efeito separado para ATUALIZAR o editor quando os dados do fluxo (selectedFlow) mudam.
     useEffect(() => {
         if (selectedFlow) {
             setFlowNameInput(selectedFlow.name);
@@ -151,7 +149,6 @@ function FlowEditorInner({ activeFlowId, onFlowSelect }: FlowEditorInnerProps) {
             setEdges(flowElements.edges);
             setTimeout(() => reactFlowInstance.fitView({ duration: 300, padding: 0.2 }), 100);
         } else if (!activeFlowId) {
-            // Limpa o editor se nenhum fluxo estiver ativo
             setFlowNameInput('');
             setSelectedCampaignIdForFlow(null);
             setNodes([]);
@@ -179,8 +176,7 @@ function FlowEditorInner({ activeFlowId, onFlowSelect }: FlowEditorInnerProps) {
           const currentNodes = reactFlowInstance.getNodes().map(({ dragHandle, ...node }) => node);
           const currentEdges = reactFlowInstance.getEdges();
           const flowToSave = { name: flowNameInput.trim(), campaign_id: selectedCampaignIdForFlow || null, status: selectedFlow.status || 'draft', elements: { nodes: currentNodes, edges: currentEdges } };
-          const response = await apiRequest('PUT', `/api/flows?id=${selectedFlow.id}`, flowToSave);
-          if (!response.ok) { const err = await response.json(); throw new Error(err.message || 'Falha ao salvar fluxo'); }
+          await apiRequest('PUT', `/api/flows/${selectedFlow.id}`, flowToSave);
           toast({ title: "Fluxo Salvo!" }); 
           await queryClientInternal.invalidateQueries({ queryKey: ['flows'] }); 
           await queryClientInternal.invalidateQueries({ queryKey: ['flowDetails', selectedFlow.id] });
@@ -193,14 +189,10 @@ function FlowEditorInner({ activeFlowId, onFlowSelect }: FlowEditorInnerProps) {
       setIsTogglingStatus(true);
       const newStatus = selectedFlow.status === 'active' ? 'inactive' : 'active';
       try {
-          const response = await apiRequest('PUT', `/api/flows?id=${selectedFlow.id}`, { status: newStatus });
-          if (!response.ok) { const err = await response.json(); throw new Error(err.message || 'Falha ao atualizar status'); }
+          await apiRequest('PUT', `/api/flows/${selectedFlow.id}`, { status: newStatus });
           toast({ title: `Fluxo ${newStatus === 'active' ? 'Ativado' : 'Desativado'}` });
           await queryClientInternal.invalidateQueries({ queryKey: ['flows'] }); 
           await queryClientInternal.invalidateQueries({ queryKey: ['flowDetails', selectedFlow.id] });
-          if (newStatus === 'active') {
-              apiRequest('POST', '/api/whatsapp/reload-flow').catch(e => console.error("Falha ao solicitar recarga do bot:", e));
-          }
       } catch (error: any) { toast({ title: "Erro Status", description: error.message, variant: "destructive" });
       } finally { setIsTogglingStatus(false); }
     }, [selectedFlow, toast, queryClientInternal]);
@@ -209,11 +201,11 @@ function FlowEditorInner({ activeFlowId, onFlowSelect }: FlowEditorInnerProps) {
     const handleNodeContextMenu = useCallback((event: React.MouseEvent, node: Node) => { event.preventDefault(); setContextMenu({ id: node.id, top: event.clientY, left: event.clientX, nodeType: node.type }); }, []);
     const handlePaneClick = useCallback(() => setContextMenu(null), []);
     const handleDeleteNode = useCallback((nodeId: string) => { setNodes((nds) => nds.filter((node) => node.id !== nodeId)); setEdges((eds) => eds.filter((edge) => edge.source !== nodeId && edge.target !== nodeId)); setContextMenu(null); }, [setNodes, setEdges]);
-    const handleDuplicateNode = useCallback((nodeId: string) => { const nodeToDuplicate = reactFlowInstance.getNode(nodeId); if (!nodeToDuplicate) return; const newNodeId = `<span class="math-inline">\{nodeToDuplicate\.type\}\_</span>{Date.now()}_${Math.random().toString(16).slice(2,6)}`; const position = { x: nodeToDuplicate.position.x + 40, y: nodeToDuplicate.position.y + 40 }; let newData = JSON.parse(JSON.stringify(nodeToDuplicate.data)); if (nodeToDuplicate.type === 'buttonMessage' && newData.buttons) { newData.buttons = newData.buttons.map((btn: ButtonOption, i: number) => ({ ...btn, id: `btn_${newNodeId}_${i}` })); } if (nodeToDuplicate.type === 'listMessage' && newData.sections) { newData.sections = newData.sections.map((sec: ListSection, sIdx: number) => ({ ...sec, id: `sec_${newNodeId}_${sIdx}`, rows: sec.rows.map((row: ListItem, rIdx: number) => ({ ...row, id: `row_${newNodeId}_${sIdx}_${rIdx}` })) })); } const newNode: Node = { ...nodeToDuplicate, id: newNodeId, position, data: newData, dragHandle: '.node-header' }; reactFlowInstance.addNodes(newNode); setContextMenu(null); }, [reactFlowInstance]);
+    const handleDuplicateNode = useCallback((nodeId: string) => { const nodeToDuplicate = reactFlowInstance.getNode(nodeId); if (!nodeToDuplicate) return; const newNodeId = `${nodeToDuplicate.type}_${Date.now()}_${Math.random().toString(16).slice(2,6)}`; const position = { x: nodeToDuplicate.position.x + 40, y: nodeToDuplicate.position.y + 40 }; let newData = JSON.parse(JSON.stringify(nodeToDuplicate.data)); if (nodeToDuplicate.type === 'buttonMessage' && newData.buttons) { newData.buttons = newData.buttons.map((btn: ButtonOption, i: number) => ({ ...btn, id: `btn_${newNodeId}_${i}` })); } if (nodeToDuplicate.type === 'listMessage' && newData.sections) { newData.sections = newData.sections.map((sec: ListSection, sIdx: number) => ({ ...sec, id: `sec_${newNodeId}_${sIdx}`, rows: sec.rows.map((row: ListItem, rIdx: number) => ({ ...row, id: `row_${newNodeId}_${sIdx}_${rIdx}` })) })); } const newNode: Node = { ...nodeToDuplicate, id: newNodeId, position, data: newData, dragHandle: '.node-header' }; reactFlowInstance.addNodes(newNode); setContextMenu(null); }, [reactFlowInstance]);
     
     const addNodeToFlow = useCallback((type: keyof typeof nodeTypes) => {
         if (!reactFlowInstance || !selectedFlow) { toast({ title: "Ação Indisponível", description: "Selecione um fluxo para adicionar nós.", variant: "default" }); return; }
-        const { x: viewX, y: viewY, zoom } = reactFlowInstance.getViewport(); const pane = reactFlowWrapper.current?.querySelector('.react-flow__pane') as HTMLElement; const paneRect = pane?.getBoundingClientRect() || {width: window.innerWidth, height: window.innerHeight, top:0, left:0}; const centerX = (paneRect.width / 2 - viewX) / zoom; const centerY = (paneRect.height / 2 - viewY) / zoom; const position = { x: centerX, y: centerY }; const newNodeId = `<span class="math-inline">\{type\}\_</span>{Date.now()}_${Math.random().toString(16).substring(2, 6)}`;
+        const { x: viewX, y: viewY, zoom } = reactFlowInstance.getViewport(); const pane = reactFlowWrapper.current?.querySelector('.react-flow__pane') as HTMLElement; const paneRect = pane?.getBoundingClientRect() || {width: window.innerWidth, height: window.innerHeight, top:0, left:0}; const centerX = (paneRect.width / 2 - viewX) / zoom; const centerY = (paneRect.height / 2 - viewY) / zoom; const position = { x: centerX, y: centerY }; const newNodeId = `${type}_${Date.now()}_${Math.random().toString(16).substring(2, 6)}`;
         let newNodeData: AllNodeDataTypes | {} = {}; 
         switch (type) {
           case 'textMessage': newNodeData = { text: 'Nova mensagem de texto...' } as TextMessageNodeData; break;
@@ -321,6 +313,7 @@ function FlowEditorInner({ activeFlowId, onFlowSelect }: FlowEditorInnerProps) {
 }
 // --- FIM DO EDITOR DE FLUXO INTERNO ---
 
+// --- INÍCIO DO GERENCIADOR DE TEMPLATES ---
 const TemplateManager: React.FC = () => {
     const { toast } = useToast();
     const queryClient = useQueryClient();
@@ -333,7 +326,7 @@ const TemplateManager: React.FC = () => {
         queryFn: async () => apiRequest('GET', '/api/whatsapp/templates').then(res => res.json()),
     });
 
-    const createMutation = useMutation<WhatsappMessageTemplate, Error, Omit<WhatsappMessageTemplate, 'id' | 'createdAt' | 'updatedAt' | 'userId'>>({
+    const createMutation = useMutation<WhatsappMessageTemplate, Error, Omit<WhatsappMessageTemplate, 'id' | 'createdAt' | 'updatedAt' | 'userId' | 'statusMeta' | 'metaTemplateId'>>({
         mutationFn: (newTemplate) => apiRequest('POST', '/api/whatsapp/templates', newTemplate).then(res => res.json()),
         onSuccess: () => {
             toast({ title: "Sucesso", description: "Template criado." });
@@ -343,7 +336,7 @@ const TemplateManager: React.FC = () => {
         onError: (err) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
     });
 
-    const updateMutation = useMutation<WhatsappMessageTemplate, Error, WhatsappMessageTemplate>({
+    const updateMutation = useMutation<WhatsappMessageTemplate, Error, Partial<WhatsappMessageTemplate> & {id: number}>({
         mutationFn: (template) => apiRequest('PUT', `/api/whatsapp/templates/${template.id}`, template).then(res => res.json()),
         onSuccess: () => {
             toast({ title: "Sucesso", description: "Template atualizado." });
@@ -406,7 +399,7 @@ const TemplateManager: React.FC = () => {
             </CardHeader>
             <CardContent>
                 {isLoading && <div className='text-center py-4'><Loader2 className="w-6 h-6 animate-spin mx-auto" /></div>}
-                {error && <div className='text-center text-destructive py-4'>Erro ao carregar templates: {error.message}</div>}
+                {error && <div className='text-center text-destructive py-4'>Erro ao carregar templates: {(error as Error).message}</div>}
                 {!isLoading && !error && (
                     <Table>
                         <TableHeader>
@@ -481,6 +474,7 @@ const TemplateManager: React.FC = () => {
         </Card>
     );
 };
+// --- FIM DO GERENCIADOR DE TEMPLATES ---
 
 
 // --- COMPONENTE PRINCIPAL DA PÁGINA ---
@@ -492,7 +486,6 @@ const WhatsApp: React.FC = () => {
   
   const [activeFlowIdForEditor, setActiveFlowIdForEditor] = useState<number | null>(null);
   
-  // --- LÓGICA DE DADOS REAIS PARA "CONVERSAS" ---
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [currentChatMessage, setCurrentChatMessage] = useState('');
   const [searchTermContacts, setSearchTermContacts] = useState('');
@@ -540,7 +533,6 @@ const WhatsApp: React.FC = () => {
   };
   const handleChatKeyPress = (e: React.KeyboardEvent) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChatMessage(); }};
   
-  // --- LÓGICA DE DADOS PARA "FLUXOS" ---
   const [filterCampaignIdForList, setFilterCampaignIdForList] = useState<string>('all');
 
   const { data: flowsList = [], isLoading: isLoadingFlowsList, error: flowsListError } = useQuery<FlowData[]>({
@@ -592,7 +584,7 @@ const WhatsApp: React.FC = () => {
   }, [auth.isAuthenticated, filterCampaignIdForList, createNewFlowMutation]);
 
   const deleteFlowMutation = useMutation<void, Error, number>({
-    mutationFn: async (flowId: number) => { const response = await apiRequest('DELETE', `/api/flows?id=${flowId}`); if (!response.ok) { const err = await response.json(); throw new Error(err.message || 'Falha ao deletar fluxo'); } },
+    mutationFn: async (flowId: number) => { const response = await apiRequest('DELETE', `/api/flows/${flowId}`); if (!response.ok) { const err = await response.json(); throw new Error(err.message || 'Falha ao deletar fluxo'); } },
     onSuccess: (_, deletedId) => {
       toast({ title: "Fluxo Deletado" });
       queryClient.invalidateQueries({ queryKey: ['flows'] });
@@ -728,7 +720,7 @@ const WhatsApp: React.FC = () => {
                     : (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             {flowsList.map((flow) => (
-                                <Card key={flow.id} className={cn("neu-card hover:shadow-primary/20 cursor-pointer", activeFlowIdForEditor === flow.id && "ring-2 ring-primary shadow-primary/20")} onClick={() => setActiveFlowIdForEditor(flow.id)}>
+                                <Card key={flow.id} className={cn("neu-card hover:shadow-primary/20 cursor-pointer", activeFlowIdForEditor === flow.id && "ring-2 ring-primary shadow-primary/20")} onClick={() => { setActiveFlowIdForEditor(flow.id); setActiveTab('flow-builder'); }}>
                                     <CardHeader className="pb-2 pt-3 px-3"><div className="flex justify-between items-start"><CardTitle className="text-sm font-semibold leading-tight line-clamp-2">{flow.name}</CardTitle><Badge variant={flow.status === 'active' ? 'default' : 'outline'} className={cn("text-xs px-1.5 py-0.5", flow.status === 'active' ? 'bg-green-500/80 border-green-400/50 text-white' : 'bg-muted')}>{flow.status === 'active' ? 'Ativo' : flow.status === 'inactive' ? 'Inativo' : 'Rascunho'}</Badge></div><CardDescription className="text-xs line-clamp-1 h-4 mt-0.5">{flow.campaign_id ? `Campanha: ${campaignListForFilter.find(c => Number(c.id) === flow.campaign_id)?.name || 'N/A'}` : 'Sem campanha'}</CardDescription></CardHeader>
                                     <CardContent className="text-xs text-muted-foreground pt-1 pb-2 px-3"><p>Atualizado: {flow.updated_at ? new Date(flow.updated_at).toLocaleDateString('pt-BR', {day:'2-digit', month:'short'}) : 'N/A'}</p><div className="mt-1 flex justify-end"><Button variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:text-destructive-foreground hover:bg-destructive/10" onClick={(e) => { e.stopPropagation(); deleteFlowFromList(flow.id);}} disabled={deleteFlowMutation.isPending}><IconTrash className="w-3 h-3" /></Button></div></CardContent>
                                 </Card>
