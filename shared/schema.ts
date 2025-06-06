@@ -1,3 +1,4 @@
+// shared/schema.ts
 import { pgTable, text, serial, integer, boolean, timestamp, decimal, jsonb, varchar, pgEnum, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -36,50 +37,12 @@ export const chatMessages = pgTable('chat_messages', { id: serial('id').primaryK
 export const funnels = pgTable("funnels", { id: serial("id").primaryKey(), userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }), campaignId: integer("campaign_id").references(() => campaigns.id, { onDelete: 'set null' }), name: text("name").notNull(), description: text("description"), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),});
 export const funnelStages = pgTable("funnel_stages", { id: serial("id").primaryKey(), funnelId: integer("funnel_id").notNull().references(() => funnels.id, { onDelete: 'cascade' }), name: text("name").notNull(), description: text("description"), order: integer("order").notNull().default(0), config: jsonb("config").$type<Record<string, any>>().default({}), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),});
 export const flows = pgTable("flows", { id: serial("id").primaryKey(), userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }), campaignId: integer("campaign_id").references(() => campaigns.id, { onDelete: 'set null' }), name: text("name").notNull(), status: flowStatusEnum("status").default("draft").notNull(), elements: jsonb("elements").$type<FlowElementData>().default({'nodes': [], 'edges': []}).notNull(), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),});
-
-// --- NOVAS TABELAS PARA O MOTOR DE FLUXO E WHATSAPP ---
-
-// Tabela para gerenciar o estado da conexão de cada usuário
-export const whatsappConnections = pgTable('whatsapp_connections', {
-    id: serial('id').primaryKey(),
-    userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-    connectionStatus: text('status').notNull().default('disconnected'),
-    qrCodeData: text('qr_code_data'),
-    connectedPhoneNumber: text('connected_phone_number'),
-    lastError: text('last_error'),
-    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-});
-
-// Tabela para armazenar o estado de cada contato dentro de um fluxo
-export const whatsappFlowUserStates = pgTable('whatsapp_flow_user_states', {
-    id: serial('id').primaryKey(),
-    userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-    contactJid: text('contact_jid').notNull(),
-    activeFlowId: integer('active_flow_id').references(() => flows.id, { onDelete: 'set null' }),
-    currentNodeId: text('current_node_id'),
-    flowVariables: jsonb('flow_variables').default('{}'),
-    lastInteractionAt: timestamp('last_interaction_at', { withTimezone: true }).defaultNow().notNull(),
-}, (table) => ({
-    unq: unique().on(table.userId, table.contactJid),
-}));
-
-// Tabela para templates de mensagem HSM
-export const whatsappMessageTemplates = pgTable('whatsapp_message_templates', {
-    id: serial('id').primaryKey(),
-    userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-    name: text('template_name').notNull(),
-    category: text('category'),
-    language: text('language_code').notNull(),
-    components: jsonb('components').notNull(),
-    statusMeta: text('meta_status').default('DRAFT'),
-    metaTemplateId: text('meta_template_id'),
-    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-});
-
+export const whatsappConnections = pgTable('whatsapp_connections', { id: serial('id').primaryKey(), userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }), connectionStatus: text('status').notNull().default('disconnected'), qrCodeData: text('qr_code_data'), connectedPhoneNumber: text('connected_phone_number'), lastError: text('last_error'), updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),});
+export const whatsappFlowUserStates = pgTable('whatsapp_flow_user_states', { id: serial('id').primaryKey(), userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }), contactJid: text('contact_jid').notNull(), activeFlowId: integer('active_flow_id').references(() => flows.id, { onDelete: 'set null' }), currentNodeId: text('current_node_id'), flowVariables: jsonb('flow_variables').default('{}'), lastInteractionAt: timestamp('last_interaction_at', { withTimezone: true }).defaultNow().notNull(), }, (table) => ({ unq: unique().on(table.userId, table.contactJid),}));
+export const whatsappMessageTemplates = pgTable('whatsapp_message_templates', { id: serial('id').primaryKey(), userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }), name: text('template_name').notNull(), category: text('category'), language: text('language_code').notNull(), components: jsonb('components').notNull(), statusMeta: text('meta_status').default('DRAFT'), metaTemplateId: text('meta_template_id'), createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),});
 
 // --- RELAÇÕES ---
-export const userRelations = relations(users, ({ many }) => ({ campaigns: many(campaigns), creatives: many(creatives), metrics: many(metrics), whatsappMessages: many(whatsappMessages), copies: many(copies), alerts: many(alerts), budgets: many(budgets), landingPages: many(landingPages), chatSessions: many(chatSessions), funnels: many(funnels), flows: many(flows) }));
+export const userRelations = relations(users, ({ many }) => ({ campaigns: many(campaigns), creatives: many(creatives), metrics: many(metrics), whatsappMessages: many(whatsappMessages), copies: many(copies), alerts: many(alerts), budgets: many(budgets), landingPages: many(landingPages), chatSessions: many(chatSessions), funnels: many(funnels), flows: many(flows), whatsappConnections: many(whatsappConnections), whatsappFlowUserStates: many(whatsappFlowUserStates), whatsappMessageTemplates: many(whatsappMessageTemplates) }));
 export const campaignRelations = relations(campaigns, ({ one, many }) => ({ user: one(users, { fields: [campaigns.userId], references: [users.id] }), creatives: many(creatives), metrics: many(metrics), copies: many(copies), alerts: many(alerts), budgets: many(budgets), funnels: many(funnels), flows: many(flows) }));
 export const creativeRelations = relations(creatives, ({ one }) => ({ user: one(users, { fields: [creatives.userId], references: [users.id] }), campaign: one(campaigns, { fields: [creatives.campaignId], references: [campaigns.id] }), }));
 export const metricRelations = relations(metrics, ({ one }) => ({ campaign: one(campaigns, { fields: [metrics.campaignId], references: [campaigns.id] }), user: one(users, { fields: [metrics.userId], references: [users.id] }), }));
@@ -92,16 +55,14 @@ export const chatSessionRelations = relations(chatSessions, ({ one, many }) => (
 export const chatMessageRelations = relations(chatMessages, ({ one }) => ({ session: one(chatSessions, { fields: [chatMessages.sessionId], references: [chatSessions.id] }), }));
 export const funnelRelations = relations(funnels, ({ one, many }) => ({ user: one(users, { fields: [funnels.userId], references: [users.id] }), campaign: one(campaigns, { fields: [funnels.campaignId], references: [campaigns.id] }), stages: many(funnelStages), }));
 export const funnelStageRelations = relations(funnelStages, ({ one }) => ({ funnel: one(funnels, { fields: [funnelStages.funnelId], references: [funnels.id] }), }));
-export const flowRelations = relations(flows, ({ one }) => ({ user: one(users, { fields: [flows.userId], references: [users.id] }), campaign: one(campaigns, { fields: [flows.campaignId], references: [campaigns.id] }),}));
+export const flowRelations = relations(flows, ({ one, many }) => ({ user: one(users, { fields: [flows.userId], references: [users.id] }), campaign: one(campaigns, { fields: [flows.campaignId], references: [campaigns.id] }), userStates: many(whatsappFlowUserStates) }));
+export const whatsappConnectionRelations = relations(whatsappConnections, ({ one }) => ({ user: one(users, { fields: [whatsappConnections.userId], references: [users.id] })}));
+export const whatsappFlowUserStateRelations = relations(whatsappFlowUserStates, ({ one }) => ({ user: one(users, { fields: [whatsappFlowUserStates.userId], references: [users.id] }), flow: one(flows, { fields: [whatsappFlowUserStates.activeFlowId], references: [flows.id] })}));
+export const whatsappMessageTemplateRelations = relations(whatsappMessageTemplates, ({ one }) => ({ user: one(users, { fields: [whatsappMessageTemplates.userId], references: [users.id] })}));
 
 
 // --- SCHEMAS ZOD PARA INSERÇÃO ---
-// ✅ CORREÇÃO: Schema específico para validar a estrutura dos elementos do fluxo
-const FlowElementsSchema = z.object({
-    nodes: z.array(z.any()).default([]),
-    edges: z.array(z.any()).default([]),
-}).nullable().optional().default({ nodes: [], edges: [] });
-
+const FlowElementsSchema = z.object({ nodes: z.array(z.any()).default([]), edges: z.array(z.any()).default([]),}).nullable().optional().default({ nodes: [], edges: [] });
 
 export const insertUserSchema = createInsertSchema(users, { email: z.string().email("Email inválido."), username: z.string().min(3, "Nome de usuário deve ter pelo menos 3 caracteres."), password: z.string().min(6, "Senha deve ter pelo menos 6 caracteres."), }).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertCampaignSchema = createInsertSchema(campaigns, { name: z.string().min(1, "Nome da campanha é obrigatório."), budget: z.preprocess( (val) => (typeof val === 'string' && val.trim() !== '' ? parseFloat(val) : (typeof val === 'number' ? val : undefined)), z.number({ invalid_type_error: "Orçamento deve ser um número" }).nullable().optional() ), dailyBudget: z.preprocess( (val) => (typeof val === 'string' && val.trim() !== '' ? parseFloat(val) : (typeof val === 'number' ? val : undefined)), z.number({ invalid_type_error: "Orçamento diário deve ser um número" }).nullable().optional() ), avgTicket: z.preprocess( (val) => (typeof val === 'string' && val.trim() !== '' ? parseFloat(val) : (typeof val === 'number' ? val : undefined)), z.number({ invalid_type_error: "Ticket médio deve ser um número" }).nullable().optional() ), startDate: z.preprocess( (arg) => { if (typeof arg === "string" || arg instanceof Date) return new Date(arg); return undefined; }, z.date().optional().nullable() ), endDate: z.preprocess( (arg) => { if (typeof arg === "string" || arg instanceof Date) return new Date(arg); return undefined; }, z.date().optional().nullable() ), platforms: z.preprocess( (val) => { if (Array.isArray(val)) return val; if (typeof val === 'string') return val.split(',').map(s => s.trim()).filter(s => s); return []; }, z.array(z.string()).default([]) ), objectives: z.preprocess( (val) => { if (Array.isArray(val)) return val; if (typeof val === 'string') return val.split(',').map(s => s.trim()).filter(s => s); return []; }, z.array(z.string()).default([]) ), }).omit({ id: true, createdAt: true, updatedAt: true, userId: true });
@@ -116,12 +77,8 @@ export const insertBudgetSchema = createInsertSchema(budgets, { totalBudget: z.p
 export const insertChatSessionSchema = createInsertSchema(chatSessions, { title: z.string().min(1, "Título da sessão é obrigatório.").default('Nova Conversa').optional(), }).omit({ id: true, createdAt: true, updatedAt: true, userId: true });
 export const insertChatMessageSchema = createInsertSchema(chatMessages, { text: z.string().min(1, "O texto da mensagem é obrigatório."), sender: z.enum(chatSenderEnum.enumValues), sessionId: z.number().int().positive(), attachmentUrl: z.string().url().optional().nullable(), }).omit({id: true, timestamp: true});
 export const insertMetricSchema = createInsertSchema(metrics, { campaignId: z.number().int().positive(), userId: z.number().int().positive(), date: z.preprocess((arg) => { if (typeof arg === "string" || arg instanceof Date) return new Date(arg); return undefined; }, z.date()), impressions: z.number().int().min(0).default(0), clicks: z.number().int().min(0).default(0), conversions: z.number().int().min(0).default(0), cost: z.preprocess( (val) => (typeof val === 'string' && val.trim() !== '' ? parseFloat(val) : (typeof val === 'number' ? val : 0)), z.number().min(0).default(0) ), revenue: z.preprocess( (val) => (typeof val === 'string' && val.trim() !== '' ? parseFloat(val) : (typeof val === 'number' ? val : 0)), z.number().min(0).default(0) ), leads: z.number().int().min(0).default(0) }).omit({ id: true, createdAt: true });
-export const insertFlowSchema = createInsertSchema(flows, { 
-    name: z.string().min(1, "Nome do fluxo é obrigatório."), 
-    status: z.enum(flowStatusEnum.enumValues).default('draft'), 
-    elements: FlowElementsSchema, // ✅ CORREÇÃO APLICADA AQUI
-    campaignId: z.preprocess( (val) => (val === undefined || val === null || val === "" || String(val).toUpperCase() === "NONE" ? null : parseInt(String(val))), z.number().int().positive().nullable().optional() ),
-}).omit({ id: true, createdAt: true, updatedAt: true, userId: true });
+export const insertFlowSchema = createInsertSchema(flows, { name: z.string().min(1, "Nome do fluxo é obrigatório."), status: z.enum(flowStatusEnum.enumValues).default('draft'), elements: FlowElementsSchema, campaignId: z.preprocess( (val) => (val === undefined || val === null || val === "" || String(val).toUpperCase() === "NONE" ? null : parseInt(String(val))), z.number().int().positive().nullable().optional() ),}).omit({ id: true, createdAt: true, updatedAt: true, userId: true });
+export const insertWhatsappMessageTemplateSchema = createInsertSchema(whatsappMessageTemplates, { name: z.string().min(1, "O nome do template é obrigatório"), language: z.string().min(1, "O código do idioma é obrigatório"), components: z.record(z.any()), }).omit({ id: true, createdAt: true, updatedAt: true, userId: true });
 
 // --- SCHEMAS ZOD PARA SELEÇÃO (SELECT) ---
 export const selectUserSchema = createSelectSchema(users);
@@ -138,6 +95,10 @@ export const selectChatMessageSchema = createSelectSchema(chatMessages);
 export const selectFunnelSchema = createSelectSchema(funnels);
 export const selectFunnelStageSchema = createSelectSchema(funnelStages);
 export const selectFlowSchema = createSelectSchema(flows);
+export const selectWhatsappMessageTemplateSchema = createSelectSchema(whatsappMessageTemplates);
+export const selectWhatsappConnectionSchema = createSelectSchema(whatsappConnections);
+export const selectWhatsappFlowUserStateSchema = createSelectSchema(whatsappFlowUserStates);
+
 
 // --- Tipos Inferidos ---
 export type User = z.infer<typeof selectUserSchema>; export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -154,6 +115,11 @@ export type ChatMessage = z.infer<typeof selectChatMessageSchema>; export type I
 export type Funnel = z.infer<typeof selectFunnelSchema>; export type InsertFunnel = z.infer<typeof insertFunnelSchema>;
 export type FunnelStage = z.infer<typeof selectFunnelStageSchema>; export type InsertFunnelStage = z.infer<typeof insertFunnelStageSchema>;
 export type Flow = z.infer<typeof selectFlowSchema>; export type InsertFlow = z.infer<typeof insertFlowSchema>;
+export type WhatsappMessageTemplate = z.infer<typeof selectWhatsappMessageTemplateSchema>; export type InsertWhatsappMessageTemplate = z.infer<typeof insertWhatsappMessageTemplateSchema>;
+export type WhatsappConnection = z.infer<typeof selectWhatsappConnectionSchema>;
+export type WhatsappFlowUserState = z.infer<typeof selectWhatsappFlowUserStateSchema>;
+export type InsertFlowUserState = z.infer<typeof createInsertSchema<typeof whatsappFlowUserStates>>;
+
 
 // --- CONFIGURAÇÕES DE COPY ---
 export const allCopyPurposesConfig: CopyPurposeConfig[] = [ { key: 'prelaunch_ad_event_invitation', label: 'Anúncio: Convite para Evento Online Gratuito', phase: 'pre_launch', category: 'Anúncios (Pré-Lançamento)', description: 'Crie anúncios chamativos para convidar pessoas para seu webinar, masterclass ou live.', fields: [ { name: 'eventName', label: 'Nome do Evento *', type: 'text', placeholder: 'Ex: Masterclass "Decole Seu Negócio Online"', tooltip: 'O título principal do seu evento.', required: true }, { name: 'eventSubtitle', label: 'Subtítulo do Evento (Opcional)', type: 'text', placeholder: 'Ex: O guia definitivo para...', tooltip: 'Uma frase curta para complementar o nome.'}, { name: 'eventFormat', label: 'Formato do Evento', type: 'text', placeholder: 'Ex: Workshop online de 3 dias via Zoom', tooltip: 'Descreva como será o evento (live, gravado, desafio, etc.).', defaultValue: 'Webinar Ao Vivo' }, { name: 'eventDateTime', label: 'Data e Hora Principal do Evento *', type: 'text', placeholder: 'Ex: Terça, 25 de Junho, às 20h (Horário de Brasília)', tooltip: 'Quando o evento principal acontecerá? Inclua fuso horário se relevante.', required: true }, { name: 'eventDuration', label: 'Duração Estimada do Evento', type: 'text', placeholder: 'Ex: Aproximadamente 1h30', tooltip: 'Quanto tempo o público deve reservar?' }, { name: 'eventPromise', label: 'Principal Promessa/Transformação do Evento *', type: 'textarea', placeholder: 'Ex: Você vai descobrir o método exato para criar anúncios que vendem todos os dias, mesmo começando do zero.', tooltip: 'O que a pessoa vai ganhar/aprender de mais valioso?', required: true }, { name: 'eventTopics', label: 'Principais Tópicos Abordados (1 por linha) *', type: 'textarea', placeholder: 'Ex:\n- Como definir seu público ideal\n- Os 3 erros que te fazem perder dinheiro em anúncios\n- O segredo das headlines que convertem', tooltip: 'Liste os pontos chave que serão ensinados.', required: true }, { name: 'eventTargetAudience', label: 'Público Específico Deste Evento', type: 'text', placeholder: 'Ex: Empreendedores que já tentaram anunciar e não tiveram resultado', tooltip: 'Para quem este evento é especialmente desenhado?' }, { name: 'eventCTA', label: 'Chamada para Ação do Anúncio *', type: 'text', placeholder: 'Ex: "Garanta sua vaga gratuita agora!" ou "Clique em Saiba Mais e inscreva-se!"', tooltip: 'O que você quer que a pessoa faça ao ver o anúncio?', required: true, defaultValue: 'Inscreva-se Gratuitamente!' }, { name: 'urgencyScarcityElement', label: 'Elemento de Urgência/Escassez (Opcional)', type: 'text', placeholder: 'Ex: Vagas limitadas, Bônus para os 100 primeiros inscritos', tooltip: 'Algum motivo para a pessoa agir rápido?' }, ], }, ];
