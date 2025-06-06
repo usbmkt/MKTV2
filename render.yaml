@@ -1,4 +1,3 @@
-# render.yaml
 services:
   - type: web
     name: mktv5-render
@@ -18,7 +17,8 @@ services:
           - libasound2
           - libgbm1
           - chromium-browser
-    buildCommand: "npm install && npm run build && npm run db:generate"
+    # ✅ CORREÇÃO APLICADA AQUI: Limpa o cache e depois executa os comandos
+    buildCommand: "rm -rf node_modules package-lock.json && npm cache clean --force && npm install && npm run build && npm run db:generate"
     startCommand: "npm run migrate:deploy && npm start"
     envVars:
       - key: NODE_ENV
@@ -39,7 +39,6 @@ services:
         fromDatabase:
           name: mktv5-render-db
           property: connectionString
-      # ✅ CORREÇÃO: Adicione esta variável para o QR Code funcionar
       - key: PUPPETEER_EXECUTABLE_PATH
         value: /usr/bin/chromium-browser
 
