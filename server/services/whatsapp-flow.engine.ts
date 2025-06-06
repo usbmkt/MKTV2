@@ -2,7 +2,7 @@
 import { storage } from '../storage';
 import { WhatsappConnectionService } from './whatsapp-connection.service';
 import { externalDataService } from './external-data.service';
-import { getSimpleAiResponse } from '../mcp_handler'; // Importando a nova função de IA
+import { getSimpleAiResponse } from '../mcp_handler';
 import * as schema from '../../shared/schema';
 import { Edge, Node } from '@xyflow/react';
 import { logger } from '../logger';
@@ -101,15 +101,15 @@ export class WhatsappFlowEngine {
     let nextNodeId: string | null = null;
     try {
       switch (node.type) {
-        case 'buttonMessage':
+        case 'buttonMessage': {
           const button = node.data.buttons.find((b: any) => b.text === messageContent);
           if (button) {
             const edge = edges.find(e => e.source === node.id && e.sourceHandle === button.id);
             nextNodeId = edge?.target || null;
           }
           break;
-        
-        case 'waitInput':
+        }
+        case 'waitInput': {
           const variableName = node.data.variableName;
           if (variableName) {
             const currentVariables = typeof userState.flowVariables === 'object' && userState.flowVariables !== null ? userState.flowVariables : {};
@@ -120,6 +120,7 @@ export class WhatsappFlowEngine {
           const edge = edges.find(e => e.source === node.id);
           nextNodeId = edge?.target || null;
           break;
+        }
       }
     } catch (err: any) {
         logger.error({ contactJid: userState.contactJid, nodeId: node.id, error: err.message }, "Erro ao processar input.");
@@ -128,24 +129,25 @@ export class WhatsappFlowEngine {
   }
 
   private async executeWaitingNode(userState: schema.WhatsappFlowUserState, node: Node): Promise<void> {
-    const interpolatedText = node.data.text ? this.interpolate(node.data.text, userState.flowVariables) : '';
     try {
       switch (node.type) {
-        case 'buttonMessage':
+        case 'buttonMessage': {
+          const interpolatedText = node.data.text ? this.interpolate(node.data.text, userState.flowVariables) : 'Escolha uma opção:';
           const buttonPayload = {
-            text: interpolatedText || 'Escolha uma opção:', footer: node.data.footer,
+            text: interpolatedText, footer: node.data.footer,
             buttons: node.data.buttons.map((btn: any) => ({ buttonId: btn.id, buttonText: { displayText: btn.text }, type: 1 })),
             headerType: 1
           };
           await WhatsappConnectionService.sendMessageForUser(userState.userId, userState.contactJid, buttonPayload);
           break;
-        
-        case 'waitInput':
+        }
+        case 'waitInput': {
           const promptMessage = node.data.message ? this.interpolate(node.data.message, userState.flowVariables) : '';
           if (promptMessage) {
             await WhatsappConnectionService.sendMessageForUser(userState.userId, userState.contactJid, { text: promptMessage });
           }
           break;
+        }
       }
     } catch (err: any) {
       logger.error({ contactJid: userState.contactJid, nodeId: node.id, error: err.message }, "Erro ao executar nó de espera.");
@@ -157,12 +159,12 @@ export class WhatsappFlowEngine {
 
     try {
         switch (node.type) {
-            case 'textMessage':
+            case 'textMessage': {
                 const messageText = this.interpolate(node.data.text || '...', userState.flowVariables);
                 await WhatsappConnectionService.sendMessageForUser(userState.userId, userState.contactJid, { text: messageText });
                 break;
-
-            case 'apiCall':
+            }
+            case 'apiCall': {
                 const { apiUrl, method, headers, body, saveResponseTo } = node.data;
                 const interpolatedUrl = this.interpolate(apiUrl, userState.flowVariables);
                 const interpolatedHeaders = headers ? JSON.parse(this.interpolate(headers, userState.flowVariables)) : undefined;
@@ -174,8 +176,8 @@ export class WhatsappFlowEngine {
                     await storage.updateFlowUserState(userState.id, { flowVariables: newVariables });
                 }
                 break;
-            
-            case 'gptQuery':
+            }
+            case 'gptQuery': {
                 const { prompt, systemMessage, saveResponseTo } = node.data;
                 const interpolatedPrompt = this.interpolate(prompt, userState.flowVariables);
                 const aiResponse = await getSimpleAiResponse(interpolatedPrompt, systemMessage);
@@ -185,10 +187,11 @@ export class WhatsappFlowEngine {
                     await storage.updateFlowUserState(userState.id, { flowVariables: newVariables });
                 }
                 break;
-
-            default:
+            }
+            default: {
                 logger.warn({ type: node.type }, "Tipo de nó de ação não implementado.");
                 return null;
+            }
         }
     } catch (err: any) {
         logger.error({ contactJid: userState.contactJid, nodeId: node.id, error: err.message }, "Erro ao executar nó de ação.");
