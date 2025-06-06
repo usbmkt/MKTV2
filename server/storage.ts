@@ -106,8 +106,24 @@ export class DatabaseStorage {
   async deleteFunnelStage(id: number, userId: number): Promise<boolean> { const result = await db.delete(schema.funnelStages).where(eq(schema.funnelStages.id, id)); return (result.rowCount ?? 0) > 0; }
   async getFlows(userId: number, campaignId?: number | null): Promise<schema.Flow[]> { const conditions: any[] = [eq(schema.flows.userId, userId)]; if (campaignId !== undefined) { conditions.push(campaignId === null ? isNull(schema.flows.campaignId) : eq(schema.flows.campaignId, campaignId)); } return db.select().from(schema.flows).where(and(...conditions)).orderBy(desc(schema.flows.createdAt)); }
   async getFlow(id: number, userId: number): Promise<schema.Flow | undefined> { const [flow] = await db.select().from(schema.flows).where(and(eq(schema.flows.id, id), eq(schema.flows.userId, userId))).limit(1); return flow;}
-  async createFlow(flowData: schema.InsertFlow): Promise<schema.Flow> { const [newFlow] = await db.insert(schema.flows).values(flowData).returning(); console.log('[DEBUG storage.createFlow] newFlow criado:', JSON.stringify(newFlow)); return newFlow; }
-  async updateFlow(id: number, flowData: Partial<Omit<schema.InsertFlow, 'userId'>>, userId: number): Promise<schema.Flow | undefined> { const dataToSet: Partial<schema.Flow> & { campaignId?: number | null } = { updatedAt: new Date() }; if (flowData.name !== undefined) dataToSet.name = flowData.name; if (flowData.status !== undefined) dataToSet.status = flowData.status; if (flowData.hasOwnProperty('campaignId')) { dataToSet.campaignId = flowData.campaignId; } if (flowData.elements) { dataToSet.elements = flowData.elements; } const [updatedFlow] = await db.update(schema.flows).set(dataToSet).where(and(eq(schema.flows.id, id), eq(schema.flows.userId, userId))).returning(); console.log('[DEBUG storage.updateFlow] updatedFlow RETORNADO do DB:', JSON.stringify(updatedFlow)); return updatedFlow; }
+  async createFlow(flowData: schema.InsertFlow): Promise<schema.Flow> { const [newFlow] = await db.insert(schema.flows).values(flowData).returning(); console.log('[DB_CREATE_FLOW] Fluxo criado no banco:', JSON.stringify(newFlow)); return newFlow; }
+  async updateFlow(id: number, flowData: Partial<Omit<schema.InsertFlow, 'userId'>>, userId: number): Promise<schema.Flow | undefined> {
+    // ✅ CORREÇÃO: Simplificado e corrigido para garantir que todos os campos sejam atualizados.
+    // O spread operator '...' lida com a passagem apenas dos campos definidos em flowData.
+    const dataToSet = {
+        ...flowData,
+        updatedAt: new Date(),
+    };
+    
+    const [updatedFlow] = await db
+      .update(schema.flows)
+      .set(dataToSet)
+      .where(and(eq(schema.flows.id, id), eq(schema.flows.userId, userId)))
+      .returning();
+
+    console.log('[DB_UPDATE_FLOW] Fluxo atualizado no banco. Retorno:', JSON.stringify(updatedFlow));
+    return updatedFlow;
+  }
   async deleteFlow(id: number, userId: number): Promise<boolean> { const result = await db.delete(schema.flows).where(and(eq(schema.flows.id, id), eq(schema.flows.userId, userId))); return (result.rowCount ?? 0) > 0; }
 }
 
