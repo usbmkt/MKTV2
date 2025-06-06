@@ -1,4 +1,5 @@
 // client/src/components/whatsapp-connection.tsx
+
 import React, { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/api';
@@ -19,7 +20,10 @@ interface WhatsAppConnectionProps {
   onConnectionChange?: (status: ConnectionStatus) => void;
 }
 
-// ALTERAÇÃO: Mudança para exportação nomeada (named export)
+// =================================================================
+// CORREÇÃO: Adicionada a palavra-chave 'export' para que o componente
+// possa ser importado corretamente pela página principal.
+// =================================================================
 export const WhatsAppConnection: React.FC<WhatsAppConnectionProps> = ({ onConnectionChange }) => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -34,7 +38,10 @@ export const WhatsAppConnection: React.FC<WhatsAppConnectionProps> = ({ onConnec
       }
       return response.json();
     },
-    refetchInterval: (data) => (data?.status === 'qr_code_needed' || data?.status === 'connecting') ? 5000 : 30000,
+    refetchInterval: (query) => {
+        const data = query.state.data;
+        return (data?.status === 'qr_code_needed' || data?.status === 'connecting') ? 3000 : 15000;
+    },
     refetchOnWindowFocus: true,
   });
   
@@ -68,6 +75,9 @@ export const WhatsAppConnection: React.FC<WhatsAppConnectionProps> = ({ onConnec
   });
 
   const getStatusInfo = () => {
+    if (isLoadingStatus && !status) {
+        return { icon: <Loader2 className="w-5 h-5 animate-spin" />, text: 'Carregando status...', color: "text-gray-500" };
+    }
     switch (status?.status) {
       case 'connected': return { icon: <CheckCircle className="w-5 h-5 text-green-500" />, text: `Conectado: ${status.connectedPhoneNumber}`, color: "text-green-500" };
       case 'connecting': return { icon: <Loader2 className="w-5 h-5 animate-spin text-yellow-500" />, text: 'Conectando...', color: "text-yellow-500" };
@@ -100,16 +110,21 @@ export const WhatsAppConnection: React.FC<WhatsAppConnectionProps> = ({ onConnec
           <div className="text-center p-8">
             <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
             <Button variant="destructive" onClick={() => disconnectMutation.mutate()} disabled={isLoading}>
-              {isLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <PowerOff className="w-4 h-4 mr-2" />}
+              {disconnectMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <PowerOff className="w-4 h-4 mr-2" />}
               Desconectar
             </Button>
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="flex flex-col items-center justify-center p-4 border rounded-lg bg-card-foreground/5 min-h-[280px]">
-              {isLoading && <Loader2 className="w-16 h-16 animate-spin text-primary" />}
-              {status?.status === 'qr_code_needed' && status.qrCode && (
+              {/* Lógica de renderização aprimorada */}
+              {status?.status === 'qr_code_needed' && status.qrCode ? (
                 <img src={status.qrCode} alt="WhatsApp QR Code" className="w-64 h-64 rounded-lg shadow-lg" />
+              ) : (
+                <div className="text-center text-muted-foreground">
+                    {isLoading || status?.status === 'connecting' ? <Loader2 className="w-16 h-16 animate-spin text-primary" /> : <QrCode className="w-16 h-16" />}
+                    <p className="mt-4">{isLoading || status?.status === 'connecting' ? 'Gerando QR Code...' : 'Clique em Conectar para gerar o QR Code'}</p>
+                </div>
               )}
             </div>
             <div>
@@ -119,13 +134,13 @@ export const WhatsAppConnection: React.FC<WhatsAppConnectionProps> = ({ onConnec
                 <AlertDescription>
                   <ol className="list-decimal list-inside space-y-1 mt-2">
                     <li>Clique em "Conectar / Gerar QR Code".</li>
-                    <li>No seu celular, vá em WhatsApp &gt; Dispositivos conectados.</li>
+                    <li>No seu celular, vá em WhatsApp > Dispositivos conectados.</li>
                     <li>Toque em "Conectar um dispositivo" e escaneie o código.</li>
                   </ol>
                 </AlertDescription>
               </Alert>
-              <Button className="w-full mt-4" onClick={() => connectMutation.mutate()} disabled={isLoading}>
-                {isLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Power className="w-4 h-4 mr-2" />}
+              <Button className="w-full mt-4" onClick={() => connectMutation.mutate()} disabled={isLoading || status?.status === 'connecting'}>
+                {connectMutation.isPending || status?.status === 'connecting' ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Power className="w-4 h-4 mr-2" />}
                 Conectar / Gerar QR Code
               </Button>
             </div>
