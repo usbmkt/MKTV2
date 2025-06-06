@@ -1,153 +1,195 @@
 // server/services/whatsapp-flow.engine.ts
 import { storage } from '../storage';
 import { WhatsappConnectionService } from './whatsapp-connection.service';
+import { externalDataService } from './external-data.service';
 import * as schema from '../../shared/schema';
 import { Edge, Node } from '@xyflow/react';
+import { logger } from '../logger';
 
 export class WhatsappFlowEngine {
 
+  // Função auxiliar para substituir variáveis como {{nome}}
+  private interpolate(text: string, variables: Record<string, any>): string {
+    return text.replace(/\{\{([a-zA-Z0-9_.-]+)\}\}/g, (match, key) => {
+      // Navega em objetos aninhados, ex: {{user.name}}
+      const value = key.split('.').reduce((o, i) => (o ? o[i] : undefined), variables);
+      return value !== undefined ? String(value) : match;
+    });
+  }
+
   public async processMessage(userId: number, contactJid: string, messageContent: string): Promise<void> {
-    console.log(`[FlowEngine] Processando mensagem de ${contactJid} para usuário ${userId}`);
+    logger.info({ contactJid, userId }, `Processando mensagem: "${messageContent}"`);
     
-    // 1. Obtém ou cria o estado do usuário no fluxo
     let userState = await storage.getFlowUserState(userId, contactJid);
     let flow: schema.Flow | undefined;
 
-    // Se não há estado, é a primeira interação. Tenta iniciar um fluxo.
     if (!userState) {
         const triggerFlow = await storage.findTriggerFlow(userId, messageContent);
         if (!triggerFlow || !triggerFlow.elements || triggerFlow.elements.nodes.length === 0) {
-            console.warn(`[FlowEngine] Nenhum fluxo de gatilho ativo ou válido encontrado para ${userId}. Ignorando.`);
+            logger.warn({ userId }, `Nenhum fluxo de gatilho ativo ou válido encontrado.`);
             return;
         }
         flow = triggerFlow;
         const firstNode = this.findStartNode(flow);
         if (!firstNode) {
-            console.error(`[FlowEngine] Fluxo ${flow.id} não possui um nó inicial.`);
+            logger.error({ flowId: flow.id }, `Fluxo não possui um nó inicial.`);
             return;
         }
         userState = await storage.createFlowUserState({ userId, contactJid, activeFlowId: flow.id, currentNodeId: firstNode.id, flowVariables: {} });
-        console.log(`[FlowEngine] Novo estado criado para ${contactJid}. Iniciando fluxo ${flow.id} no nó ${firstNode.id}`);
-        
-        // Como é uma nova interação, não há input a ser processado, então limpamos o messageContent
+        logger.info({ contactJid, flowId: flow.id, startNodeId: firstNode.id }, `Novo estado criado. Iniciando fluxo.`);
         messageContent = ''; 
     } else {
         if (!userState.activeFlowId) {
              await storage.deleteFlowUserState(userState.id);
-             console.error(`[FlowEngine] Estado de usuário órfão encontrado para ${contactJid}. Estado limpo.`);
+             logger.error({ contactJid }, `Estado de usuário órfão encontrado. Estado limpo.`);
              return;
         }
         flow = await storage.getFlow(userState.activeFlowId, userId);
     }
     
     if (!flow || !userState.currentNodeId) {
-        console.error(`[FlowEngine] Estado inválido para ${contactJid}. Fluxo ou nó não encontrado. Resetando.`);
+        logger.error({ contactJid }, `Estado inválido. Fluxo ou nó não encontrado. Resetando.`);
         if (userState) await storage.deleteFlowUserState(userState.id);
         return;
     }
 
-    // 2. Processa a resposta do usuário, se houver, para o nó de espera atual
     let currentNode = this.findNodeById(flow, userState.currentNodeId);
     let nextNodeId: string | null = currentNode?.id ?? null;
 
     if (currentNode && this.isWaitingNode(currentNode.type) && messageContent) {
-        console.log(`[FlowEngine] Processando input "${messageContent}" para o nó de espera ${currentNode.id}`);
-        nextNodeId = await this.processInput(userState, currentNode, flow.elements.edges, messageContent);
+        logger.info({ contactJid, node: currentNode.id }, `Processando input para o nó de espera.`);
+        const updatedState = await storage.getFlowUserState(userId, contactJid); // Pega estado atualizado com variáveis
+        nextNodeId = await this.processInput(updatedState!, currentNode, flow.elements.edges, messageContent);
     }
 
-    // 3. Executa em loop todos os nós de ação sequenciais
     while (nextNodeId) {
         const nodeToExecute = this.findNodeById(flow, nextNodeId);
         if (!nodeToExecute) {
-            console.error(`[FlowEngine] Próximo nó ${nextNodeId} não encontrado no fluxo. Encerrando.`);
+            logger.error({ flowId: flow.id, nodeId: nextNodeId }, `Próximo nó não encontrado. Encerrando.`);
             break;
         }
 
+        const currentState = await storage.getFlowUserState(userId, contactJid);
+        if (!currentState) {
+            logger.warn({ contactJid }, "Estado do usuário foi removido durante a execução. Encerrando.");
+            return;
+        }
+
         if (this.isWaitingNode(nodeToExecute.type)) {
-            console.log(`[FlowEngine] Atingiu nó de espera ${nodeToExecute.id}. Enviando pergunta e pausando.`);
-            await storage.updateFlowUserState(userState.id, { currentNodeId: nodeToExecute.id });
-            await this.executeWaitingNode(userState, nodeToExecute);
-            return; // Pausa a execução e aguarda a próxima mensagem do usuário
+            logger.info({ contactJid, nodeId: nodeToExecute.id }, `Atingiu nó de espera. Pausando.`);
+            await storage.updateFlowUserState(currentState.id, { currentNodeId: nodeToExecute.id });
+            await this.executeWaitingNode(currentState, nodeToExecute);
+            return; 
         }
         
-        console.log(`[FlowEngine] Executando nó de ação ${nodeToExecute.id}`);
-        nextNodeId = await this.executeActionNode(userState, nodeToExecute, flow.elements.edges);
+        logger.info({ contactJid, nodeId: nodeToExecute.id, type: nodeToExecute.type }, `Executando nó de ação.`);
+        nextNodeId = await this.executeActionNode(currentState, nodeToExecute, flow.elements.edges);
     }
 
-    // 4. Se o loop terminar, o fluxo chegou ao fim. Limpa o estado.
     if (!nextNodeId) {
-        console.log(`[FlowEngine] Fim do fluxo para ${contactJid}.`);
+        logger.info({ contactJid }, `Fim do fluxo ou caminho sem saída.`);
         await storage.deleteFlowUserState(userState.id);
     }
   }
 
-  private findStartNode(flow: schema.Flow): Node | undefined {
-    return flow.elements.nodes.find(n => !flow.elements.edges.some(e => e.target === n.id));
-  }
-
-  private findNodeById(flow: schema.Flow, nodeId: string): Node | undefined {
-    return flow.elements.nodes.find(n => n.id === nodeId);
-  }
-
-  private isWaitingNode(type: string | undefined): boolean {
-    return type === 'buttonMessage' || type === 'waitInput';
-  }
-
+  private findStartNode = (flow: schema.Flow): Node | undefined => flow.elements.nodes.find(n => !flow.elements.edges.some(e => e.target === n.id));
+  private findNodeById = (flow: schema.Flow, nodeId: string): Node | undefined => flow.elements.nodes.find(n => n.id === nodeId);
+  private isWaitingNode = (type?: string): boolean => ['buttonMessage', 'waitInput'].includes(type || '');
+  
   private async processInput(userState: schema.WhatsappFlowUserState, node: Node, edges: Edge[], messageContent: string): Promise<string | null> {
-    switch (node.type) {
+    let nextNodeId: string | null = null;
+    try {
+      switch (node.type) {
         case 'buttonMessage':
-            const button = node.data.buttons.find((b: any) => b.text === messageContent);
-            if (button) {
-                const edge = edges.find(e => e.source === node.id && e.sourceHandle === button.id);
-                return edge?.target || null;
-            }
-            break;
+          const button = node.data.buttons.find((b: any) => b.text === messageContent);
+          if (button) {
+            const edge = edges.find(e => e.source === node.id && e.sourceHandle === button.id);
+            nextNodeId = edge?.target || null;
+          }
+          break;
         
         case 'waitInput':
-            const variableName = node.data.variableName;
-            if (variableName) {
-                const newVariables = { ...userState.flowVariables, [variableName]: messageContent };
-                await storage.updateFlowUserState(userState.id, { flowVariables: newVariables });
-                console.log(`[FlowEngine] Variável "${variableName}" salva para ${userState.contactJid}.`);
-            }
-            const edge = edges.find(e => e.source === node.id); // 'waitInput' tem apenas uma saída
-            return edge?.target || null;
+          const variableName = node.data.variableName;
+          if (variableName) {
+            const currentVariables = typeof userState.flowVariables === 'object' && userState.flowVariables !== null ? userState.flowVariables : {};
+            const newVariables = { ...currentVariables, [variableName]: messageContent };
+            await storage.updateFlowUserState(userState.id, { flowVariables: newVariables });
+            logger.info({ contactJid: userState.contactJid, variable: variableName }, `Variável salva.`);
+          }
+          const edge = edges.find(e => e.source === node.id);
+          nextNodeId = edge?.target || null;
+          break;
+      }
+    } catch (err: any) {
+        logger.error({ contactJid: userState.contactJid, nodeId: node.id, error: err.message }, "Erro ao processar input.");
     }
-    return null;
+    return nextNodeId;
   }
 
   private async executeWaitingNode(userState: schema.WhatsappFlowUserState, node: Node): Promise<void> {
-    switch (node.type) {
-      case 'buttonMessage':
-        const buttonPayload = {
-          text: node.data.text || 'Escolha uma opção:',
-          footer: node.data.footer,
-          buttons: node.data.buttons.map((btn: any) => ({
-            buttonId: btn.id,
-            buttonText: { displayText: btn.text },
-            type: 1
-          })),
-          headerType: 1
-        };
-        await WhatsappConnectionService.sendMessageForUser(userState.userId, userState.contactJid, buttonPayload);
-        break;
-      
-      case 'waitInput':
-        if (node.data.message) {
-            await WhatsappConnectionService.sendMessageForUser(userState.userId, userState.contactJid, { text: node.data.message });
-        }
-        break;
+    const interpolatedText = node.data.text ? this.interpolate(node.data.text, userState.flowVariables) : '';
+    try {
+      switch (node.type) {
+        case 'buttonMessage':
+          const buttonPayload = {
+            text: interpolatedText || 'Escolha uma opção:', footer: node.data.footer,
+            buttons: node.data.buttons.map((btn: any) => ({ buttonId: btn.id, buttonText: { displayText: btn.text }, type: 1 })),
+            headerType: 1
+          };
+          await WhatsappConnectionService.sendMessageForUser(userState.userId, userState.contactJid, buttonPayload);
+          break;
+        
+        case 'waitInput':
+          const promptMessage = node.data.message ? this.interpolate(node.data.message, userState.flowVariables) : '';
+          if (promptMessage) {
+            await WhatsappConnectionService.sendMessageForUser(userState.userId, userState.contactJid, { text: promptMessage });
+          }
+          break;
+      }
+    } catch (err: any) {
+      logger.error({ contactJid: userState.contactJid, nodeId: node.id, error: err.message }, "Erro ao executar nó de espera.");
     }
   }
 
   private async executeActionNode(userState: schema.WhatsappFlowUserState, node: Node, edges: Edge[]): Promise<string | null> {
-    switch (node.type) {
-      case 'textMessage':
-        const messageText = node.data.text || '...';
-        await WhatsappConnectionService.sendMessageForUser(userState.userId, userState.contactJid, { text: messageText });
-        const edge = edges.find(e => e.source === node.id);
-        return edge?.target || null;
+    let nextNodeId: string | null = null;
+    let success = true;
+
+    try {
+        switch (node.type) {
+            case 'textMessage':
+                const messageText = this.interpolate(node.data.text || '...', userState.flowVariables);
+                await WhatsappConnectionService.sendMessageForUser(userState.userId, userState.contactJid, { text: messageText });
+                break;
+
+            case 'apiCall':
+                const { apiUrl, method, headers, body, saveResponseTo } = node.data;
+                const interpolatedUrl = this.interpolate(apiUrl, userState.flowVariables);
+                const interpolatedHeaders = headers ? JSON.parse(this.interpolate(headers, userState.flowVariables)) : undefined;
+                const interpolatedBody = body ? JSON.parse(this.interpolate(body, userState.flowVariables)) : undefined;
+
+                const response = await externalDataService.request(interpolatedUrl, { method, headers: interpolatedHeaders, body: interpolatedBody });
+
+                if (saveResponseTo) {
+                    const currentVariables = typeof userState.flowVariables === 'object' && userState.flowVariables !== null ? userState.flowVariables : {};
+                    const newVariables = { ...currentVariables, [saveResponseTo]: response.data };
+                    await storage.updateFlowUserState(userState.id, { flowVariables: newVariables });
+                }
+                break;
+
+            default:
+                logger.warn({ type: node.type }, "Tipo de nó de ação não implementado.");
+                return null;
+        }
+    } catch (err: any) {
+        logger.error({ contactJid: userState.contactJid, nodeId: node.id, error: err.message }, "Erro ao executar nó de ação.");
+        success = false;
     }
-    return null;
+    
+    // Determina a próxima aresta com base no sucesso ou falha da ação
+    const sourceHandle = success ? (node.data.successHandle || 'source-success') : (node.data.errorHandle || 'source-error');
+    const edge = edges.find(e => e.source === node.id && (e.sourceHandle === sourceHandle || !e.sourceHandle));
+    
+    return edge?.target || null;
   }
 }
