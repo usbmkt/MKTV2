@@ -8,6 +8,9 @@ import baileys, {
   Browsers,
   WAMessage,
   WASocket,
+  getDevice,
+  isJidGroup,
+  isJidUser
 } from '@whiskeysockets/baileys';
 const makeWASocket = baileys.default;
 
@@ -15,7 +18,8 @@ import pino from 'pino';
 import fs from 'node:fs';
 import path from 'node:path';
 import { Boom } from '@hapi/boom';
-import QRCode from 'qrcode'; // Para converter QR em base64
+import QRCode from 'qrcode';
+import { WhatsappFlowEngine } from './whatsapp-flow.engine'; // Importando o motor de fluxo
 
 const SESSIONS_DIR = path.join(process.cwd(), 'server', 'sessions');
 if (!fs.existsSync(SESSIONS_DIR)) {
@@ -23,6 +27,9 @@ if (!fs.existsSync(SESSIONS_DIR)) {
 }
 
 const logger = pino({ level: 'debug' }).child({ class: 'WhatsappConnectionService' });
+
+// Criando uma instância única do motor de fluxo que será usada por todas as conexões
+const flowEngine = new WhatsappFlowEngine();
 
 export interface WhatsappConnectionStatus {
   status: 'disconnected' | 'connecting' | 'connected' | 'qr_code_needed' | 'auth_failure' | 'error' | 'disconnected_logged_out';
@@ -77,7 +84,7 @@ export class WhatsappConnectionService {
         this.sock = makeWASocket({
           version,
           logger: pino({ level: 'warn' }),
-          printQRInTerminal: false, // Desabilitado para evitar warnings no log, já tratamos o QR.
+          printQRInTerminal: false,
           auth: state,
           browser: Browsers.ubuntu('Chrome'),
           generateHighQualityLinkPreview: true,
@@ -111,6 +118,30 @@ export class WhatsappConnectionService {
           }
         });
 
+        // --- ADIÇÃO DO HANDLER DE MENSAGENS ---
+        this.sock.ev.on('messages.upsert', async (update) => {
+            for (const m of update.messages) {
+                // Ignorar mensagens próprias, de grupos, ou sem conteúdo
+                if (!m.key || m.key.fromMe || !m.key.remoteJid || isJidGroup(m.key.remoteJid) || !m.message) {
+                    continue;
+                }
+
+                // Extrair o conteúdo da mensagem de texto
+                const messageText = m.message.conversation || m.message.extendedTextMessage?.text || '';
+                
+                if (messageText) {
+                    logger.info({ userId: this.userId, from: m.key.remoteJid, text: messageText }, 'Mensagem de texto recebida, encaminhando para o FlowEngine.');
+                    
+                    // Chama o motor de fluxo para processar a mensagem
+                    await flowEngine.processMessage(this.userId, m.key.remoteJid, messageText)
+                        .catch(err => {
+                            logger.error({ userId: this.userId, from: m.key.remoteJid, error: err.message }, 'Erro no FlowEngine ao processar mensagem.');
+                        });
+                }
+            }
+        });
+
+
     } catch (error: any) {
         logger.error({ userId: this.userId, error: error.message, stack: error.stack }, "Falha crítica ao inicializar o WhatsApp.");
         this.updateGlobalStatus({ status: 'error', lastError: `Falha na inicialização: ${error.message}` });
@@ -131,7 +162,6 @@ export class WhatsappConnectionService {
     } else if (statusCode === DisconnectReason.restartRequired) {
         logger.info(`[User ${this.userId}] Reinicialização necessária. Tentando reconectar...`);
         this.updateGlobalStatus({ status: 'connecting', qrCode: null });
-        // ✅ CORREÇÃO: Limpa a referência do socket antes de tentar uma nova conexão.
         this.cleanup();
         setTimeout(() => this.connectToWhatsApp(), 5000);
         return;
