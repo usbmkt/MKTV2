@@ -9,7 +9,7 @@ import path from 'path';
 import fs from 'fs';
 import * as schemaShared from "../shared/schema"; 
 import { ZodError } from "zod";
-import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { JWT_SECRET, GEMINI_API_KEY } from './config'; 
 import { WhatsappConnectionService } from './services/whatsapp-connection.service';
 import { handleMCPConversation } from "./mcp_handler";
@@ -115,7 +115,7 @@ async function doRegisterRoutes(app: Express): Promise<HttpServer> {
     apiRouter.get('/funnels', async (req: AuthenticatedRequest, res, next) => { try { res.json(await storage.getFunnels(req.user!.id)); } catch (e) { next(e); }});
     apiRouter.post('/funnels', async (req: AuthenticatedRequest, res, next) => { try { const data = schemaShared.insertFunnelSchema.parse(req.body); res.status(201).json(await storage.createFunnel({ ...data, userId: req.user!.id })); } catch(e){ next(e); }});
 
-    // Metrics (Exemplo)
+    // Metrics
     apiRouter.get('/metrics/campaign/:campaignId', async (req: AuthenticatedRequest, res, next) => { try { res.json(await storage.getMetricsForCampaign(parseInt(req.params.campaignId), req.user!.id)); } catch(e){ next(e); }});
 
     // Copies
@@ -143,7 +143,6 @@ async function doRegisterRoutes(app: Express): Promise<HttpServer> {
     apiRouter.put('/alerts/:id/read', async (req: AuthenticatedRequest, res, next) => { try { await storage.markAlertAsRead(parseInt(req.params.id), req.user!.id); res.status(200).json({ success: true }); } catch (e) { next(e); }});
     
     // ROTAS DE FLUXOS (WhatsApp)
-    // ✅ CORREÇÃO APLICADA AQUI: Lógica de parsing do campaignId robustecida.
     apiRouter.get('/flows', async (req: AuthenticatedRequest, res, next) => {
         try {
             const userId = req.user!.id;
