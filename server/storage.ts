@@ -125,6 +125,54 @@ export class DatabaseStorage {
     return updatedFlow;
   }
   async deleteFlow(id: number, userId: number): Promise<boolean> { const result = await db.delete(schema.flows).where(and(eq(schema.flows.id, id), eq(schema.flows.userId, userId))); return (result.rowCount ?? 0) > 0; }
+
+  // --- MÉTODOS PARA O MOTOR DE FLUXO ---
+  
+  async findTriggerFlow(userId: number, triggerText?: string): Promise<schema.Flow | undefined> {
+    // Lógica simples por enquanto: pega o primeiro fluxo ativo do usuário.
+    // Futuramente, pode verificar o triggerText contra palavras-chave nos nós de gatilho.
+    const [flow] = await db.select()
+      .from(schema.flows)
+      .where(and(
+        eq(schema.flows.userId, userId),
+        eq(schema.flows.status, 'active')
+      ))
+      .orderBy(asc(schema.flows.createdAt))
+      .limit(1);
+    return flow;
+  }
+
+  async getFlowUserState(userId: number, contactJid: string): Promise<schema.WhatsappFlowUserState | undefined> {
+    const [state] = await db.select()
+      .from(schema.whatsappFlowUserStates)
+      .where(and(
+        eq(schema.whatsappFlowUserStates.userId, userId),
+        eq(schema.whatsappFlowUserStates.contactJid, contactJid)
+      ))
+      .limit(1);
+    return state;
+  }
+  
+  async createFlowUserState(state: Omit<schema.InsertFlowUserState, 'id'>): Promise<schema.WhatsappFlowUserState> {
+    const [newState] = await db.insert(schema.whatsappFlowUserStates)
+      .values(state)
+      .returning();
+    if (!newState) throw new Error("Falha ao criar o estado do usuário no fluxo.");
+    return newState;
+  }
+
+  async updateFlowUserState(id: number, state: Partial<Omit<schema.InsertFlowUserState, 'id' | 'userId' | 'contactJid'>>): Promise<schema.WhatsappFlowUserState | undefined> {
+    const [updatedState] = await db.update(schema.whatsappFlowUserStates)
+      .set({ ...state, lastInteractionAt: new Date() })
+      .where(eq(schema.whatsappFlowUserStates.id, id))
+      .returning();
+    return updatedState;
+  }
+
+  async deleteFlowUserState(id: number): Promise<boolean> {
+     const result = await db.delete(schema.whatsappFlowUserStates).where(eq(schema.whatsappFlowUserStates.id, id));
+     return (result.rowCount ?? 0) > 0;
+  }
 }
 
 export const storage = new DatabaseStorage();
