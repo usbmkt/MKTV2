@@ -40,7 +40,7 @@ interface Contact {
   contactNumber: string;
   contactName: string | null;
   lastMessage: string;
-  timestamp: string; // Vem como string da API
+  timestamp: string;
   unreadCount: number;
 }
 
