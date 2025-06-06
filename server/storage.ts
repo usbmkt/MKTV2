@@ -1,85 +1,234 @@
 // server/storage.ts
 import { db } from './db.js';
 import * as schema from '../shared/schema.js';
-import { eq, count, sum, desc, and, or, gte, isNull, asc, ilike, SQL } from 'drizzle-orm';
+import { eq, and, sql, desc, isNull, or } from 'drizzle-orm';
 import bcrypt from 'bcrypt';
-import { z } from 'zod';
-import { logger } from './logger.js';
 
-const chartColors = { palette: [ 'rgba(75, 192, 192, 1)', 'rgba(255, 99, 132, 1)', 'rgba(54, 162, 235, 1)', 'rgba(255, 206, 86, 1)', 'rgba(153, 102, 255, 1)', 'rgba(255, 159, 64, 1)', 'rgba(200, 200, 200, 1)' ], background: [ 'rgba(75, 192, 192, 0.2)', 'rgba(255, 99, 132, 0.2)', 'rgba(54, 162, 235, 0.2)', 'rgba(255, 206, 86, 0.2)', 'rgba(153, 102, 255, 0.2)', 'rgba(255, 159, 64, 0.2)', 'rgba(200, 200, 200, 0.2)' ] };
-function generateSimulatedLineChartData(label: string, startValue: number, countNum: number, maxFluctuation: number, color: string): { labels: string[], datasets: { label: string, data: number[], borderColor: string, backgroundColor: string, fill: boolean, tension: number }[] } { const dataPoints: number[] = []; const labels: string[] = []; let currentValue = startValue; for (let i = 0; i < countNum; i++) { labels.push(`Dia ${i + 1}`); dataPoints.push(Math.round(currentValue)); currentValue += (Math.random() * maxFluctuation * 2) - maxFluctuation; if (currentValue < 0) currentValue = 0; } return { labels: labels, datasets: [ { label: label, data: dataPoints, borderColor: color, backgroundColor: color.replace('1)', '0.2)'), fill: true, tension: 0.4, }, ], }; }
-function generateSimulatedBarChartData(label: string, categories: string[], baseValue: number, maxFluctuation: number, colors: string[]): { labels: string[], datasets: { label: string, data: number[], backgroundColor: string[] }[] } { const dataPoints: number[] = categories.map(() => Math.round(baseValue + (Math.random() * maxFluctuation * 2) - maxFluctuation)); return { labels: categories, datasets: [ { label: label, data: dataPoints, backgroundColor: colors, }, ], }; }
-function generateSimulatedDoughnutChartData(chartLabels: string[], baseValue: number, maxFluctuation: number, colors: string[]): { labels: string[], datasets: { data: number[], backgroundColor: string[], borderWidth: number }[] } { const dataPoints: number[] = chartLabels.map(() => Math.round(baseValue + (Math.random() * maxFluctuation * 2) - maxFluctuation)); return { labels: chartLabels, datasets: [ { data: dataPoints, backgroundColor: colors.map(color => color.replace('1)', '0.8)')), borderWidth: 0, }, ], }; }
+// Tipos para facilitar a passagem de dados com userId
+type InsertCampaignWithUser = typeof schema.campaigns.$inferInsert;
+type InsertCreativeWithUser = typeof schema.creatives.$inferInsert;
+type InsertFunnelWithUser = typeof schema.funnels.$inferInsert;
+type InsertCopyWithUser = typeof schema.copies.$inferInsert;
+type InsertLandingPageWithUser = typeof schema.landingPages.$inferInsert;
+type InsertBudgetWithUser = typeof schema.budgets.$inferInsert;
+type InsertFlowWithUser = typeof schema.flows.$inferInsert;
+type InsertWhatsappTemplateWithUser = typeof schema.whatsappMessageTemplates.$inferInsert;
+type InsertWhatsappMessageWithUser = typeof schema.whatsappMessages.$inferInsert;
 
-export class DatabaseStorage {
-  async getUser(id: number): Promise<schema.User | undefined> { const result = await db.select().from(schema.users).where(eq(schema.users.id, id)).limit(1); return result[0]; }
-  async getUserByUsername(username: string): Promise<schema.User | undefined> { const result = await db.select().from(schema.users).where(eq(schema.users.username, username)).limit(1); return result[0]; }
-  async getUserByEmail(email: string): Promise<schema.User | undefined> { const result = await db.select().from(schema.users).where(eq(schema.users.email, email)).limit(1); return result[0]; }
-  async createUser(userData: schema.InsertUser): Promise<schema.User> { const hashedPassword = await bcrypt.hash(userData.password, 10); const [newUser] = await db.insert(schema.users).values({ ...userData, password: hashedPassword, }).returning(); if (!newUser) throw new Error("Falha ao criar usuário."); return newUser; }
-  async validatePassword(password: string, hashedPassword: string): Promise<boolean> { return bcrypt.compare(password, hashedPassword); }
-  async getCampaigns(userId: number, limit?: number): Promise<schema.Campaign[]> { let query = db.select().from(schema.campaigns).where(eq(schema.campaigns.userId, userId)).orderBy(desc(schema.campaigns.createdAt)); if (limit) { return query.limit(limit); } return query; }
-  async getCampaign(id: number, userId: number): Promise<schema.Campaign | undefined> { const [campaign] = await db.select().from(schema.campaigns).where(and(eq(schema.campaigns.id, id), eq(schema.campaigns.userId, userId))).limit(1); return campaign; }
-  async createCampaign(campaignData: schema.InsertCampaign): Promise<schema.Campaign> { const [newCampaign] = await db.insert(schema.campaigns).values(campaignData).returning(); if (!newCampaign) throw new Error("Falha ao criar campanha."); return newCampaign; }
-  async updateCampaign(id: number, campaignData: Partial<Omit<schema.InsertCampaign, 'userId'>>, userId: number): Promise<schema.Campaign | undefined> { const [updatedCampaign] = await db.update(schema.campaigns).set({ ...campaignData, updatedAt: new Date() }).where(and(eq(schema.campaigns.id, id), eq(schema.campaigns.userId, userId))).returning(); return updatedCampaign; }
-  async deleteCampaign(id: number, userId: number): Promise<boolean> { const result = await db.delete(schema.campaigns).where(and(eq(schema.campaigns.id, id), eq(schema.campaigns.userId, userId))); return (result.rowCount ?? 0) > 0; }
-  async getCreatives(userId: number, campaignId?: number | null): Promise<schema.Creative[]> { const conditions = [eq(schema.creatives.userId, userId)]; if (campaignId !== undefined) { conditions.push(campaignId === null ? isNull(schema.creatives.campaignId) : eq(schema.creatives.campaignId, campaignId)); } return db.select().from(schema.creatives).where(and(...conditions)).orderBy(desc(schema.creatives.createdAt));}
-  async getCreative(id: number, userId: number): Promise<schema.Creative | undefined> { const [creative] = await db.select().from(schema.creatives).where(and(eq(schema.creatives.id, id), eq(schema.creatives.userId, userId))).limit(1); return creative; }
-  async createCreative(creativeData: schema.InsertCreative): Promise<schema.Creative> { const [newCreative] = await db.insert(schema.creatives).values(creativeData).returning(); if (!newCreative) throw new Error("Falha ao criar criativo."); return newCreative; }
-  async updateCreative(id: number, creativeData: Partial<Omit<schema.InsertCreative, 'userId'>>, userId: number): Promise<schema.Creative | undefined> { const [updatedCreative] = await db.update(schema.creatives).set({ ...creativeData, updatedAt: new Date() }).where(and(eq(schema.creatives.id, id), eq(schema.creatives.userId, userId))).returning(); return updatedCreative; }
-  async deleteCreative(id: number, userId: number): Promise<boolean> { const result = await db.delete(schema.creatives).where(and(eq(schema.creatives.id, id), eq(schema.creatives.userId, userId))); return (result.rowCount ?? 0) > 0; }
-  async getMetricsForCampaign(campaignId: number, userId: number): Promise<schema.Metric[]> { return db.select().from(schema.metrics).where(eq(schema.metrics.campaignId, campaignId)).orderBy(desc(schema.metrics.date)); }
-  async createMetric(metricData: z.infer<typeof schema.insertMetricSchema>): Promise<schema.Metric> { const [newMetric] = await db.insert(schema.metrics).values(metricData).returning(); if (!newMetric) throw new Error("Falha ao criar métrica."); return newMetric; }
-  async getMessages(userId: number, contactNumber?: string): Promise<schema.WhatsappMessage[]> { const conditions = [eq(schema.whatsappMessages.userId, userId)]; if (contactNumber) { conditions.push(eq(schema.whatsappMessages.contactNumber, contactNumber)); } return db.select().from(schema.whatsappMessages).where(and(...conditions)).orderBy(asc(schema.whatsappMessages.timestamp)); }
-  async createMessage(messageData: Omit<schema.InsertWhatsappMessage, 'userId'> & {userId: number}): Promise<schema.WhatsappMessage> { const [newMessage] = await db.insert(schema.whatsappMessages).values(messageData).returning(); if (!newMessage) throw new Error("Falha ao criar mensagem."); return newMessage; }
-  async markMessageAsRead(id: number, userId: number): Promise<boolean> { const result = await db.update(schema.whatsappMessages).set({ isRead: true }).where(and(eq(schema.whatsappMessages.id, id), eq(schema.whatsappMessages.userId, userId), eq(schema.whatsappMessages.isRead, false))); return (result.rowCount ?? 0) > 0; }
-  async getContacts(userId: number): Promise<{ contactNumber: string; contactName: string | null; lastMessage: string; timestamp: Date, unreadCount: number }[]> { const allMessages = await db.select().from(schema.whatsappMessages).where(eq(schema.whatsappMessages.userId, userId)).orderBy(desc(schema.whatsappMessages.timestamp)); const contactsMap = new Map<string, { contactNumber: string; contactName: string | null; lastMessage: string; timestamp: Date, unreadCount: number }>(); for (const msg of allMessages) { if (!contactsMap.has(msg.contactNumber)) { contactsMap.set(msg.contactNumber, { contactNumber: msg.contactNumber, contactName: msg.contactName || null, lastMessage: msg.message, timestamp: new Date(msg.timestamp), unreadCount: 0, }); } const contact = contactsMap.get(msg.contactNumber)!; if (!msg.isRead && msg.direction === 'incoming') { contact.unreadCount++; } } return Array.from(contactsMap.values()).sort((a,b) => b.timestamp.getTime() - a.timestamp.getTime()); }
-  async getCopies(userId: number, campaignId?: number | null, phase?: string, purposeKey?: string, searchTerm?: string): Promise<schema.Copy[]> { const conditions: (SQL | undefined)[] = [eq(schema.copies.userId, userId)]; if (campaignId !== undefined) { conditions.push(campaignId === null ? isNull(schema.copies.campaignId) : eq(schema.copies.campaignId, campaignId)); } if (phase && phase !== 'all') { conditions.push(eq(schema.copies.launchPhase, phase as schema.LaunchPhase));} if (purposeKey && purposeKey !== 'all') { conditions.push(eq(schema.copies.purposeKey, purposeKey)); } if (searchTerm && searchTerm.trim() !== '') { const searchPattern = `%${searchTerm.toLowerCase()}%`; conditions.push( or( ilike(schema.copies.title, searchPattern), ilike(schema.copies.content, searchPattern) )); } return db.select().from(schema.copies).where(and(...conditions.filter(c => c !== undefined) as SQL[])).orderBy(desc(schema.copies.createdAt)); }
-  async createCopy(copyData: schema.InsertCopy): Promise<schema.Copy> { const [newCopy] = await db.insert(schema.copies).values(copyData).returning(); if (!newCopy) throw new Error("Falha ao salvar a copy."); return newCopy; }
-  async updateCopy(id: number, copyData: Partial<Omit<schema.InsertCopy, 'userId' | 'id' | 'createdAt'>>, userId: number): Promise<schema.Copy | undefined> { const [updatedCopy] = await db.update(schema.copies).set({ ...copyData, lastUpdatedAt: new Date() }).where(and(eq(schema.copies.id, id), eq(schema.copies.userId, userId))).returning(); return updatedCopy; }
-  async deleteCopy(id: number, userId: number): Promise<boolean> { const result = await db.delete(schema.copies).where(and(eq(schema.copies.id, id), eq(schema.copies.userId, userId))); return (result.rowCount ?? 0) > 0; }
-  async getAlerts(userId: number, onlyUnread?: boolean): Promise<schema.Alert[]> { const conditions = [eq(schema.alerts.userId, userId)]; if (onlyUnread) { conditions.push(eq(schema.alerts.isRead, false)); } return db.select().from(schema.alerts).where(and(...conditions)).orderBy(desc(schema.alerts.createdAt)); }
-  async createAlert(alertData: schema.InsertAlert): Promise<schema.Alert> { const [newAlert] = await db.insert(schema.alerts).values(alertData).returning(); if (!newAlert) throw new Error("Falha ao criar alerta."); return newAlert; }
-  async markAlertAsRead(id: number, userId: number): Promise<boolean> { const result = await db.update(schema.alerts).set({ isRead: true }).where(and(eq(schema.alerts.id, id), eq(schema.alerts.userId, userId), eq(schema.alerts.isRead, false))); return (result.rowCount ?? 0) > 0; }
-  async getBudgets(userId: number, campaignId?: number | null): Promise<schema.Budget[]> { const conditions = [eq(schema.budgets.userId, userId)]; if (campaignId !== undefined) { conditions.push(campaignId === null ? isNull(schema.budgets.campaignId) : eq(schema.budgets.campaignId, campaignId)); } return db.select().from(schema.budgets).where(and(...conditions)).orderBy(desc(schema.budgets.createdAt)); }
-  async createBudget(budgetData: schema.InsertBudget): Promise<schema.Budget> { const [newBudget] = await db.insert(schema.budgets).values(budgetData).returning(); if (!newBudget) throw new Error("Falha ao criar orçamento."); return newBudget; }
-  async updateBudget(id: number, budgetData: Partial<Omit<schema.InsertBudget, 'userId' | 'campaignId'>>, userId: number): Promise<schema.Budget | undefined> { const [updatedBudget] = await db.update(schema.budgets).set(budgetData).where(and(eq(schema.budgets.id, id), eq(schema.budgets.userId, userId))).returning(); return updatedBudget; }
-  async getLandingPages(userId: number): Promise<schema.LandingPage[]> { return db.select().from(schema.landingPages).where(eq(schema.landingPages.userId, userId)).orderBy(desc(schema.landingPages.createdAt)); }
-  async getLandingPage(id: number, userId: number): Promise<schema.LandingPage | undefined> { const [lp] = await db.select().from(schema.landingPages).where(and(eq(schema.landingPages.id, id), eq(schema.landingPages.userId, userId))).limit(1); return lp; }
-  async getLandingPageBySlug(slug: string): Promise<schema.LandingPage | undefined> { const [lp] = await db.select().from(schema.landingPages).where(eq(schema.landingPages.slug, slug)).limit(1); return lp; }
-  async getLandingPageByStudioProjectId(studioProjectId: string, userId: number): Promise<schema.LandingPage | undefined> { const [lp] = await db.select().from(schema.landingPages).where(and(eq(schema.landingPages.studioProjectId, studioProjectId), eq(schema.landingPages.userId, userId))).limit(1); return lp; }
-  async createLandingPage(lpData: schema.InsertLandingPage): Promise<schema.LandingPage> { const [newLP] = await db.insert(schema.landingPages).values(lpData).returning(); if (!newLP) throw new Error("Falha ao criar landing page."); return newLP; }
-  async updateLandingPage(id: number, lpData: Partial<Omit<schema.InsertLandingPage, 'userId'>>, userId: number): Promise<schema.LandingPage | undefined> { const [updatedLP] = await db.update(schema.landingPages).set({ ...lpData, updatedAt: new Date() }).where(and(eq(schema.landingPages.id, id), eq(schema.landingPages.userId, userId))).returning(); return updatedLP; }
-  async deleteLandingPage(id: number, userId: number): Promise<boolean> { const result = await db.delete(schema.landingPages).where(and(eq(schema.landingPages.id, id), eq(schema.landingPages.userId, userId))); return (result.rowCount ?? 0) > 0; }
-  async createChatSession(userId: number, title: string = 'Nova Conversa'): Promise<schema.ChatSession> { const [newSession] = await db.insert(schema.chatSessions).values({ userId, title, createdAt: new Date(), updatedAt: new Date() }).returning(); if (!newSession) throw new Error("Falha ao criar sessão de chat."); return newSession; }
-  async getChatSession(sessionId: number, userId: number): Promise<schema.ChatSession | undefined> { const [session] = await db.select().from(schema.chatSessions).where(and(eq(schema.chatSessions.id, sessionId), eq(schema.chatSessions.userId, userId))).limit(1); return session; }
-  async getChatSessions(userId: number): Promise<schema.ChatSession[]> { return db.select().from(schema.chatSessions).where(eq(schema.chatSessions.userId, userId)).orderBy(desc(schema.chatSessions.updatedAt)); }
-  async updateChatSessionTitle(sessionId: number, userId: number, newTitle: string): Promise<schema.ChatSession | undefined> { const [updatedSession] = await db.update(schema.chatSessions).set({ title: newTitle, updatedAt: new Date() }).where(and(eq(schema.chatSessions.id, sessionId), eq(schema.chatSessions.userId, userId))).returning(); return updatedSession; }
-  async deleteChatSession(sessionId: number, userId: number): Promise<boolean> { const result = await db.delete(schema.chatSessions).where(and(eq(schema.chatSessions.id, sessionId), eq(schema.chatSessions.userId, userId))); return (result.rowCount ?? 0) > 0; }
-  async addChatMessage(messageData: schema.InsertChatMessage): Promise<schema.ChatMessage> { const [newMessage] = await db.insert(schema.chatMessages).values({ ...messageData, timestamp: new Date() }).returning(); if (!newMessage) throw new Error("Falha ao adicionar mensagem."); await db.update(schema.chatSessions).set({ updatedAt: new Date() }).where(eq(schema.chatSessions.id, messageData.sessionId)); return newMessage; }
-  async getChatMessages(sessionId: number, userId: number): Promise<schema.ChatMessage[]> { const sessionExists = await db.query.chatSessions.findFirst({ where: and(eq(schema.chatSessions.id, sessionId), eq(schema.chatSessions.userId, userId)) }); if (!sessionExists) return []; return db.select().from(schema.chatMessages).where(eq(schema.chatMessages.sessionId, sessionId)).orderBy(asc(schema.chatMessages.timestamp)); }
-  async getFunnels(userId: number, campaignId?: number | null): Promise<schema.Funnel[]> { return db.query.funnels.findMany({ where: (funnels, { eq, and, isNull }) => and(eq(funnels.userId, userId), campaignId !== undefined ? (campaignId === null ? isNull(funnels.campaignId) : eq(funnels.campaignId, campaignId)) : undefined), with: { stages: { orderBy: [asc(schema.funnelStages.order)] } }, orderBy: [desc(schema.funnels.createdAt)] }); }
-  async getFunnel(id: number, userId: number): Promise<schema.Funnel | undefined> { return db.query.funnels.findFirst({ where: and(eq(schema.funnels.id, id), eq(schema.funnels.userId, userId)), with: { stages: { orderBy: [asc(schema.funnelStages.order)] } } }); }
-  async createFunnel(funnelData: schema.InsertFunnel): Promise<schema.Funnel> { const [newFunnel] = await db.insert(schema.funnels).values(funnelData).returning(); return newFunnel; }
-  async updateFunnel(id: number, funnelData: Partial<Omit<schema.InsertFunnel, 'userId' | 'campaignId'>>, userId: number): Promise<schema.Funnel | undefined> { const [updatedFunnel] = await db.update(schema.funnels).set({ ...funnelData, updatedAt: new Date() }).where(and(eq(schema.funnels.id, id), eq(schema.funnels.userId, userId))).returning(); return updatedFunnel; }
-  async deleteFunnel(id: number, userId: number): Promise<boolean> { const result = await db.delete(schema.funnels).where(and(eq(schema.funnels.id, id), eq(schema.funnels.userId, userId))); return (result.rowCount ?? 0) > 0; }
-  async getFunnelStages(funnelId: number, userId: number): Promise<schema.FunnelStage[]> { const funnelOwner = await db.query.funnels.findFirst({ columns: { id: true }, where: and(eq(schema.funnels.id, funnelId), eq(schema.funnels.userId, userId)) }); if (!funnelOwner) return []; return db.select().from(schema.funnelStages).where(eq(schema.funnelStages.funnelId, funnelId)).orderBy(asc(schema.funnelStages.order), desc(schema.funnelStages.createdAt)); }
-  async createFunnelStage(stageData: schema.InsertFunnelStage): Promise<schema.FunnelStage> { const [newStage] = await db.insert(schema.funnelStages).values(stageData).returning(); return newStage; }
-  async updateFunnelStage(id: number, stageData: Partial<Omit<schema.InsertFunnelStage, 'funnelId'>>, userId: number): Promise<schema.FunnelStage | undefined> { const [updatedStage] = await db.update(schema.funnelStages).set({ ...stageData, updatedAt: new Date() }).where(eq(schema.funnelStages.id, id)).returning(); return updatedStage; }
-  async deleteFunnelStage(id: number, userId: number): Promise<boolean> { const result = await db.delete(schema.funnelStages).where(eq(schema.funnelStages.id, id)); return (result.rowCount ?? 0) > 0; }
-  async getFlows(userId: number, campaignId?: number | null): Promise<schema.Flow[]> { const conditions: (SQL | undefined)[] = [eq(schema.flows.userId, userId)]; if (campaignId !== undefined) { conditions.push(campaignId === null ? isNull(schema.flows.campaignId) : eq(schema.flows.campaignId, campaignId)); } return db.select().from(schema.flows).where(and(...conditions.filter(c => c !== undefined) as SQL[])).orderBy(desc(schema.flows.createdAt)); }
-  async getFlow(id: number, userId: number): Promise<schema.Flow | undefined> { const [flow] = await db.select().from(schema.flows).where(and(eq(schema.flows.id, id), eq(schema.flows.userId, userId))).limit(1); return flow;}
-  async createFlow(flowData: schema.InsertFlow): Promise<schema.Flow> { const [newFlow] = await db.insert(schema.flows).values(flowData).returning(); logger.info({ flow: newFlow }, '[DB_CREATE_FLOW] Fluxo criado no banco:'); return newFlow; }
-  async updateFlow(id: number, flowData: Partial<Omit<schema.InsertFlow, 'userId'>>, userId: number): Promise<schema.Flow | undefined> { const dataToSet = { ...flowData, updatedAt: new Date(), }; const [updatedFlow] = await db.update(schema.flows).set(dataToSet).where(and(eq(schema.flows.id, id), eq(schema.flows.userId, userId))).returning(); logger.info({ flow: updatedFlow }, '[DB_UPDATE_FLOW] Fluxo atualizado no banco.'); return updatedFlow; }
-  async deleteFlow(id: number, userId: number): Promise<boolean> { const result = await db.delete(schema.flows).where(and(eq(schema.flows.id, id), eq(schema.flows.userId, userId))); return (result.rowCount ?? 0) > 0; }
-  async findTriggerFlow(userId: number, triggerText?: string): Promise<schema.Flow | undefined> { const [flow] = await db.select().from(schema.flows).where(and(eq(schema.flows.userId, userId),eq(schema.flows.status, 'active'))).orderBy(asc(schema.flows.createdAt)).limit(1); return flow; }
-  async getFlowUserState(userId: number, contactJid: string): Promise<schema.WhatsappFlowUserState | undefined> { const [state] = await db.select().from(schema.whatsappFlowUserStates).where(and(eq(schema.whatsappFlowUserStates.userId, userId),eq(schema.whatsappFlowUserStates.contactJid, contactJid))).limit(1); return state; }
-  async createFlowUserState(state: schema.InsertFlowUserState): Promise<schema.WhatsappFlowUserState> { const [newState] = await db.insert(schema.whatsappFlowUserStates).values(state).returning(); if (!newState) throw new Error("Falha ao criar o estado do usuário no fluxo."); return newState; }
-  async updateFlowUserState(id: number, state: Partial<Omit<schema.InsertFlowUserState, 'id' | 'userId' | 'contactJid'>>): Promise<schema.WhatsappFlowUserState | undefined> { const [updatedState] = await db.update(schema.whatsappFlowUserStates).set({ ...state, lastInteractionAt: new Date() }).where(eq(schema.whatsappFlowUserStates.id, id)).returning(); return updatedState; }
-  async deleteFlowUserState(id: number): Promise<boolean> { const result = await db.delete(schema.whatsappFlowUserStates).where(eq(schema.whatsappFlowUserStates.id, id)); return (result.rowCount ?? 0) > 0; }
-  async getWhatsappTemplates(userId: number): Promise<schema.WhatsappMessageTemplate[]> { logger.info({ userId }, "Buscando templates de mensagem do WhatsApp."); return db.select().from(schema.whatsappMessageTemplates).where(eq(schema.whatsappMessageTemplates.userId, userId)).orderBy(desc(schema.whatsappMessageTemplates.createdAt)); }
-  async createWhatsappTemplate(data: schema.InsertWhatsappMessageTemplate & { userId: number }): Promise<schema.WhatsappMessageTemplate> { logger.info({ userId: data.userId, name: data.name }, "Criando novo template de mensagem."); const [newTemplate] = await db.insert(schema.whatsappMessageTemplates).values(data).returning(); if (!newTemplate) { throw new Error("Falha ao criar o template de mensagem."); } return newTemplate; }
-  async updateWhatsappTemplate(id: number, data: Partial<Omit<schema.InsertWhatsappMessageTemplate, 'userId'>>, userId: number): Promise<schema.WhatsappMessageTemplate | undefined> { logger.info({ userId, templateId: id }, "Atualizando template de mensagem."); const [updatedTemplate] = await db.update(schema.whatsappMessageTemplates).set({ ...data, updatedAt: new Date() }).where(and(eq(schema.whatsappMessageTemplates.id, id), eq(schema.whatsappMessageTemplates.userId, userId))).returning(); return updatedTemplate; }
-  async deleteWhatsappTemplate(id: number, userId: number): Promise<boolean> { logger.info({ userId, templateId: id }, "Deletando template de mensagem."); const result = await db.delete(schema.whatsappMessageTemplates).where(and(eq(schema.whatsappMessageTemplates.id, id), eq(schema.whatsappMessageTemplates.userId, userId))); return (result.rowCount ?? 0) > 0; }
-}
+export const storage = {
+    // User
+    async getUser(id: number) {
+        return await db.query.users.findFirst({ where: eq(schema.users.id, id) });
+    },
+    async getUserByEmail(email: string) {
+        return await db.query.users.findFirst({ where: eq(schema.users.email, email) });
+    },
+    async createUser(userData: typeof schema.insertUserSchema._type) {
+        const hashedPassword = await bcrypt.hash(userData.password, 10);
+        const [newUser] = await db.insert(schema.users).values({ ...userData, password: hashedPassword }).returning();
+        return newUser;
+    },
+    async validatePassword(password: string, hash: string) {
+        return await bcrypt.compare(password, hash);
+    },
 
-export const storage = new DatabaseStorage();
+    // Dashboard
+    async getDashboardData(userId: number) {
+        const campaigns = await this.getCampaigns(userId);
+        const funnels = await this.getFunnels(userId);
+        const creatives = await this.getCreatives(userId);
+        return {
+            campaignsCount: campaigns.length,
+            funnelsCount: funnels.length,
+            creativesCount: creatives.length,
+        };
+    },
+
+    // Campaigns
+    async getCampaigns(userId: number) {
+        return await db.query.campaigns.findMany({ where: eq(schema.campaigns.userId, userId), orderBy: [desc(schema.campaigns.createdAt)] });
+    },
+    async getCampaign(id: number, userId: number) {
+        return await db.query.campaigns.findFirst({ where: and(eq(schema.campaigns.id, id), eq(schema.campaigns.userId, userId)) });
+    },
+    async createCampaign(campaignData: InsertCampaignWithUser) {
+        const [newCampaign] = await db.insert(schema.campaigns).values(campaignData).returning();
+        return newCampaign;
+    },
+    async updateCampaign(id: number, campaignData: Partial<InsertCampaignWithUser>, userId: number) {
+        const [updatedCampaign] = await db.update(schema.campaigns).set(campaignData).where(and(eq(schema.campaigns.id, id), eq(schema.campaigns.userId, userId))).returning();
+        return updatedCampaign;
+    },
+    async deleteCampaign(id: number, userId: number) {
+        await db.delete(schema.campaigns).where(and(eq(schema.campaigns.id, id), eq(schema.campaigns.userId, userId)));
+    },
+
+    // Creatives
+    async getCreatives(userId: number, campaignId?: number | null) {
+        const conditions = [eq(schema.creatives.userId, userId)];
+        if (campaignId) {
+            conditions.push(eq(schema.creatives.campaignId, campaignId));
+        } else if (campaignId === null) {
+            conditions.push(isNull(schema.creatives.campaignId));
+        }
+        return await db.query.creatives.findMany({ where: and(...conditions), orderBy: [desc(schema.creatives.createdAt)] });
+    },
+    async createCreative(creativeData: InsertCreativeWithUser) {
+        const [newCreative] = await db.insert(schema.creatives).values(creativeData).returning();
+        return newCreative;
+    },
+    async updateCreative(id: number, creativeData: Partial<InsertCreativeWithUser>, userId: number) {
+        const [updatedCreative] = await db.update(schema.creatives).set(creativeData).where(and(eq(schema.creatives.id, id), eq(schema.creatives.userId, userId))).returning();
+        return updatedCreative;
+    },
+    async deleteCreative(id: number, userId: number) {
+        await db.delete(schema.creatives).where(and(eq(schema.creatives.id, id), eq(schema.creatives.userId, userId)));
+    },
+
+    // Funnels
+    async getFunnels(userId: number) {
+        return await db.query.funnels.findMany({ where: eq(schema.funnels.userId, userId), orderBy: [desc(schema.funnels.createdAt)] });
+    },
+    async createFunnel(funnelData: InsertFunnelWithUser) {
+        const [newFunnel] = await db.insert(schema.funnels).values(funnelData).returning();
+        return newFunnel;
+    },
+
+    // Copies
+    async getCopies(userId: number, campaignId?: number, phase?: string, purpose?: string, search?: string) {
+        let query = db.select().from(schema.copies).where(eq(schema.copies.userId, userId));
+        if (campaignId) query = query.where(eq(schema.copies.campaignId, campaignId));
+        if (phase) query = query.where(eq(schema.copies.phase, phase));
+        if (purpose) query = query.where(eq(schema.copies.purpose, purpose));
+        if (search) query = query.where(sql`"text" ILIKE ${'%' + search + '%'}`);
+        return await query.orderBy(desc(schema.copies.createdAt));
+    },
+    async createCopy(copyData: InsertCopyWithUser) {
+        const [newCopy] = await db.insert(schema.copies).values(copyData).returning();
+        return newCopy;
+    },
+    async deleteCopy(id: number, userId: number) {
+        await db.delete(schema.copies).where(and(eq(schema.copies.id, id), eq(schema.copies.userId, userId)));
+    },
+
+    // Landing Pages
+    async getLandingPages(userId: number) {
+        return await db.query.landingPages.findMany({ where: eq(schema.landingPages.userId, userId), orderBy: [desc(schema.landingPages.createdAt)] });
+    },
+    async getLandingPageBySlug(slug: string) {
+        return await db.query.landingPages.findFirst({ where: eq(schema.landingPages.slug, slug) });
+    },
+    async getLandingPageByStudioProjectId(studioProjectId: string, userId: number) {
+        return await db.query.landingPages.findFirst({ where: and(eq(schema.landingPages.studioProjectId, studioProjectId), eq(schema.landingPages.userId, userId)) });
+    },
+    async createLandingPage(lpData: InsertLandingPageWithUser) {
+        const [newLp] = await db.insert(schema.landingPages).values(lpData).returning();
+        return newLp;
+    },
+    async updateLandingPage(id: number, lpData: Partial<InsertLandingPageWithUser>, userId: number) {
+        const [updatedLp] = await db.update(schema.landingPages).set(lpData).where(and(eq(schema.landingPages.id, id), eq(schema.landingPages.userId, userId))).returning();
+        return updatedLp;
+    },
+    async deleteLandingPage(id: number, userId: number) {
+        await db.delete(schema.landingPages).where(and(eq(schema.landingPages.id, id), eq(schema.landingPages.userId, userId)));
+    },
+
+    // Budgets
+    async getBudgets(userId: number) {
+        return await db.query.budgets.findMany({ where: eq(schema.budgets.userId, userId), orderBy: [desc(schema.budgets.createdAt)] });
+    },
+    async createBudget(budgetData: InsertBudgetWithUser) {
+        const [newBudget] = await db.insert(schema.budgets).values(budgetData).returning();
+        return newBudget;
+    },
+
+    // Alerts
+    async getAlerts(userId: number, unreadOnly: boolean = false) {
+        const conditions = [eq(schema.alerts.userId, userId)];
+        if (unreadOnly) conditions.push(eq(schema.alerts.isRead, false));
+        return await db.query.alerts.findMany({ where: and(...conditions), orderBy: [desc(schema.alerts.createdAt)] });
+    },
+    async markAlertAsRead(id: number, userId: number) {
+        await db.update(schema.alerts).set({ isRead: true }).where(and(eq(schema.alerts.id, id), eq(schema.alerts.userId, userId)));
+    },
+
+    // Flows
+    async getFlow(id: number, userId: number) {
+        return await db.query.flows.findFirst({ where: and(eq(schema.flows.id, id), eq(schema.flows.userId, userId)) });
+    },
+    async getFlows(userId: number, campaignId?: number | null) {
+        const conditions = [eq(schema.flows.userId, userId)];
+        if (campaignId) {
+            conditions.push(eq(schema.flows.campaignId, campaignId));
+        } else if (campaignId === null) {
+            conditions.push(isNull(schema.flows.campaignId));
+        }
+        return await db.query.flows.findMany({ where: and(...conditions), orderBy: [desc(schema.flows.createdAt)] });
+    },
+    async createFlow(flowData: InsertFlowWithUser) {
+        const [newFlow] = await db.insert(schema.flows).values(flowData).returning();
+        return newFlow;
+    },
+    async updateFlow(id: number, flowData: Partial<InsertFlowWithUser>, userId: number) {
+        const [updatedFlow] = await db.update(schema.flows).set(flowData).where(and(eq(schema.flows.id, id), eq(schema.flows.userId, userId))).returning();
+        return updatedFlow;
+    },
+    async deleteFlow(id: number, userId: number) {
+        await db.delete(schema.flows).where(and(eq(schema.flows.id, id), eq(schema.flows.userId, userId)));
+    },
+
+    // WhatsApp
+    async getContacts(userId: number) {
+        return await db.selectDistinct({ jid: schema.whatsappMessages.contactNumber })
+            .from(schema.whatsappMessages)
+            .where(eq(schema.whatsappMessages.userId, userId));
+    },
+    async getMessages(userId: number, contactNumber: string) {
+        return await db.query.whatsappMessages.findMany({
+            where: and(eq(schema.whatsappMessages.userId, userId), eq(schema.whatsappMessages.contactNumber, contactNumber)),
+            orderBy: [desc(schema.whatsappMessages.timestamp)]
+        });
+    },
+    async createMessage(messageData: InsertWhatsappMessageWithUser) {
+        const [newMessage] = await db.insert(schema.whatsappMessages).values(messageData).returning();
+        return newMessage;
+    },
+    async getWhatsappTemplates(userId: number) {
+        return await db.query.whatsappMessageTemplates.findMany({ where: eq(schema.whatsappMessageTemplates.userId, userId) });
+    },
+    async createWhatsappTemplate(templateData: InsertWhatsappTemplateWithUser) {
+        const [newTemplate] = await db.insert(schema.whatsappMessageTemplates).values(templateData).returning();
+        return newTemplate;
+    },
+    async updateWhatsappTemplate(id: number, templateData: Partial<InsertWhatsappTemplateWithUser>, userId: number) {
+        const [updatedTemplate] = await db.update(schema.whatsappMessageTemplates).set(templateData).where(and(eq(schema.whatsappMessageTemplates.id, id), eq(schema.whatsappMessageTemplates.userId, userId))).returning();
+        return updatedTemplate;
+    },
+    async deleteWhatsappTemplate(id: number, userId: number) {
+        const result = await db.delete(schema.whatsappMessageTemplates).where(and(eq(schema.whatsappMessageTemplates.id, id), eq(schema.whatsappMessageTemplates.userId, userId)));
+        return result.rowCount > 0;
+    },
+    
+    // Chat / MCP
+    async getChatSessions(userId: number) {
+        return await db.query.chatSessions.findMany({ where: eq(schema.chatSessions.userId, userId), orderBy: [desc(schema.chatSessions.createdAt)] });
+    },
+    async createChatSession(userId: number, title?: string | null) {
+        const [newSession] = await db.insert(schema.chatSessions).values({ userId, title: title || 'Nova Conversa' }).returning();
+        return newSession;
+    },
+    async getChatMessages(sessionId: number, userId: number) {
+        return await db.query.chatMessages.findMany({ where: and(eq(schema.chatMessages.sessionId, sessionId), eq(schema.chatMessages.userId, userId)), orderBy: [schema.chatMessages.createdAt] });
+    },
+    async createChatMessage(messageData: typeof schema.chatMessages.$inferInsert) {
+        const [newMessage] = await db.insert(schema.chatMessages).values(messageData).returning();
+        return newMessage;
+    },
+    async updateChatSessionTitle(sessionId: number, userId: number, newTitle: string) {
+        const [updatedSession] = await db.update(schema.chatSessions).set({ title: newTitle }).where(and(eq(schema.chatSessions.id, sessionId), eq(schema.chatSessions.userId, userId))).returning();
+        return updatedSession;
+    },
+    async deleteChatSession(sessionId: number, userId: number) {
+        await db.delete(schema.chatSessions).where(and(eq(schema.chatSessions.id, sessionId), eq(schema.chatSessions.userId, userId)));
+    }
+};
