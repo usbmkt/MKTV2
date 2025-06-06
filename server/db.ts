@@ -1,18 +1,16 @@
 // server/db.ts
-import dotenv from 'dotenv';
-dotenv.config();
-
-import { drizzle, NodePgDatabase } from 'drizzle-orm/node-postgres';
-import { Pool } from 'pg';
-import * as schema from '../shared/schema'; // Importa todo o schema para o drizzle
+import { drizzle } from 'drizzle-orm/neon-http';
+import { neon } from '@neondatabase/serverless';
+import * as schema from '../shared/schema.js';
+import 'dotenv/config';
 
 if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL não está definida nas variáveis de ambiente.");
+  throw new Error('DATABASE_URL is not set in environment variables');
 }
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-});
+const sql = neon(process.env.DATABASE_URL);
 
-export const db: NodePgDatabase<typeof schema> = drizzle(pool, { schema });
+export const db = drizzle(sql, {
+  schema,
+  logger: process.env.NODE_ENV === 'development' // Ativa logs do Drizzle apenas em desenvolvimento
+});
