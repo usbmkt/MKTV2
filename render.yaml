@@ -17,8 +17,7 @@ services:
           - libasound2
           - libgbm1
           - chromium-browser
-    # ✅ CORREÇÃO APLICADA AQUI: Limpa o cache e depois executa os comandos
-    buildCommand: "rm -rf node_modules package-lock.json && npm cache clean --force && npm install && npm run build && npm run db:generate"
+    buildCommand: "npm cache clean --force && npm install && npm run build && npm run db:generate"
     startCommand: "npm run migrate:deploy && npm start"
     envVars:
       - key: NODE_ENV
