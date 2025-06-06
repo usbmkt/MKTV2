@@ -15,19 +15,32 @@ BEGIN
     END IF;
 END
 $$;
+--> statement-breakpoint
 
--- Cria as tabelas somente se elas não existirem
-CREATE TABLE IF NOT EXISTS "public"."users" (
+-- Cria as tabelas se elas ainda não existirem
+CREATE TABLE IF NOT EXISTS "public"."alerts" (
 	"id" serial PRIMARY KEY NOT NULL,
-	"username" text NOT NULL,
-	"email" text NOT NULL,
-	"password" text NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "users_username_unique" UNIQUE("username"),
-	CONSTRAINT "users_email_unique" UNIQUE("email")
+	"user_id" integer NOT NULL,
+	"campaign_id" integer,
+	"type" text NOT NULL,
+	"title" text NOT NULL,
+	"message" text NOT NULL,
+	"is_read" boolean DEFAULT false NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
-
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "public"."budgets" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"user_id" integer NOT NULL,
+	"campaign_id" integer,
+	"total_budget" numeric(10, 2) NOT NULL,
+	"spent_amount" numeric(10, 2) DEFAULT '0' NOT NULL,
+	"period" text NOT NULL,
+	"start_date" timestamp with time zone NOT NULL,
+	"end_date" timestamp with time zone,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "public"."campaigns" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" integer NOT NULL,
@@ -46,38 +59,7 @@ CREATE TABLE IF NOT EXISTS "public"."campaigns" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
-
-CREATE TABLE IF NOT EXISTS "public"."alerts" (
-	"id" serial PRIMARY KEY NOT NULL,
-	"user_id" integer NOT NULL,
-	"campaign_id" integer,
-	"type" text NOT NULL,
-	"title" text NOT NULL,
-	"message" text NOT NULL,
-	"is_read" boolean DEFAULT false NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS "public"."budgets" (
-	"id" serial PRIMARY KEY NOT NULL,
-	"user_id" integer NOT NULL,
-	"campaign_id" integer,
-	"total_budget" numeric(10, 2) NOT NULL,
-	"spent_amount" numeric(10, 2) DEFAULT '0' NOT NULL,
-	"period" text NOT NULL,
-	"start_date" timestamp with time zone NOT NULL,
-	"end_date" timestamp with time zone,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS "public"."chat_sessions" (
-	"id" serial PRIMARY KEY NOT NULL,
-	"user_id" integer NOT NULL,
-	"title" text DEFAULT 'Nova Conversa' NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
-);
-
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "public"."chat_messages" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"session_id" integer NOT NULL,
@@ -86,7 +68,15 @@ CREATE TABLE IF NOT EXISTS "public"."chat_messages" (
 	"attachment_url" text,
 	"timestamp" timestamp with time zone DEFAULT now() NOT NULL
 );
-
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "public"."chat_sessions" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"user_id" integer NOT NULL,
+	"title" text DEFAULT 'Nova Conversa' NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "public"."copies" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" integer NOT NULL,
@@ -104,7 +94,7 @@ CREATE TABLE IF NOT EXISTS "public"."copies" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"last_updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
-
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "public"."creatives" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" integer NOT NULL,
@@ -119,7 +109,7 @@ CREATE TABLE IF NOT EXISTS "public"."creatives" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
-
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "public"."flows" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" integer NOT NULL,
@@ -130,17 +120,7 @@ CREATE TABLE IF NOT EXISTS "public"."flows" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
-
-CREATE TABLE IF NOT EXISTS "public"."funnels" (
-	"id" serial PRIMARY KEY NOT NULL,
-	"user_id" integer NOT NULL,
-	"campaign_id" integer,
-	"name" text NOT NULL,
-	"description" text,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
-);
-
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "public"."funnel_stages" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"funnel_id" integer NOT NULL,
@@ -151,7 +131,17 @@ CREATE TABLE IF NOT EXISTS "public"."funnel_stages" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
-
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "public"."funnels" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"user_id" integer NOT NULL,
+	"campaign_id" integer,
+	"name" text NOT NULL,
+	"description" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "public"."landing_pages" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" integer NOT NULL,
@@ -168,7 +158,7 @@ CREATE TABLE IF NOT EXISTS "public"."landing_pages" (
 	CONSTRAINT "landing_pages_studio_project_id_unique" UNIQUE("studio_project_id"),
 	CONSTRAINT "landing_pages_slug_unique" UNIQUE("slug")
 );
-
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "public"."metrics" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"campaign_id" integer NOT NULL,
@@ -182,7 +172,18 @@ CREATE TABLE IF NOT EXISTS "public"."metrics" (
 	"leads" integer DEFAULT 0 NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
-
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "public"."users" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"username" text NOT NULL,
+	"email" text NOT NULL,
+	"password" text NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "users_username_unique" UNIQUE("username"),
+	CONSTRAINT "users_email_unique" UNIQUE("email")
+);
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "public"."whatsapp_messages" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" integer NOT NULL,
@@ -193,6 +194,7 @@ CREATE TABLE IF NOT EXISTS "public"."whatsapp_messages" (
 	"timestamp" timestamp with time zone DEFAULT now() NOT NULL,
 	"is_read" boolean DEFAULT false NOT NULL
 );
+--> statement-breakpoint
 
 -- Adiciona as chaves estrangeiras (FOREIGN KEY) se elas ainda não existirem
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'alerts_user_id_users_id_fk') THEN ALTER TABLE "public"."alerts" ADD CONSTRAINT "alerts_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action; END IF; END; $$;
