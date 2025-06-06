@@ -4,16 +4,17 @@ import express from "express";
 import { createServer, type Server as HttpServer } from "http";
 import { storage } from "./storage.js"; 
 import jwt from 'jsonwebtoken';
-import { ZodError } from "zod";
+import bcrypt from 'bcrypt';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 import * as schemaShared from "../shared/schema.js"; 
+import { ZodError } from "zod";
 import { JWT_SECRET } from './config.js'; 
 import { WhatsappConnectionService } from './services/whatsapp-connection.service.js';
 import { handleMCPConversation } from "./mcp_handler.js";
 import { logger } from "./logger.js";
 import { io } from "./index.js";
-import multer from 'multer';
-import path from 'path';
-import fs from 'fs';
 
 const UPLOADS_ROOT_DIR = 'uploads';
 const LP_ASSETS_DIR = path.resolve(UPLOADS_ROOT_DIR, 'lp-assets');
@@ -134,8 +135,12 @@ export function registerRoutes(app: Express): HttpServer {
     const handleZodError: ErrorRequestHandler = (err, req, res, next) => { if (err instanceof ZodError) return res.status(400).json({ error: "Erro de validação.", details: err.errors }); next(err); };
     const handleError: ErrorRequestHandler = (err, req, res, next) => { logger.error(err, "Erro não tratado capturado:"); res.status(err.statusCode || 500).json({ error: err.message || "Erro interno do servidor." }); };
     
+    app.use(express.json({ limit: "10mb" }));
+    app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+    
     app.use('/api', publicRouter);
     app.use('/api', apiRouter);
+
     app.use(handleZodError);
     app.use(handleError);
     
