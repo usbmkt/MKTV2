@@ -188,4 +188,14 @@ export class WhatsappConnectionService {
     }
     return await connection.sock.sendMessage(jid, messagePayload);
   }
+
+  public static async sendMessageForUser(userId: number, jid: string, messagePayload: any) {
+    const connection = activeConnections.get(userId);
+    if (!connection?.sock || connection.statusDetails.status !== 'connected') {
+        logger.error({ userId, jid, status: connection?.statusDetails?.status }, 'Tentativa de enviar mensagem para um socket não conectado.');
+        throw new Error(`WhatsApp não conectado para o usuário ${userId}.`);
+    }
+    logger.info({ userId, jid }, 'Enviando mensagem via FlowEngine.');
+    return await connection.sock.sendMessage(jid, messagePayload);
+  }
 }
