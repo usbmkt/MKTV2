@@ -947,4 +947,4 @@ apiRouter.post('/whatsapp/messages', async (req: AuthenticatedRequest, res, next
         } catch (e) {
             next(e);
         }
-    });
+    }});
