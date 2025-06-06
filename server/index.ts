@@ -1,75 +1,54 @@
 // server/index.ts
 import express from 'express';
-import cors from 'cors';
-import { logger } from './logger.js';
-import { PORT } from './config.js';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
 import { registerRoutes } from './routes.js';
-import { Server as SocketIOServer } from 'socket.io';
-import jwt from 'jsonwebtoken';
-import { JWT_SECRET } from './config.js';
-import { storage } from './storage.js';
+import { logger } from './logger.js';
+import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
+
+const app = express();
+const server = createServer(app);
+
+export const io = new Server(server, {
+  cors: {
+    origin: "*", 
+    methods: ["GET", "POST"]
+  }
+});
+
+app.use(cors());
+
+// Registra as rotas da API
+registerRoutes(app);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const app = express();
-app.use(cors({ origin: '*' }));
+// Servir os arquivos estáticos do cliente (Vite build output)
+const clientDistPath = path.join(__dirname, '..', 'client', 'dist');
+app.use(express.static(clientDistPath));
 
-async function startServer() {
-  const httpServer = registerRoutes(app);
+// Servir o index.html para todas as outras rotas (para o React Router funcionar)
+app.get('*', (req, res) => {
+  res.sendFile(path.join(clientDistPath, 'index.html'));
+});
 
-  const io = new SocketIOServer(httpServer, {
-    cors: {
-      origin: "*",
-      methods: ["GET", "POST"]
-    }
-  });
-
-  io.use(async (socket, next) => {
-    const token = socket.handshake.auth.token;
-    if (!token) {
-      return next(new Error('Authentication error: Token not provided.'));
-    }
-    try {
-      const decoded = jwt.verify(token, JWT_SECRET) as { userId: number };
-      const user = await storage.getUser(decoded.userId);
-      if (!user) {
-        return next(new Error('Authentication error: Invalid user.'));
-      }
-      (socket as any).user = user;
-      next();
-    } catch (err) {
-      next(new Error('Authentication error: Invalid token.'));
-    }
-  });
-
-  io.on('connection', (socket) => {
-    const user = (socket as any).user;
-    logger.info({ userId: user.id, socketId: socket.id }, 'Cliente conectado via WebSocket');
-    socket.join(`user_${user.id}`);
-    socket.on('disconnect', () => {
-      logger.info({ userId: user.id, socketId: socket.id }, 'Cliente desconectado do WebSocket');
-    });
-  });
-
-  const clientBuildPath = path.join(__dirname, '../../client/dist');
-  app.use(express.static(clientBuildPath));
+io.on('connection', (socket) => {
+  logger.info('A user connected via WebSocket');
   
-  app.get('*', (req, res, next) => {
-    if (!req.path.startsWith('/api/') && !req.path.startsWith('/uploads/')) {
-      res.sendFile(path.join(clientBuildPath, 'index.html'));
-    } else {
-      next();
-    }
+  socket.on('join_user_room', (userId) => {
+    socket.join(`user_${userId}`);
+    logger.info(`Socket ${socket.id} joined room for user ${userId}`);
   });
-
-  httpServer.listen(PORT, () => {
-    logger.info(`🚀 Servidor rodando na porta ${PORT}`);
+  
+  socket.on('disconnect', () => {
+    logger.info('User disconnected');
   });
+});
 
-  return { app, io };
-}
-
-export const { io } = await startServer();
+const PORT = process.env.PORT || 5000;
+server.listen(PORT, () => {
+  logger.info(`Server is running on port ${PORT}`);
+});
