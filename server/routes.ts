@@ -64,6 +64,9 @@ function getWhatsappServiceForUser(userId: number): WhatsappConnectionService {
 
 // --- Função Principal de Setup das Rotas ---
 export function registerRoutes(app: Express): HttpServer {
+    app.use(express.json({ limit: "10mb" }));
+    app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+    
     const publicRouter = express.Router();
     const apiRouter = express.Router();
     
@@ -124,8 +127,6 @@ export function registerRoutes(app: Express): HttpServer {
     apiRouter.get('/whatsapp/contacts', async (req: AuthenticatedRequest, res, next) => { try { res.json(await storage.getContacts(req.user!.id)); } catch(e) { next(e); }});
     apiRouter.get('/whatsapp/messages', async (req: AuthenticatedRequest, res, next) => { try { const contactNumber = req.query.contactNumber as string; if(!contactNumber) return res.status(400).json({ error: "Número do contato é obrigatório."}); res.json(await storage.getMessages(req.user!.id, contactNumber)); } catch(e) { next(e); }});
     apiRouter.post('/whatsapp/messages', async (req: AuthenticatedRequest, res, next) => { try { const { contactNumber, message } = schemaShared.insertWhatsappMessageSchema.pick({contactNumber: true, message: true}).parse(req.body); const service = getWhatsappServiceForUser(req.user!.id); const fullJid = contactNumber.endsWith('@s.whatsapp.net') ? contactNumber : `${contactNumber}@s.whatsapp.net`; await service.sendMessage(fullJid, { text: message }); const savedMessage = await storage.createMessage({ userId: req.user!.id, contactNumber, message, direction: 'outgoing' }); res.status(201).json(savedMessage); } catch (e) { next(e); } });
-    
-    // --- NOVAS ROTAS PARA TEMPLATES DE MENSAGEM (HSM) ---
     apiRouter.get('/whatsapp/templates', async (req: AuthenticatedRequest, res, next) => { try { const templates = await storage.getWhatsappTemplates(req.user!.id); res.json(templates); } catch (e) { next(e); } });
     apiRouter.post('/whatsapp/templates', async (req: AuthenticatedRequest, res, next) => { try { const data = schemaShared.insertWhatsappMessageTemplateSchema.parse(req.body); const newTemplate = await storage.createWhatsappTemplate({ ...data, userId: req.user!.id }); res.status(201).json(newTemplate); } catch (e) { next(e); } });
     apiRouter.put('/whatsapp/templates/:id', async (req: AuthenticatedRequest, res, next) => { try { const id = parseInt(req.params.id); if (isNaN(id)) return res.status(400).json({ error: "ID do template inválido." }); const data = schemaShared.insertWhatsappMessageTemplateSchema.partial().parse(req.body); const updatedTemplate = await storage.updateWhatsappTemplate(id, data, req.user!.id); if (!updatedTemplate) return res.status(404).json({ error: "Template não encontrado." }); res.json(updatedTemplate); } catch (e) { next(e); }});
@@ -133,19 +134,18 @@ export function registerRoutes(app: Express): HttpServer {
 
     // Chat / MCP
     apiRouter.post('/mcp/converse', async (req: AuthenticatedRequest, res, next) => { try { const { message, sessionId, attachmentUrl } = req.body; const payload = await handleMCPConversation(req.user!.id, message, sessionId, attachmentUrl); res.json(payload); } catch(e) { next(e); }});
-    apiRouter.post('/chat/sessions', async (req: AuthenticatedRequest, res, next) => { try { const data = schemaShared.insertChatSessionSchema.parse(req.body); res.status(201).json(await storage.createChatSession(req.user!.id, data.title)); } catch(e) { next(e); }});
     apiRouter.get('/chat/sessions', async (req: AuthenticatedRequest, res, next) => { try { res.json(await storage.getChatSessions(req.user!.id)); } catch(e){ next(e); }});
+    apiRouter.post('/chat/sessions', async (req: AuthenticatedRequest, res, next) => { try { const data = schemaShared.insertChatSessionSchema.parse(req.body); res.status(201).json(await storage.createChatSession(req.user!.id, data.title)); } catch(e) { next(e); }});
     apiRouter.get('/chat/sessions/:sessionId/messages', async (req: AuthenticatedRequest, res, next) => { try { res.json(await storage.getChatMessages(parseInt(req.params.sessionId), req.user!.id)); } catch(e){ next(e); }});
     apiRouter.put('/chat/sessions/:sessionId/title', async (req: AuthenticatedRequest, res, next) => { try { const updated = await storage.updateChatSessionTitle(parseInt(req.params.sessionId), req.user!.id, req.body.title); res.json(updated); } catch(e){ next(e); }});
     apiRouter.delete('/chat/sessions/:sessionId', async (req: AuthenticatedRequest, res, next) => { try { await storage.deleteChatSession(parseInt(req.params.sessionId), req.user!.id); res.status(204).send(); } catch(e){ next(e); }});
-
+    
     // --- REGISTRO DOS ROUTERS ---
+    const handleZodError: ErrorRequestHandler = (err, req, res, next) => { if (err instanceof ZodError) return res.status(400).json({ error: "Erro de validação.", details: err.errors }); next(err); };
+    const handleError: ErrorRequestHandler = (err, req, res, next) => { logger.error(err, "Erro não tratado capturado:"); res.status(err.statusCode || 500).json({ error: err.message || "Erro interno do servidor." }); };
+    
     app.use('/api', publicRouter);
     app.use('/api', apiRouter);
-
-    const handleZodError: ErrorRequestHandler = (err, req, res, next) => { if (err instanceof ZodError) return res.status(400).json({ error: "Erro de validação.", details: err.errors }); next(err); };
-    const handleError: ErrorRequestHandler = (err, req, res, next) => { logger.error(err); res.status(err.statusCode || 500).json({ error: err.message || "Erro interno do servidor." }); };
-    
     app.use(handleZodError);
     app.use(handleError);
     
