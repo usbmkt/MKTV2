@@ -20,7 +20,6 @@ async function runMigrations() {
     console.log('Conectado ao banco de dados. Aplicando migrações...');
     await migrate(db, { migrationsFolder: './migrations' });
     console.log('Migrações concluídas com sucesso.');
-    // A conexão é stateless, então não precisa fechar explicitamente com neon-http
     console.log('Conexão com o banco de dados fechada.');
   } catch (error) {
     console.error('Erro durante a migração:', error);
