@@ -60,7 +60,7 @@ import {
 // Usando os novos caminhos para componentes e utils do fluxo
 import NodeContextMenuComponent from '@/components/flow/NodeContextMenu';
 import { IconWithGlow, NEON_COLOR, NEON_GREEN, NEON_RED, baseButtonSelectStyle, baseCardStyle, baseInputInsetStyle, popoverContentStyle, customScrollbarStyle } from '@/components/flow/utils';
-import WhatsAppConnection from '@/components/whatsapp-connection';
+import { WhatsAppConnection } from '@/components/whatsapp-connection';
 
 
 // --- INTERFACES MOCK (PARA A ABA CONVERSAS) ---
