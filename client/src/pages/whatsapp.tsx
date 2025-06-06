@@ -15,10 +15,12 @@ import { useAuthStore } from '@/lib/auth';
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
     MessageSquare, ListChecks, Trash2 as IconTrash, Image as ImageIcon, Clock, Variable, Waypoints, HelpCircle, Plus, Send, RadioTower, UserCheck, LogOut, Save, Play, Square, Filter, Layers, Activity, Workflow, Mic, FileText as FileIcon, MapPin, Repeat, Webhook, X, AlertTriangle, Bot, Clock10, Tag, Shuffle,
     MessageCircle as MsgIcon, Phone, Search, MoreVertical, Check, CheckCheck, Paperclip, Smile,
-    Loader2
+    Loader2, Pencil
 } from 'lucide-react';
 import {
     ReactFlow, MiniMap, Controls, Background, useNodesState, useEdgesState, addEdge, Node, Edge, OnConnect, BackgroundVariant, MarkerType, Position, Handle, NodeProps, useReactFlow, ReactFlowProvider, NodeOrigin, Panel
@@ -28,7 +30,8 @@ import '@xyflow/react/dist/style.css';
 import {
     FlowData, CampaignSelectItem, NodeContextMenuProps as FlowNodeContextMenuProps, ButtonOption, ListItem, ListSection,
     GPTQueryNodeData, TextMessageNodeData, ButtonMessageNodeData, ImageNodeData, AudioNodeData, FileNodeData, LocationNodeData, ListMessageNodeData, DelayNodeData, WaitInputNodeData, SetVariableNodeData, ConditionNodeData, TimeConditionNodeData, LoopNodeData, ApiCallNodeData, WebhookCallNodeData, AssignAgentNodeData, EndFlowNodeData, GoToFlowNodeData, TagContactNodeData,
-    AllNodeDataTypes
+    AllNodeDataTypes,
+    WhatsappMessageTemplate
 } from '@/types/zapTypes';
 import NodeContextMenuComponent from '@/components/flow/NodeContextMenu';
 import { IconWithGlow, NEON_COLOR, NEON_GREEN, NEON_RED, baseButtonSelectStyle, baseCardStyle, baseInputInsetStyle, popoverContentStyle, customScrollbarStyle } from '@/components/flow/utils';
@@ -206,11 +209,11 @@ function FlowEditorInner({ activeFlowId, onFlowSelect }: FlowEditorInnerProps) {
     const handleNodeContextMenu = useCallback((event: React.MouseEvent, node: Node) => { event.preventDefault(); setContextMenu({ id: node.id, top: event.clientY, left: event.clientX, nodeType: node.type }); }, []);
     const handlePaneClick = useCallback(() => setContextMenu(null), []);
     const handleDeleteNode = useCallback((nodeId: string) => { setNodes((nds) => nds.filter((node) => node.id !== nodeId)); setEdges((eds) => eds.filter((edge) => edge.source !== nodeId && edge.target !== nodeId)); setContextMenu(null); }, [setNodes, setEdges]);
-    const handleDuplicateNode = useCallback((nodeId: string) => { const nodeToDuplicate = reactFlowInstance.getNode(nodeId); if (!nodeToDuplicate) return; const newNodeId = `${nodeToDuplicate.type}_${Date.now()}_${Math.random().toString(16).slice(2,6)}`; const position = { x: nodeToDuplicate.position.x + 40, y: nodeToDuplicate.position.y + 40 }; let newData = JSON.parse(JSON.stringify(nodeToDuplicate.data)); if (nodeToDuplicate.type === 'buttonMessage' && newData.buttons) { newData.buttons = newData.buttons.map((btn: ButtonOption, i: number) => ({ ...btn, id: `btn_${newNodeId}_${i}` })); } if (nodeToDuplicate.type === 'listMessage' && newData.sections) { newData.sections = newData.sections.map((sec: ListSection, sIdx: number) => ({ ...sec, id: `sec_${newNodeId}_${sIdx}`, rows: sec.rows.map((row: ListItem, rIdx: number) => ({ ...row, id: `row_${newNodeId}_${sIdx}_${rIdx}` })) })); } const newNode: Node = { ...nodeToDuplicate, id: newNodeId, position, data: newData, dragHandle: '.node-header' }; reactFlowInstance.addNodes(newNode); setContextMenu(null); }, [reactFlowInstance]);
+    const handleDuplicateNode = useCallback((nodeId: string) => { const nodeToDuplicate = reactFlowInstance.getNode(nodeId); if (!nodeToDuplicate) return; const newNodeId = `<span class="math-inline">\{nodeToDuplicate\.type\}\_</span>{Date.now()}_${Math.random().toString(16).slice(2,6)}`; const position = { x: nodeToDuplicate.position.x + 40, y: nodeToDuplicate.position.y + 40 }; let newData = JSON.parse(JSON.stringify(nodeToDuplicate.data)); if (nodeToDuplicate.type === 'buttonMessage' && newData.buttons) { newData.buttons = newData.buttons.map((btn: ButtonOption, i: number) => ({ ...btn, id: `btn_${newNodeId}_${i}` })); } if (nodeToDuplicate.type === 'listMessage' && newData.sections) { newData.sections = newData.sections.map((sec: ListSection, sIdx: number) => ({ ...sec, id: `sec_${newNodeId}_${sIdx}`, rows: sec.rows.map((row: ListItem, rIdx: number) => ({ ...row, id: `row_${newNodeId}_${sIdx}_${rIdx}` })) })); } const newNode: Node = { ...nodeToDuplicate, id: newNodeId, position, data: newData, dragHandle: '.node-header' }; reactFlowInstance.addNodes(newNode); setContextMenu(null); }, [reactFlowInstance]);
     
     const addNodeToFlow = useCallback((type: keyof typeof nodeTypes) => {
         if (!reactFlowInstance || !selectedFlow) { toast({ title: "Ação Indisponível", description: "Selecione um fluxo para adicionar nós.", variant: "default" }); return; }
-        const { x: viewX, y: viewY, zoom } = reactFlowInstance.getViewport(); const pane = reactFlowWrapper.current?.querySelector('.react-flow__pane') as HTMLElement; const paneRect = pane?.getBoundingClientRect() || {width: window.innerWidth, height: window.innerHeight, top:0, left:0}; const centerX = (paneRect.width / 2 - viewX) / zoom; const centerY = (paneRect.height / 2 - viewY) / zoom; const position = { x: centerX, y: centerY }; const newNodeId = `${type}_${Date.now()}_${Math.random().toString(16).substring(2, 6)}`;
+        const { x: viewX, y: viewY, zoom } = reactFlowInstance.getViewport(); const pane = reactFlowWrapper.current?.querySelector('.react-flow__pane') as HTMLElement; const paneRect = pane?.getBoundingClientRect() || {width: window.innerWidth, height: window.innerHeight, top:0, left:0}; const centerX = (paneRect.width / 2 - viewX) / zoom; const centerY = (paneRect.height / 2 - viewY) / zoom; const position = { x: centerX, y: centerY }; const newNodeId = `<span class="math-inline">\{type\}\_</span>{Date.now()}_${Math.random().toString(16).substring(2, 6)}`;
         let newNodeData: AllNodeDataTypes | {} = {}; 
         switch (type) {
           case 'textMessage': newNodeData = { text: 'Nova mensagem de texto...' } as TextMessageNodeData; break;
@@ -317,6 +320,168 @@ function FlowEditorInner({ activeFlowId, onFlowSelect }: FlowEditorInnerProps) {
     );
 }
 // --- FIM DO EDITOR DE FLUXO INTERNO ---
+
+const TemplateManager: React.FC = () => {
+    const { toast } = useToast();
+    const queryClient = useQueryClient();
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [editingTemplate, setEditingTemplate] = useState<WhatsappMessageTemplate | null>(null);
+    const [templateFormData, setTemplateFormData] = useState({ name: '', category: 'UTILITY', language: 'pt_BR', components: '[]' });
+
+    const { data: templates = [], isLoading, error } = useQuery<WhatsappMessageTemplate[]>({
+        queryKey: ['whatsappTemplates'],
+        queryFn: async () => apiRequest('GET', '/api/whatsapp/templates').then(res => res.json()),
+    });
+
+    const createMutation = useMutation<WhatsappMessageTemplate, Error, Omit<WhatsappMessageTemplate, 'id' | 'createdAt' | 'updatedAt' | 'userId'>>({
+        mutationFn: (newTemplate) => apiRequest('POST', '/api/whatsapp/templates', newTemplate).then(res => res.json()),
+        onSuccess: () => {
+            toast({ title: "Sucesso", description: "Template criado." });
+            queryClient.invalidateQueries({ queryKey: ['whatsappTemplates'] });
+            setIsModalOpen(false);
+        },
+        onError: (err) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
+    });
+
+    const updateMutation = useMutation<WhatsappMessageTemplate, Error, WhatsappMessageTemplate>({
+        mutationFn: (template) => apiRequest('PUT', `/api/whatsapp/templates/${template.id}`, template).then(res => res.json()),
+        onSuccess: () => {
+            toast({ title: "Sucesso", description: "Template atualizado." });
+            queryClient.invalidateQueries({ queryKey: ['whatsappTemplates'] });
+            setIsModalOpen(false);
+        },
+        onError: (err) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
+    });
+    
+    const deleteMutation = useMutation<void, Error, number>({
+        mutationFn: (id) => apiRequest('DELETE', `/api/whatsapp/templates/${id}`).then(() => {}),
+        onSuccess: () => {
+            toast({ title: "Sucesso", description: "Template deletado." });
+            queryClient.invalidateQueries({ queryKey: ['whatsappTemplates'] });
+        },
+        onError: (err) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
+    });
+
+    const handleOpenModal = (template: WhatsappMessageTemplate | null = null) => {
+        setEditingTemplate(template);
+        if (template) {
+            setTemplateFormData({
+                name: template.name,
+                category: template.category || 'UTILITY',
+                language: template.language,
+                components: JSON.stringify(template.components, null, 2)
+            });
+        } else {
+            setTemplateFormData({ name: '', category: 'UTILITY', language: 'pt_BR', components: '[\n  {\n    "type": "BODY",\n    "text": "Olá {{1}}, este é um exemplo."\n  }\n]' });
+        }
+        setIsModalOpen(true);
+    };
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            const parsedComponents = JSON.parse(templateFormData.components);
+            const submissionData = { ...templateFormData, components: parsedComponents };
+
+            if (editingTemplate) {
+                updateMutation.mutate({ ...submissionData, id: editingTemplate.id });
+            } else {
+                createMutation.mutate(submissionData);
+            }
+        } catch (err) {
+            toast({ title: "Erro no JSON", description: "A estrutura dos componentes do template é um JSON inválido.", variant: "destructive" });
+        }
+    };
+    
+    return (
+        <Card className="neu-card">
+            <CardHeader>
+                <div className="flex justify-between items-center">
+                    <div>
+                        <CardTitle>Templates de Mensagem (HSM)</CardTitle>
+                        <CardDescription>Gerencie seus templates para envio ativo.</CardDescription>
+                    </div>
+                    <Button onClick={() => handleOpenModal(null)} className="neu-button"><Plus className="w-4 h-4 mr-2"/>Novo Template</Button>
+                </div>
+            </CardHeader>
+            <CardContent>
+                {isLoading && <div className='text-center py-4'><Loader2 className="w-6 h-6 animate-spin mx-auto" /></div>}
+                {error && <div className='text-center text-destructive py-4'>Erro ao carregar templates: {error.message}</div>}
+                {!isLoading && !error && (
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Nome</TableHead>
+                                <TableHead>Categoria</TableHead>
+                                <TableHead>Idioma</TableHead>
+                                <TableHead>Status Meta</TableHead>
+                                <TableHead className="text-right">Ações</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {templates.map(template => (
+                                <TableRow key={template.id}>
+                                    <TableCell className="font-medium">{template.name}</TableCell>
+                                    <TableCell>{template.category}</TableCell>
+                                    <TableCell>{template.language}</TableCell>
+                                    <TableCell><Badge variant={template.statusMeta === 'APPROVED' ? 'default' : 'secondary'} className={template.statusMeta === 'APPROVED' ? 'bg-green-600' : ''}>{template.statusMeta}</Badge></TableCell>
+                                    <TableCell className="text-right">
+                                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleOpenModal(template)}><Pencil className="w-4 h-4"/></Button>
+                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => window.confirm(`Deseja deletar o template "${template.name}"?`) && deleteMutation.mutate(template.id)}><IconTrash className="w-4 h-4"/></Button>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                )}
+                 <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+                    <DialogContent className="sm:max-w-[625px] neu-card">
+                        <DialogHeader>
+                            <DialogTitle>{editingTemplate ? 'Editar' : 'Criar'} Template</DialogTitle>
+                            <DialogDescription>
+                                Preencha os detalhes do seu template. O campo 'Componentes' deve ser um JSON válido.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <form onSubmit={handleSubmit}>
+                            <div className="grid gap-4 py-4">
+                                <div className="grid grid-cols-4 items-center gap-4">
+                                    <Label htmlFor="name" className="text-right">Nome</Label>
+                                    <Input id="name" value={templateFormData.name} onChange={e => setTemplateFormData({...templateFormData, name: e.target.value})} className="col-span-3 neu-input" placeholder="Ex: bem_vindo_cliente"/>
+                                </div>
+                                <div className="grid grid-cols-4 items-center gap-4">
+                                    <Label htmlFor="category" className="text-right">Categoria</Label>
+                                    <Select value={templateFormData.category} onValueChange={v => setTemplateFormData({...templateFormData, category: v})}>
+                                        <SelectTrigger className="col-span-3 neu-input"><SelectValue/></SelectTrigger>
+                                        <SelectContent className="neu-card">
+                                            <SelectItem value="MARKETING">Marketing</SelectItem>
+                                            <SelectItem value="UTILITY">Utilidade</SelectItem>
+                                            <SelectItem value="AUTHENTICATION">Autenticação</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="grid grid-cols-4 items-center gap-4">
+                                    <Label htmlFor="language" className="text-right">Idioma</Label>
+                                    <Input id="language" value={templateFormData.language} onChange={e => setTemplateFormData({...templateFormData, language: e.target.value})} className="col-span-3 neu-input" placeholder="Ex: pt_BR"/>
+                                </div>
+                                <div className="grid grid-cols-1 items-start gap-4">
+                                    <Label htmlFor="components">Componentes (JSON)</Label>
+                                    <Textarea id="components" value={templateFormData.components} onChange={e => setTemplateFormData({...templateFormData, components: e.target.value})} className="neu-input min-h-[200px] font-mono text-xs" />
+                                </div>
+                            </div>
+                            <DialogFooter>
+                                <DialogClose asChild><Button type="button" variant="secondary">Cancelar</Button></DialogClose>
+                                <Button type="submit" className="neu-button" disabled={createMutation.isPending || updateMutation.isPending}>
+                                    {createMutation.isPending || updateMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin"/> : 'Salvar'}
+                                </Button>
+                            </DialogFooter>
+                        </form>
+                    </DialogContent>
+                </Dialog>
+            </CardContent>
+        </Card>
+    );
+};
+
 
 // --- COMPONENTE PRINCIPAL DA PÁGINA ---
 const WhatsApp: React.FC = () => {
@@ -459,7 +624,7 @@ const WhatsApp: React.FC = () => {
           <TabsTrigger value="conversations">Conversas</TabsTrigger>
           <TabsTrigger value="flows">Fluxos Salvos</TabsTrigger>
           <TabsTrigger value="flow-builder">Editor Visual</TabsTrigger>
-          <TabsTrigger value="templates" disabled>Templates (Em Breve)</TabsTrigger>
+          <TabsTrigger value="templates">Templates</TabsTrigger>
         </TabsList>
 
         <TabsContent value="connection" className="space-y-4">
@@ -583,7 +748,7 @@ const WhatsApp: React.FC = () => {
         </TabsContent>
 
         <TabsContent value="templates" className="space-y-4">
-          <Card className="neu-card"><CardHeader><CardTitle>Templates de Mensagem</CardTitle><CardDescription>Em breve: gerencie seus templates aprovados pelo WhatsApp.</CardDescription></CardHeader><CardContent className="text-center py-12"><p className="text-muted-foreground">(Funcionalidade em Desenvolvimento)</p></CardContent></Card>
+          <TemplateManager />
         </TabsContent>
       </Tabs>
     </div>
