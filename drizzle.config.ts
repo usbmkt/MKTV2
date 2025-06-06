@@ -1,23 +1,21 @@
+// drizzle.config.ts
 import { defineConfig } from "drizzle-kit";
+import 'dotenv/config'; // Garante que as variáveis de ambiente sejam carregadas
 
-// Remova esta linha se ela contiver suas credenciais! É uma falha de segurança grave.
-// if (!process.env.DATABASE_URL) {
-//   console.warn("DATABASE_URL não está definida. O Drizzle Kit pode falhar se não encontrar um arquivo .env ou variável de ambiente.");
-// }
+if (!process.env.DATABASE_URL) {
+  throw new Error("Variável de ambiente DATABASE_URL não está definida.");
+}
 
 export default defineConfig({
   out: "./migrations",
-  // Caminho para o seu arquivo de schema (confirmado como correto)
   schema: "./shared/schema.ts",
-  dialect: "postgresql",
-  // Usamos 'pglite' AQUI para satisfazer a validação do 'drizzle-kit generate' durante o build
-  driver: "pglite",
+  dialect: "postgresql", // Dialeto correto
+  driver: "pg", // ✅ CORREÇÃO: Driver correto para PostgreSQL
   dbCredentials: {
-    // Usamos 'url' pois o erro anterior indicou que é o esperado para o migrate/config
-    url: process.env.DATABASE_URL!,
-    // Mantemos a configuração SSL necessária para conectar ao Render
-    ssl: { rejectUnauthorized: false }
+    // A URL é pega diretamente das variáveis de ambiente,
+    // que o Render injeta automaticamente no ambiente de produção.
+    url: process.env.DATABASE_URL,
   },
-  verbose: true, // Mantém logs detalhados, útil para depuração
+  verbose: true,
   strict: true,
 });
