@@ -1,27 +1,22 @@
+// shared/schema.ts
 import { pgTable, text, serial, integer, boolean, timestamp, decimal, jsonb, varchar, pgEnum, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { relations } from 'drizzle-orm';
 
-// Enums do Banco de Dados
 export const campaignStatusEnum = pgEnum('campaign_status', ['active', 'paused', 'completed', 'draft']);
 export const chatSenderEnum = pgEnum('chat_sender', ['user', 'agent']);
 export const launchPhaseEnum = pgEnum('launch_phase', ['pre_launch', 'launch', 'post_launch']);
 export const flowStatusEnum = pgEnum('flow_status', ['active', 'inactive', 'draft']);
 
-// --- Definições de Tipos para Copy Configurations ---
+export const launchPhaseSchema = z.enum(launchPhaseEnum.enumValues);
+export type LaunchPhase = z.infer<typeof launchPhaseSchema>;
+
 export interface BaseGeneratorFormState { product: string; audience: string; objective: 'sales' | 'leads' | 'engagement' | 'awareness'; tone: 'professional' | 'casual' | 'urgent' | 'inspirational' | 'educational' | 'empathetic' | 'divertido' | 'sofisticado';}
-export type LaunchPhase = z.infer<typeof launchPhaseEnum>; 
 export interface FieldDefinition { name: string; label: string; type: 'text' | 'textarea' | 'select' | 'number' | 'date'; placeholder?: string; tooltip: string; required?: boolean; options?: Array<{ value: string; label: string }>; defaultValue?: string | number | boolean; dependsOn?: string; showIf?: (formData: Record<string, any>, baseData?: BaseGeneratorFormState) => boolean;}
 export interface CopyPurposeConfig { key: string; label: string; phase: LaunchPhase; fields: FieldDefinition[]; category: string; description?: string; promptEnhancer?: (basePrompt: string, details: Record<string, any>, baseForm: BaseGeneratorFormState) => string;}
+export interface FlowElementData { nodes: any[]; edges: any[]; }
 
-// Interface para FlowElementData (usada na tabela 'flows')
-export interface FlowElementData {
-  nodes: any[]; 
-  edges: any[]; 
-}
-
-// --- Definições de Tabelas ---
 export const users = pgTable("users", { id: serial("id").primaryKey(), username: text("username").notNull().unique(), email: text("email").notNull().unique(), password: text("password").notNull(), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),});
 export const campaigns = pgTable("campaigns", { id: serial("id").primaryKey(), userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }), name: text("name").notNull(), description: text("description"), status: campaignStatusEnum("status").default("draft").notNull(), platforms: jsonb("platforms").$type<string[]>().default([]).notNull(), objectives: jsonb("objectives").$type<string[]>().default([]).notNull(), budget: decimal("budget", { precision: 10, scale: 2 }), dailyBudget: decimal("daily_budget", { precision: 10, scale: 2 }), startDate: timestamp("start_date", { withTimezone: true }), endDate: timestamp("end_date", { withTimezone: true }), targetAudience: text("target_audience"), industry: text("industry"), avgTicket: decimal("avg_ticket", { precision: 10, scale: 2 }), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),});
 export const copies = pgTable("copies", { id: serial("id").primaryKey(), userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }), campaignId: integer("campaign_id").references(() => campaigns.id, { onDelete: 'set null' }), title: text("title").notNull(), content: text("content").notNull(), purposeKey: text("purpose_key").notNull(), launchPhase: launchPhaseEnum("launch_phase").notNull(), details: jsonb("details").$type<Record<string, any>>().default({}).notNull(), baseInfo: jsonb("base_info").$type<BaseGeneratorFormState | any>().default({}).notNull(), fullGeneratedResponse: jsonb("full_generated_response").$type<any>().default({}).notNull(), platform: text("platform"), isFavorite: boolean("is_favorite").default(false).notNull(), tags: jsonb("tags").$type<string[]>().default([]).notNull(), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), lastUpdatedAt: timestamp("last_updated_at", { withTimezone: true }).defaultNow().notNull(),});
@@ -40,7 +35,6 @@ export const whatsappConnections = pgTable('whatsapp_connections', { id: serial(
 export const whatsappFlowUserStates = pgTable('whatsapp_flow_user_states', { id: serial('id').primaryKey(), userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }), contactJid: text('contact_jid').notNull(), activeFlowId: integer('active_flow_id').references(() => flows.id, { onDelete: 'set null' }), currentNodeId: text('current_node_id'), flowVariables: jsonb('flow_variables').default('{}'), lastInteractionAt: timestamp('last_interaction_at', { withTimezone: true }).defaultNow().notNull(), }, (table) => ({ unq: unique().on(table.userId, table.contactJid),}));
 export const whatsappMessageTemplates = pgTable('whatsapp_message_templates', { id: serial('id').primaryKey(), userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }), name: text('template_name').notNull(), category: text('category'), language: text('language_code').notNull(), components: jsonb('components').notNull(), statusMeta: text('meta_status').default('DRAFT'), metaTemplateId: text('meta_template_id'), createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),});
 
-// --- RELAÇÕES ---
 export const userRelations = relations(users, ({ many }) => ({ campaigns: many(campaigns), creatives: many(creatives), metrics: many(metrics), whatsappMessages: many(whatsappMessages), copies: many(copies), alerts: many(alerts), budgets: many(budgets), landingPages: many(landingPages), chatSessions: many(chatSessions), funnels: many(funnels), flows: many(flows), whatsappConnections: many(whatsappConnections), whatsappFlowUserStates: many(whatsappFlowUserStates), whatsappMessageTemplates: many(whatsappMessageTemplates) }));
 export const campaignRelations = relations(campaigns, ({ one, many }) => ({ user: one(users, { fields: [campaigns.userId], references: [users.id] }), creatives: many(creatives), metrics: many(metrics), copies: many(copies), alerts: many(alerts), budgets: many(budgets), funnels: many(funnels), flows: many(flows) }));
 export const creativeRelations = relations(creatives, ({ one }) => ({ user: one(users, { fields: [creatives.userId], references: [users.id] }), campaign: one(campaigns, { fields: [creatives.campaignId], references: [campaigns.id] }), }));
@@ -59,8 +53,6 @@ export const whatsappConnectionRelations = relations(whatsappConnections, ({ one
 export const whatsappFlowUserStateRelations = relations(whatsappFlowUserStates, ({ one }) => ({ user: one(users, { fields: [whatsappFlowUserStates.userId], references: [users.id] }), flow: one(flows, { fields: [whatsappFlowUserStates.activeFlowId], references: [flows.id] })}));
 export const whatsappMessageTemplateRelations = relations(whatsappMessageTemplates, ({ one }) => ({ user: one(users, { fields: [whatsappMessageTemplates.userId], references: [users.id] })}));
 
-
-// --- SCHEMAS ZOD PARA INSERÇÃO ---
 const FlowElementsSchema = z.object({ nodes: z.array(z.any()).default([]), edges: z.array(z.any()).default([]),}).nullable().optional().default({ nodes: [], edges: [] });
 
 export const insertUserSchema = createInsertSchema(users, { email: z.string().email("Email inválido."), username: z.string().min(3, "Nome de usuário deve ter pelo menos 3 caracteres."), password: z.string().min(6, "Senha deve ter pelo menos 6 caracteres."), }).omit({ id: true, createdAt: true, updatedAt: true });
@@ -79,7 +71,6 @@ export const insertMetricSchema = createInsertSchema(metrics, { campaignId: z.nu
 export const insertFlowSchema = createInsertSchema(flows, { name: z.string().min(1, "Nome do fluxo é obrigatório."), status: z.enum(flowStatusEnum.enumValues).default('draft'), elements: FlowElementsSchema, campaignId: z.preprocess( (val) => (val === undefined || val === null || val === "" || String(val).toUpperCase() === "NONE" ? null : parseInt(String(val))), z.number().int().positive().nullable().optional() ),}).omit({ id: true, createdAt: true, updatedAt: true, userId: true });
 export const insertWhatsappMessageTemplateSchema = createInsertSchema(whatsappMessageTemplates, { name: z.string().min(1, "O nome do template é obrigatório"), language: z.string().min(1, "O código do idioma é obrigatório"), components: z.record(z.any()), }).omit({ id: true, createdAt: true, updatedAt: true, userId: true });
 
-// --- SCHEMAS ZOD PARA SELEÇÃO (SELECT) ---
 export const selectUserSchema = createSelectSchema(users);
 export const selectCampaignSchema = createSelectSchema(campaigns);
 export const selectCreativeSchema = createSelectSchema(creatives);
@@ -97,9 +88,8 @@ export const selectFlowSchema = createSelectSchema(flows);
 export const selectWhatsappMessageTemplateSchema = createSelectSchema(whatsappMessageTemplates);
 export const selectWhatsappConnectionSchema = createSelectSchema(whatsappConnections);
 export const selectWhatsappFlowUserStateSchema = createSelectSchema(whatsappFlowUserStates);
+export const insertFlowUserStateSchema = createInsertSchema(whatsappFlowUserStates);
 
-
-// --- Tipos Inferidos ---
 export type User = z.infer<typeof selectUserSchema>; export type InsertUser = z.infer<typeof insertUserSchema>;
 export type Campaign = z.infer<typeof selectCampaignSchema>; export type InsertCampaign = z.infer<typeof insertCampaignSchema>;
 export type Creative = z.infer<typeof selectCreativeSchema>; export type InsertCreative = z.infer<typeof insertCreativeSchema>;
@@ -117,10 +107,8 @@ export type Flow = z.infer<typeof selectFlowSchema>; export type InsertFlow = z.
 export type WhatsappMessageTemplate = z.infer<typeof selectWhatsappMessageTemplateSchema>; export type InsertWhatsappMessageTemplate = z.infer<typeof insertWhatsappMessageTemplateSchema>;
 export type WhatsappConnection = z.infer<typeof selectWhatsappConnectionSchema>;
 export type WhatsappFlowUserState = z.infer<typeof selectWhatsappFlowUserStateSchema>;
-export type InsertFlowUserState = z.infer<typeof createInsertSchema<typeof whatsappFlowUserStates>>;
+export type InsertFlowUserState = z.infer<typeof insertFlowUserStateSchema>;
 
-
-// --- CONFIGURAÇÕES DE COPY ---
 export const allCopyPurposesConfig: CopyPurposeConfig[] = [ { key: 'prelaunch_ad_event_invitation', label: 'Anúncio: Convite para Evento Online Gratuito', phase: 'pre_launch', category: 'Anúncios (Pré-Lançamento)', description: 'Crie anúncios chamativos para convidar pessoas para seu webinar, masterclass ou live.', fields: [ { name: 'eventName', label: 'Nome do Evento *', type: 'text', placeholder: 'Ex: Masterclass "Decole Seu Negócio Online"', tooltip: 'O título principal do seu evento.', required: true }, { name: 'eventSubtitle', label: 'Subtítulo do Evento (Opcional)', type: 'text', placeholder: 'Ex: O guia definitivo para...', tooltip: 'Uma frase curta para complementar o nome.'}, { name: 'eventFormat', label: 'Formato do Evento', type: 'text', placeholder: 'Ex: Workshop online de 3 dias via Zoom', tooltip: 'Descreva como será o evento (live, gravado, desafio, etc.).', defaultValue: 'Webinar Ao Vivo' }, { name: 'eventDateTime', label: 'Data e Hora Principal do Evento *', type: 'text', placeholder: 'Ex: Terça, 25 de Junho, às 20h (Horário de Brasília)', tooltip: 'Quando o evento principal acontecerá? Inclua fuso horário se relevante.', required: true }, { name: 'eventDuration', label: 'Duração Estimada do Evento', type: 'text', placeholder: 'Ex: Aproximadamente 1h30', tooltip: 'Quanto tempo o público deve reservar?' }, { name: 'eventPromise', label: 'Principal Promessa/Transformação do Evento *', type: 'textarea', placeholder: 'Ex: Você vai descobrir o método exato para criar anúncios que vendem todos os dias, mesmo começando do zero.', tooltip: 'O que a pessoa vai ganhar/aprender de mais valioso?', required: true }, { name: 'eventTopics', label: 'Principais Tópicos Abordados (1 por linha) *', type: 'textarea', placeholder: 'Ex:\n- Como definir seu público ideal\n- Os 3 erros que te fazem perder dinheiro em anúncios\n- O segredo das headlines que convertem', tooltip: 'Liste os pontos chave que serão ensinados.', required: true }, { name: 'eventTargetAudience', label: 'Público Específico Deste Evento', type: 'text', placeholder: 'Ex: Empreendedores que já tentaram anunciar e não tiveram resultado', tooltip: 'Para quem este evento é especialmente desenhado?' }, { name: 'eventCTA', label: 'Chamada para Ação do Anúncio *', type: 'text', placeholder: 'Ex: "Garanta sua vaga gratuita agora!" ou "Clique em Saiba Mais e inscreva-se!"', tooltip: 'O que você quer que a pessoa faça ao ver o anúncio?', required: true, defaultValue: 'Inscreva-se Gratuitamente!' }, { name: 'urgencyScarcityElement', label: 'Elemento de Urgência/Escassez (Opcional)', type: 'text', placeholder: 'Ex: Vagas limitadas, Bônus para os 100 primeiros inscritos', tooltip: 'Algum motivo para a pessoa agir rápido?' }, ], }, ];
 export const aiResponseSchema = { type: "OBJECT" as const, properties: { mainCopy: { type: "STRING" }, alternativeVariation1: { type: "STRING" }, alternativeVariation2: { type: "STRING" }, platformSuggestion: { type: "STRING" }, notes: { type: "STRING" } }, required: ["mainCopy", "platformSuggestion"] };
 export const aiResponseValidationSchema = z.object({ mainCopy: z.string(), alternativeVariation1: z.string().optional(), alternativeVariation2: z.string().optional(), platformSuggestion: z.string(), notes: z.string().optional(), });
