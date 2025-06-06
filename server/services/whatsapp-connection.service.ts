@@ -8,9 +8,7 @@ import baileys, {
   Browsers,
   WAMessage,
   WASocket,
-  getDevice,
-  isJidGroup,
-  isJidUser
+  isJidGroup
 } from '@whiskeysockets/baileys';
 const makeWASocket = baileys.default;
 
@@ -19,7 +17,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Boom } from '@hapi/boom';
 import QRCode from 'qrcode';
-import { WhatsappFlowEngine } from './whatsapp-flow.engine'; // Importando o motor de fluxo
+import { WhatsappFlowEngine } from './whatsapp-flow.engine'; // Importando o motor
 
 const SESSIONS_DIR = path.join(process.cwd(), 'server', 'sessions');
 if (!fs.existsSync(SESSIONS_DIR)) {
@@ -27,9 +25,7 @@ if (!fs.existsSync(SESSIONS_DIR)) {
 }
 
 const logger = pino({ level: 'debug' }).child({ class: 'WhatsappConnectionService' });
-
-// Criando uma instância única do motor de fluxo que será usada por todas as conexões
-const flowEngine = new WhatsappFlowEngine();
+const flowEngine = new WhatsappFlowEngine(); // Instanciando o motor de fluxo
 
 export interface WhatsappConnectionStatus {
   status: 'disconnected' | 'connecting' | 'connected' | 'qr_code_needed' | 'auth_failure' | 'error' | 'disconnected_logged_out';
@@ -74,16 +70,14 @@ export class WhatsappConnectionService {
     try {
         if (!fs.existsSync(this.userSessionDir)) {
             fs.mkdirSync(this.userSessionDir, { recursive: true });
-            logger.debug({ userId: this.userId }, 'Diretório de sessão criado');
         }
         
-        const authInfoPath = path.join(this.userSessionDir, 'auth_info_baileys');
-        const { state, saveCreds } = await useMultiFileAuthState(authInfoPath);
+        const { state, saveCreds } = await useMultiFileAuthState(path.join(this.userSessionDir, 'auth_info_baileys'));
         const { version } = await fetchLatestBaileysVersion();
         
         this.sock = makeWASocket({
           version,
-          logger: pino({ level: 'warn' }),
+          logger: pino({ level: 'silent' }),
           printQRInTerminal: false,
           auth: state,
           browser: Browsers.ubuntu('Chrome'),
@@ -99,48 +93,34 @@ export class WhatsappConnectionService {
 
         this.sock.ev.on('connection.update', async (update) => {
           const { connection, lastDisconnect, qr } = update;
-          
           if (qr) {
-            try {
-              const qrDataURL = await QRCode.toDataURL(qr);
-              this.updateGlobalStatus({ status: 'qr_code_needed', qrCode: qrDataURL });
-            } catch (qrError) {
-              this.updateGlobalStatus({ status: 'qr_code_needed', qrCode: qr });
-            }
+            const qrDataURL = await QRCode.toDataURL(qr).catch(() => qr);
+            this.updateGlobalStatus({ status: 'qr_code_needed', qrCode: qrDataURL });
           }
-          
-          if (connection === 'close') {
-            this.handleConnectionClose(lastDisconnect);
-          } else if (connection === 'open') {
-            this.handleConnectionOpen();
-          } else if (connection === 'connecting') {
-            this.updateGlobalStatus({ status: 'connecting' });
-          }
+          if (connection === 'close') this.handleConnectionClose(lastDisconnect);
+          else if (connection === 'open') this.handleConnectionOpen();
+          else if (connection === 'connecting') this.updateGlobalStatus({ status: 'connecting' });
         });
 
-        // --- ADIÇÃO DO HANDLER DE MENSAGENS ---
+        // ✅ NOVO HANDLER DE MENSAGENS
         this.sock.ev.on('messages.upsert', async (update) => {
             for (const m of update.messages) {
-                // Ignorar mensagens próprias, de grupos, ou sem conteúdo
                 if (!m.key || m.key.fromMe || !m.key.remoteJid || isJidGroup(m.key.remoteJid) || !m.message) {
                     continue;
                 }
 
-                // Extrair o conteúdo da mensagem de texto
                 const messageText = m.message.conversation || m.message.extendedTextMessage?.text || '';
                 
                 if (messageText) {
-                    logger.info({ userId: this.userId, from: m.key.remoteJid, text: messageText }, 'Mensagem de texto recebida, encaminhando para o FlowEngine.');
-                    
-                    // Chama o motor de fluxo para processar a mensagem
-                    await flowEngine.processMessage(this.userId, m.key.remoteJid, messageText)
-                        .catch(err => {
-                            logger.error({ userId: this.userId, from: m.key.remoteJid, error: err.message }, 'Erro no FlowEngine ao processar mensagem.');
-                        });
+                    logger.info({ userId: this.userId, from: m.key.remoteJid, text: messageText }, 'Mensagem recebida, encaminhando para o FlowEngine.');
+                    try {
+                        await flowEngine.processMessage(this.userId, m.key.remoteJid, messageText);
+                    } catch (err: any) {
+                        logger.error({ userId: this.userId, from: m.key.remoteJid, error: err.message }, 'Erro no FlowEngine ao processar mensagem.');
+                    }
                 }
             }
         });
-
 
     } catch (error: any) {
         logger.error({ userId: this.userId, error: error.message, stack: error.stack }, "Falha crítica ao inicializar o WhatsApp.");
@@ -169,7 +149,6 @@ export class WhatsappConnectionService {
         const errorMessage = boomError?.message || 'Conexão perdida';
         this.updateGlobalStatus({ status: 'error', lastError: errorMessage });
     }
-    
     this.cleanup();
   }
 
@@ -189,11 +168,11 @@ export class WhatsappConnectionService {
 
   private cleanSessionFiles() {
     try {
-        if (fs.existsSync(this.userSessionDir)) {
-          fs.rmSync(this.userSessionDir, { recursive: true, force: true });
-        }
+      if (fs.existsSync(this.userSessionDir)) {
+        fs.rmSync(this.userSessionDir, { recursive: true, force: true });
+      }
     } catch (error: any) {
-        logger.error({ userId: this.userId, error: error.message }, "Erro ao limpar arquivos de sessão.");
+      logger.error({ userId: this.userId, error: error.message }, "Erro ao limpar arquivos de sessão.");
     }
   }
 
@@ -214,7 +193,7 @@ export class WhatsappConnectionService {
   public async sendMessage(jid: string, messagePayload: any) {
     const connection = activeConnections.get(this.userId);
     if (!connection?.sock || connection.statusDetails.status !== 'connected') {
-        throw new Error('WhatsApp não conectado.');
+        throw new Error('WhatsApp não está conectado.');
     }
     return await connection.sock.sendMessage(jid, messagePayload);
   }
@@ -223,7 +202,7 @@ export class WhatsappConnectionService {
     const connection = activeConnections.get(userId);
     if (!connection?.sock || connection.statusDetails.status !== 'connected') {
         logger.error({ userId, jid, status: connection?.statusDetails?.status }, 'Tentativa de enviar mensagem para um socket não conectado.');
-        throw new Error(`WhatsApp não conectado para o usuário ${userId}.`);
+        throw new Error(`WhatsApp não está conectado para o usuário ${userId}.`);
     }
     logger.info({ userId, jid }, 'Enviando mensagem via FlowEngine.');
     return await connection.sock.sendMessage(jid, messagePayload);
