@@ -10,7 +10,7 @@
     "declaration": false,
     "isolatedModules": false,
 
-    /* --- CORREÇÕES --- */
+
     "allowImportingTsExtensions": false,
     "types": ["node"]
   },
