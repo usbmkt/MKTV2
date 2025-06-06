@@ -13,19 +13,17 @@ import { cn } from "@/lib/utils";
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/api';
 import { useAuthStore } from '@/lib/auth';
-import { useLocation } from "wouter";
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"; // DialogFooter é comum, incluí por precaução
 import {
-    MessageSquare, ListChecks, Trash2 as IconTrash, Image as ImageIcon, Clock, Variable, Waypoints, HelpCircle, Settings, Plus, RefreshCw, Send, RadioTower, UserCheck, LogOut, Save, Play, Square, Filter, Layers, Activity, Workflow, Target, Mic, FileText as FileIcon, MapPin, Repeat, Webhook, Sparkles, ArrowLeft, X, AlertTriangle, Bot, FileTerminal, Clock10, Tag, Shuffle,
-    MessageCircle as MsgIcon, Phone, Search, MoreVertical, Check, CheckCheck, Paperclip, Smile, Users, TrendingUp, Download, Upload,
+    MessageSquare, ListChecks, Trash2 as IconTrash, Image as ImageIcon, Clock, Variable, Waypoints, HelpCircle, Plus, Send, RadioTower, UserCheck, LogOut, Save, Play, Square, Filter, Layers, Activity, Workflow, Mic, FileText as FileIcon, MapPin, Repeat, Webhook, X, AlertTriangle, Bot, Clock10, Tag, Shuffle,
+    MessageCircle as MsgIcon, Phone, Search, MoreVertical, Check, CheckCheck, Paperclip, Smile,
     Loader2
 } from 'lucide-react';
 
 import {
-    ReactFlow, MiniMap, Controls, Background, useNodesState, useEdgesState, addEdge, Node, Edge, OnConnect, BackgroundVariant, MarkerType, Position, Handle, NodeProps, useReactFlow, ReactFlowProvider, ReactFlowInstance, NodeOrigin, Panel
+    ReactFlow, MiniMap, Controls, Background, useNodesState, useEdgesState, addEdge, Node, Edge, OnConnect, BackgroundVariant, MarkerType, Position, Handle, NodeProps, useReactFlow, ReactFlowProvider, NodeOrigin, Panel
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -53,7 +51,6 @@ import {
     LoopNodeData,
     ApiCallNodeData,
     WebhookCallNodeData,
-    AIAgentNodeData,
     AssignAgentNodeData,
     EndFlowNodeData,
     GoToFlowNodeData,
@@ -63,10 +60,11 @@ import {
 // Usando os novos caminhos para componentes e utils do fluxo
 import NodeContextMenuComponent from '@/components/flow/NodeContextMenu';
 import { IconWithGlow, NEON_COLOR, NEON_GREEN, NEON_RED, baseButtonSelectStyle, baseCardStyle, baseInputInsetStyle, popoverContentStyle, customScrollbarStyle } from '@/components/flow/utils';
-import WhatsAppConnection from '@/components/whatsapp-connection';
+// ✅ CORREÇÃO APLICADA AQUI
+import { WhatsAppConnection } from '@/components/whatsapp-connection';
 
 
-// --- INTERFACES MOCK (MANTIDAS DO SEU CÓDIGO ORIGINAL PARA A ABA CONVERSAS) ---
+// --- INTERFACES MOCK (PARA A ABA CONVERSAS) ---
 interface WhatsAppMessage {
   id: number;
   contactNumber: string;
@@ -90,7 +88,7 @@ interface Contact {
 }
 
 
-// --- INÍCIO DOS COMPONENTES DE NÓ E FUNÇÕES AUXILIARES DO FLOW.TSX (adaptado) ---
+// --- INÍCIO DOS COMPONENTES DE NÓ E FUNÇÕES AUXILIARES DO FLUXO ---
 const NodeInput = (props: React.ComponentProps<typeof Input>) => <Input {...props} className={cn(baseInputInsetStyle, "text-[11px] h-7 px-1.5 py-1 rounded", props.className)} />;
 const NodeLabel = (props: React.ComponentProps<typeof Label>) => <Label {...props} className={cn("text-[10px] text-gray-400 mb-0.5 block font-normal", props.className)} style={{ textShadow: `0 0 3px ${NEON_COLOR}30` }}/>;
 const NodeButton = (props: React.ComponentProps<typeof Button>) => <Button variant="outline" {...props} className={cn(baseButtonSelectStyle, `text-[10px] h-6 w-full rounded-sm px-2`, props.className)} style={{ textShadow: `0 0 4px ${NEON_COLOR}` }} />;
@@ -137,14 +135,13 @@ const globalNodeOrigin: NodeOrigin = [0.5, 0.5];
 // --- FIM DOS COMPONENTES DE NÓ ---
 
 
-// --- INÍCIO DO EDITOR DE FLUXO INTERNO (ADAPTADO DE FLOW.TSX) ---
-// Corrigido o nome da interface aqui
+// --- INÍCIO DO EDITOR DE FLUXO INTERNO ---
 interface FlowEditorInnerProps {
   activeFlowId?: string | null;
   onFlowSelect?: (flowId: string) => void;
 }
 
-function FlowEditorInner({ activeFlowId, onFlowSelect }: FlowEditorInnerProps) { // Corrigido aqui
+function FlowEditorInner({ activeFlowId, onFlowSelect }: FlowEditorInnerProps) { 
     const [nodes, setNodes, onNodesChange] = useNodesState<AllNodeDataTypes>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
     const reactFlowInstance = useReactFlow<AllNodeDataTypes, any>();
@@ -244,15 +241,16 @@ function FlowEditorInner({ activeFlowId, onFlowSelect }: FlowEditorInnerProps) {
           setSelectedFlow(prev => prev ? { ...prev, status: updatedFlow.status, updated_at: updatedFlow.updated_at } : null);
           queryClientInternal.invalidateQueries({ queryKey: ['flows'] }); 
           queryClientInternal.invalidateQueries({ queryKey: ['flowDetails', updatedFlow.id] });
+          // A lógica de recarga do bot foi movida para o backend ao ativar, mas podemos mostrar um toast se a API retornar sucesso
           if (newStatus === 'active') {
-            const reloadResponse = await apiRequest('POST', '/api/whatsapp/reload-flow', {});
-            if (reloadResponse.ok) {
-              const reloadData = await reloadResponse.json();
-              toast({ title: "Recarga Solicitada", description: reloadData.message, duration: 2000 });
-            } else {
-              const errorData = await reloadResponse.json();
-              throw new Error(errorData.message || errorData.error || "Erro ao solicitar recarga do bot");
-            }
+              const reloadResponse = await apiRequest('POST', '/api/whatsapp/reload-flow', {});
+              if (reloadResponse.ok) {
+                  const reloadData = await reloadResponse.json();
+                  toast({ title: "Recarga Solicitada", description: reloadData.message, duration: 2000 });
+              } else {
+                  const errorData = await reloadResponse.json();
+                  throw new Error(errorData.message || errorData.error || "Erro ao solicitar recarga do bot");
+              }
           }
       } catch (error: any) { toast({ title: "Erro Status", description: error.message, variant: "destructive" });
       } finally { setIsTogglingStatus(false); }
@@ -268,28 +266,29 @@ function FlowEditorInner({ activeFlowId, onFlowSelect }: FlowEditorInnerProps) {
         if (!reactFlowInstance || !selectedFlow) { toast({ title: "Ação Indisponível", description: "Selecione um fluxo para adicionar nós.", variant: "default" }); return; }
         const { x: viewX, y: viewY, zoom } = reactFlowInstance.getViewport(); const pane = reactFlowWrapper.current?.querySelector('.react-flow__pane') as HTMLElement; const paneRect = pane?.getBoundingClientRect() || {width: window.innerWidth, height: window.innerHeight, top:0, left:0}; const centerX = (paneRect.width / 2 - viewX) / zoom; const centerY = (paneRect.height / 2 - viewY) / zoom; const position = { x: centerX, y: centerY }; const newNodeId = `${type}_${Date.now()}_${Math.random().toString(16).substring(2, 6)}`;
         let newNodeData: AllNodeDataTypes | {} = {}; 
+        // Lógica de dados iniciais para cada nó
         switch (type) {
-            case 'textMessage': newNodeData = { text: 'Nova mensagem de texto...' } as TextMessageNodeData; break;
-            case 'buttonMessage': newNodeData = { text: 'Mensagem com botões', footer: '', buttons: [{ id: `btn_${newNodeId}_0`, text: 'Opção 1' }] } as ButtonMessageNodeData; break;
-            case 'imageMessage': newNodeData = { url: '', caption: '' } as ImageNodeData; break;
-            case 'audioMessage': newNodeData = { url: '', ptt: false } as AudioNodeData; break;
-            case 'fileMessage': newNodeData = { url: '', filename: '', mimetype: 'application/pdf' } as FileNodeData; break;
-            case 'locationMessage': newNodeData = { latitude: '', longitude: '', name: '', address: '' } as LocationNodeData; break;
-            case 'listMessage': newNodeData = { text: 'Corpo da lista', title: 'Título da Lista', buttonText: 'Ver Opções', footer: '', sections: [{ id: `sec_${newNodeId}_0`, title: 'Seção 1', rows: [{ id: `row_${newNodeId}_0_0`, title: 'Item 1', description: '' }] }] } as ListMessageNodeData; break;
-            case 'delay': newNodeData = { duration: 5, unit: 'seconds' } as DelayNodeData; break;
-            case 'waitInput': newNodeData = { variableName: 'userInput', message: 'Por favor, digite sua resposta:', timeoutSeconds: 60 } as WaitInputNodeData; break;
-            case 'setVariable': newNodeData = { variableName: 'novaVariavel', value: 'valor inicial' } as SetVariableNodeData; break;
-            case 'condition': newNodeData = { variableName: '{{algumaVariavel}}', comparison: 'equals', value: 'valorEsperado' } as ConditionNodeData; break;
-            case 'timeCondition': newNodeData = { startTime: '09:00', endTime: '18:00' } as TimeConditionNodeData; break;
-            case 'loopNode': newNodeData = { repetitions: 3 } as LoopNodeData; break;
-            case 'apiCall': newNodeData = { apiUrl: '', method: 'GET', headers: '{\n  "Content-Type": "application/json"\n}', body: '', saveResponseTo: 'apiResposta', timeoutMs: 10000 } as ApiCallNodeData; break;
-            case 'webhookCall': newNodeData = { url: '', method: 'POST', headers: '', body: '{\n  "data": "{{dadosDoUsuario}}"\n}', saveResponseTo: 'webhookResposta' } as WebhookCallNodeData; break;
-            case 'gptQuery': newNodeData = { prompt: 'Resuma o seguinte texto: {{textoParaResumir}}', systemMessage: 'Você é um assistente prestativo e conciso.', apiKeyVariable: 'GEMINI_API_KEY', saveResponseTo: 'gptResultado', model: 'gemini-1.5-flash-latest', temperature: 0.7, maxTokens: 250 } as GPTQueryNodeData; break;
-            case 'tagContact': newNodeData = { tagName: 'NovaTag', action: 'add' } as TagContactNodeData; break;
-            case 'goToFlow': newNodeData = { targetFlowId: '' } as GoToFlowNodeData; break;
-            case 'assignAgent': newNodeData = { department: '', message: 'Transferindo para atendimento humano.' } as AssignAgentNodeData; break;
-            case 'endFlow': newNodeData = { text: 'Fluxo concluído.', reason: '' } as EndFlowNodeData; break;
-            default: newNodeData = {}; break;
+          case 'textMessage': newNodeData = { text: 'Nova mensagem de texto...' } as TextMessageNodeData; break;
+          case 'buttonMessage': newNodeData = { text: 'Mensagem com botões', footer: '', buttons: [{ id: `btn_${newNodeId}_0`, text: 'Opção 1' }] } as ButtonMessageNodeData; break;
+          case 'imageMessage': newNodeData = { url: '', caption: '' } as ImageNodeData; break;
+          case 'audioMessage': newNodeData = { url: '' } as AudioNodeData; break;
+          case 'fileMessage': newNodeData = { url: '', filename: '' } as FileNodeData; break;
+          case 'locationMessage': newNodeData = { latitude: '', longitude: '' } as LocationNodeData; break;
+          case 'listMessage': newNodeData = { text: 'Corpo da lista', title: 'Título da Lista', buttonText: 'Ver Opções', footer: '', sections: [{ id: `sec_${newNodeId}_0`, title: 'Seção 1', rows: [{ id: `row_${newNodeId}_0_0`, title: 'Item 1', description: '' }] }] } as ListMessageNodeData; break;
+          case 'delay': newNodeData = { duration: 5, unit: 'seconds' } as DelayNodeData; break;
+          case 'waitInput': newNodeData = { variableName: 'userInput', message: 'Por favor, digite sua resposta:', timeoutSeconds: 60 } as WaitInputNodeData; break;
+          case 'setVariable': newNodeData = { variableName: 'novaVariavel', value: 'valor inicial' } as SetVariableNodeData; break;
+          case 'condition': newNodeData = { variableName: '{{algumaVariavel}}', comparison: 'equals', value: 'valorEsperado' } as ConditionNodeData; break;
+          case 'timeCondition': newNodeData = { startTime: '09:00', endTime: '18:00' } as TimeConditionNodeData; break;
+          case 'loopNode': newNodeData = { repetitions: 3 } as LoopNodeData; break;
+          case 'apiCall': newNodeData = { apiUrl: '', method: 'GET', headers: '{\n  "Content-Type": "application/json"\n}', body: '', saveResponseTo: 'apiResposta' } as ApiCallNodeData; break;
+          case 'webhookCall': newNodeData = { url: '', method: 'POST', headers: '', body: '{\n  "data": "{{dadosDoUsuario}}"\n}', saveResponseTo: 'webhookResposta' } as WebhookCallNodeData; break;
+          case 'gptQuery': newNodeData = { prompt: 'Resuma o seguinte texto: {{textoParaResumir}}', apiKeyVariable: 'GEMINI_API_KEY', saveResponseTo: 'gptResultado'} as GPTQueryNodeData; break;
+          case 'tagContact': newNodeData = { tagName: 'NovaTag', action: 'add' } as TagContactNodeData; break;
+          case 'goToFlow': newNodeData = { targetFlowId: '' } as GoToFlowNodeData; break;
+          case 'assignAgent': newNodeData = { department: '', message: 'Transferindo para atendimento humano.' } as AssignAgentNodeData; break;
+          case 'endFlow': newNodeData = { reason: '' } as EndFlowNodeData; break;
+          default: newNodeData = {}; break;
         }
         const nodeToAdd: Node<AllNodeDataTypes> = { id: newNodeId, type, position, data: newNodeData as AllNodeDataTypes, dragHandle: '.node-header' }; 
         reactFlowInstance.addNodes([nodeToAdd]); 
@@ -379,10 +378,10 @@ function FlowEditorInner({ activeFlowId, onFlowSelect }: FlowEditorInnerProps) {
                     {isLoadingEditor && <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white z-30 backdrop-blur-sm"><Activity className="h-6 w-6 animate-spin mr-2.5" style={{ filter: `drop-shadow(0 0 5px ${NEON_COLOR})` }}/> Processando...</div>}
                     {!selectedFlow && !isLoadingEditor && (
                       <div className="absolute inset-0 bg-black/30 dark:bg-black/50 flex flex-col items-center justify-center text-white z-20 backdrop-blur-sm text-sm p-5 text-center" style={{ textShadow: `0 0 4px ${NEON_COLOR}` }}>
-                        <Workflow className="h-12 w-12 mb-3 text-primary/70" style={{filter: `drop-shadow(0 0 8px ${NEON_COLOR})`}} />
-                        Nenhum fluxo selecionado.
-                        <br/>
-                        Vá para a aba "Fluxos Salvos" para selecionar ou criar um novo fluxo.
+                          <Workflow className="h-12 w-12 mb-3 text-primary/70" style={{filter: `drop-shadow(0 0 8px ${NEON_COLOR})`}} />
+                          Nenhum fluxo selecionado.
+                          <br/>
+                          Vá para a aba "Fluxos Salvos" para selecionar ou criar um novo fluxo.
                       </div>
                     )}
                 </div>
@@ -393,9 +392,9 @@ function FlowEditorInner({ activeFlowId, onFlowSelect }: FlowEditorInnerProps) {
 // --- FIM DO EDITOR DE FLUXO INTERNO ---
 
 
-interface WhatsAppPageActualProps {} // Renomeado para evitar conflito com o export default
+interface WhatsAppPageProps {} 
 
-const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
+const WhatsApp: React.FC<WhatsAppPageProps> = () => {
   const [activeTab, setActiveTab] = useState('connection'); // Iniciar na aba de conexão
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -420,7 +419,8 @@ const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
   const sendChatMessage = () => { if (!currentChatMessage.trim() || !selectedContact) return; console.log('Enviando mensagem:', currentChatMessage, 'para:', selectedContact); setCurrentChatMessage(''); };
   const handleChatKeyPress = (e: React.KeyboardEvent) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChatMessage(); }};
 
-  const { data: fetchedFlowsList, isLoading: isLoadingFlowsList, error: flowsListError, refetch: refetchFlowsForList } = useQuery<FlowData[]>({
+  // Busca a lista de fluxos para a aba "Fluxos Salvos"
+  const { isLoading: isLoadingFlowsList, error: flowsListError } = useQuery<FlowData[]>({
     queryKey: ['flows', filterCampaignIdForList],
     queryFn: async () => {
       if (!auth.isAuthenticated) return [];
@@ -439,10 +439,12 @@ const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
     enabled: auth.isAuthenticated,
     onSuccess: (data) => {
       setFlowsList(data);
+      // Lógica para auto-selecionar o primeiro fluxo da lista
       if (isInitialFlowLoad && data.length > 0 && !activeFlowIdForEditor) {
         setActiveFlowIdForEditor(String(data[0].id));
         setIsInitialFlowLoad(false);
       } else if (activeFlowIdForEditor && !data.some(f => String(f.id) === activeFlowIdForEditor)) {
+        // Se o fluxo ativo foi deletado ou não está mais na lista filtrada, seleciona o primeiro
         setActiveFlowIdForEditor(data.length > 0 ? String(data[0].id) : null);
       }
     },
@@ -452,7 +454,8 @@ const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
     }
   });
 
-  const { data: fetchedCampaignsForFilter, isLoading: isLoadingCampaignsForFilter } = useQuery<CampaignSelectItem[]>({
+  // Busca a lista de campanhas para o dropdown de filtro
+  const { isLoading: isLoadingCampaignsForFilter } = useQuery<CampaignSelectItem[]>({
     queryKey: ['campaignsForFlowFilter'],
     queryFn: async () => {
       if (!auth.isAuthenticated) return [];
@@ -465,8 +468,9 @@ const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
     onSuccess: (data) => setCampaignListForFilter(data),
     onError: (error: any) => toast({ title: "Erro Campanhas (Filtro)", description: error.message, variant: "destructive" })
   });
-
-  const createNewFlowMutation = useMutation<FlowData, Error, { name: string, campaign_id: string | null }>({
+  
+  // Mutação para criar um novo fluxo
+  const createNewFlowMutation = useMutation<FlowData, Error, { name: string; campaign_id: string | null }>({
     mutationFn: async (flowData) => {
       const response = await apiRequest('POST', '/api/flows', flowData);
       if (!response.ok) {
@@ -477,7 +481,7 @@ const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
     },
     onSuccess: (createdFlow) => {
       toast({ title: "Fluxo Criado!" });
-      queryClient.invalidateQueries({ queryKey: ['flows', filterCampaignIdForList] });
+      queryClient.invalidateQueries({ queryKey: ['flows'] });
       setActiveFlowIdForEditor(String(createdFlow.id));
       setActiveTab('flow-builder');
     },
@@ -492,6 +496,7 @@ const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
     createNewFlowMutation.mutate({ name: newFlowName.trim(), campaign_id: campaignIdToAssign });
   }, [auth.isAuthenticated, filterCampaignIdForList, createNewFlowMutation]);
 
+  // Mutação para deletar um fluxo
   const deleteFlowMutation = useMutation<void, Error, string>({
     mutationFn: async (flowId: string) => {
       const response = await apiRequest('DELETE', `/api/flows?id=${flowId}`);
@@ -502,7 +507,7 @@ const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
     },
     onSuccess: (_, deletedId) => {
       toast({ title: "Fluxo Deletado" });
-      queryClient.invalidateQueries({ queryKey: ['flows', filterCampaignIdForList] });
+      queryClient.invalidateQueries({ queryKey: ['flows'] });
       if (activeFlowIdForEditor === deletedId) {
         setActiveFlowIdForEditor(null);
       }
@@ -514,7 +519,7 @@ const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
     const flowToDelete = flowsList.find(f => String(f.id) === flowId);
     if (!flowToDelete || !window.confirm(`Deletar o fluxo "${flowToDelete.name}"?`)) return;
     deleteFlowMutation.mutate(flowId);
-  }, [flowsList, deleteFlowMutation, activeFlowIdForEditor]); // Adicionado activeFlowIdForEditor como dependência
+  }, [flowsList, deleteFlowMutation]);
 
   return (
     <div className="space-y-6">
@@ -640,7 +645,7 @@ const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
                                 campaignListForFilter.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                             </SelectContent>
                         </Select>
-                        <Button onClick={createNewFlowForList} className="neu-button w-full sm:w-auto">
+                        <Button onClick={createNewFlowForList} disabled={createNewFlowMutation.isPending} className="neu-button w-full sm:w-auto">
                             <Plus className="w-4 h-4 mr-2" /> Novo Fluxo
                         </Button>
                     </div>
@@ -673,7 +678,7 @@ const WhatsApp: React.FC<WhatsAppPageActualProps> = () => {
                                     <CardContent className="text-xs text-muted-foreground pt-1 pb-2 px-3">
                                         <p>Atualizado: {flow.updated_at ? new Date(flow.updated_at).toLocaleDateString('pt-BR', {day:'2-digit', month:'short'}) : 'N/A'}</p>
                                         <div className="mt-1 flex justify-end">
-                                           <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:text-destructive-foreground hover:bg-destructive/10" onClick={(e) => { e.stopPropagation(); deleteFlowFromList(String(flow.id));}}><IconTrash className="w-3 h-3" /></Button>
+                                           <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:text-destructive-foreground hover:bg-destructive/10" onClick={(e) => { e.stopPropagation(); deleteFlowFromList(String(flow.id));}} disabled={deleteFlowMutation.isPending}><IconTrash className="w-3 h-3" /></Button>
                                         </div>
                                     </CardContent>
                                 </Card>
