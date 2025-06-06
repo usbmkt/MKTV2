@@ -55,6 +55,13 @@ export const flowRelations = relations(flows, ({ one }) => ({ user: one(users, {
 
 
 // --- SCHEMAS ZOD PARA INSERÇÃO ---
+// ✅ CORREÇÃO: Schema específico para validar a estrutura dos elementos do fluxo
+const FlowElementsSchema = z.object({
+    nodes: z.array(z.any()).default([]),
+    edges: z.array(z.any()).default([]),
+}).nullable().optional().default({ nodes: [], edges: [] });
+
+
 export const insertUserSchema = createInsertSchema(users, { email: z.string().email("Email inválido."), username: z.string().min(3, "Nome de usuário deve ter pelo menos 3 caracteres."), password: z.string().min(6, "Senha deve ter pelo menos 6 caracteres."), }).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertCampaignSchema = createInsertSchema(campaigns, { name: z.string().min(1, "Nome da campanha é obrigatório."), budget: z.preprocess( (val) => (typeof val === 'string' && val.trim() !== '' ? parseFloat(val) : (typeof val === 'number' ? val : undefined)), z.number({ invalid_type_error: "Orçamento deve ser um número" }).nullable().optional() ), dailyBudget: z.preprocess( (val) => (typeof val === 'string' && val.trim() !== '' ? parseFloat(val) : (typeof val === 'number' ? val : undefined)), z.number({ invalid_type_error: "Orçamento diário deve ser um número" }).nullable().optional() ), avgTicket: z.preprocess( (val) => (typeof val === 'string' && val.trim() !== '' ? parseFloat(val) : (typeof val === 'number' ? val : undefined)), z.number({ invalid_type_error: "Ticket médio deve ser um número" }).nullable().optional() ), startDate: z.preprocess( (arg) => { if (typeof arg === "string" || arg instanceof Date) return new Date(arg); return undefined; }, z.date().optional().nullable() ), endDate: z.preprocess( (arg) => { if (typeof arg === "string" || arg instanceof Date) return new Date(arg); return undefined; }, z.date().optional().nullable() ), platforms: z.preprocess( (val) => { if (Array.isArray(val)) return val; if (typeof val === 'string') return val.split(',').map(s => s.trim()).filter(s => s); return []; }, z.array(z.string()).default([]) ), objectives: z.preprocess( (val) => { if (Array.isArray(val)) return val; if (typeof val === 'string') return val.split(',').map(s => s.trim()).filter(s => s); return []; }, z.array(z.string()).default([]) ), }).omit({ id: true, createdAt: true, updatedAt: true, userId: true });
 export const insertCreativeSchema = createInsertSchema(creatives, { name: z.string().min(1, "Nome do criativo é obrigatório."), type: z.enum(creatives.type.enumValues as [string, ...string[]]), status: z.enum(creatives.status.enumValues as [string, ...string[]]).optional(), platforms: z.preprocess( (val) => { if (Array.isArray(val)) { return val; } if (typeof val === 'string') { return val.split(',').map(s => s.trim()).filter(s => s.length > 0); } return []; }, z.array(z.string()).optional() ), fileUrl: z.string().nullable().optional(), thumbnailUrl: z.string().nullable().optional(), campaignId: z.preprocess( (val) => { if (val === "NONE" || val === null || val === undefined || val === "") { return null; } const parsed = parseInt(String(val)); return isNaN(parsed) ? null : parsed; }, z.number().int().positive().nullable().optional() ),}).omit({ id: true, createdAt: true, updatedAt: true, userId: true });
@@ -71,7 +78,7 @@ export const insertMetricSchema = createInsertSchema(metrics, { campaignId: z.nu
 export const insertFlowSchema = createInsertSchema(flows, { 
     name: z.string().min(1, "Nome do fluxo é obrigatório."), 
     status: z.enum(flowStatusEnum.enumValues).default('draft'), 
-    elements: z.any().optional(), // ✅ CORREÇÃO APLICADA AQUI
+    elements: FlowElementsSchema, // ✅ CORREÇÃO APLICADA AQUI
     campaignId: z.preprocess( (val) => (val === undefined || val === null || val === "" || String(val).toUpperCase() === "NONE" ? null : parseInt(String(val))), z.number().int().positive().nullable().optional() ),
 }).omit({ id: true, createdAt: true, updatedAt: true, userId: true });
 
