@@ -127,7 +127,7 @@ export const WhatsAppConnection: React.FC<WhatsAppConnectionProps> = ({ onConnec
                 <AlertDescription>
                   <ol className="list-decimal list-inside space-y-1 mt-2">
                     <li>Clique em "Conectar / Gerar QR Code".</li>
-                    <li>No seu celular, vá em WhatsApp > Dispositivos conectados.</li>
+                    <li>No seu celular, vá em WhatsApp &gt; Dispositivos conectados.</li>
                     <li>Toque em "Conectar um dispositivo" e escaneie o código.</li>
                   </ol>
                 </AlertDescription>
