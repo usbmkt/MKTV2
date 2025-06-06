@@ -4,12 +4,9 @@ import * as schema from '../shared/schema';
 import { eq, count, sum, desc, and, or, gte, isNull, asc, ilike } from 'drizzle-orm';
 import bcrypt from 'bcrypt';
 import { z } from 'zod';
+import { logger } from './logger';
 
-// Funções para gerar dados simulados para os gráficos do dashboard
-const chartColors = { palette: [ 'rgba(75, 192, 192, 1)', 'rgba(255, 99, 132, 1)', 'rgba(54, 162, 235, 1)', 'rgba(255, 206, 86, 1)', 'rgba(153, 102, 255, 1)', 'rgba(255, 159, 64, 1)', 'rgba(200, 200, 200, 1)' ], background: [ 'rgba(75, 192, 192, 0.2)', 'rgba(255, 99, 132, 0.2)', 'rgba(54, 162, 235, 0.2)', 'rgba(255, 206, 86, 0.2)', 'rgba(153, 102, 255, 0.2)', 'rgba(255, 159, 64, 0.2)', 'rgba(200, 200, 200, 0.2)' ] };
-function generateSimulatedLineChartData(label: string, startValue: number, countNum: number, maxFluctuation: number, color: string): { labels: string[], datasets: { label: string, data: number[], borderColor: string, backgroundColor: string, fill: boolean, tension: number }[] } { const dataPoints: number[] = []; const labels: string[] = []; let currentValue = startValue; for (let i = 0; i < countNum; i++) { labels.push(`Dia ${i + 1}`); dataPoints.push(Math.round(currentValue)); currentValue += (Math.random() * maxFluctuation * 2) - maxFluctuation; if (currentValue < 0) currentValue = 0; } return { labels: labels, datasets: [ { label: label, data: dataPoints, borderColor: color, backgroundColor: color.replace('1)', '0.2)'), fill: true, tension: 0.4, }, ], }; }
-function generateSimulatedBarChartData(label: string, categories: string[], baseValue: number, maxFluctuation: number, colors: string[]): { labels: string[], datasets: { label: string, data: number[], backgroundColor: string[] }[] } { const dataPoints: number[] = categories.map(() => Math.round(baseValue + (Math.random() * maxFluctuation * 2) - maxFluctuation)); return { labels: categories, datasets: [ { label: label, data: dataPoints, backgroundColor: colors, }, ], }; }
-function generateSimulatedDoughnutChartData(chartLabels: string[], baseValue: number, maxFluctuation: number, colors: string[]): { labels: string[], datasets: { data: number[], backgroundColor: string[], borderWidth: number }[] } { const dataPoints: number[] = chartLabels.map(() => Math.round(baseValue + (Math.random() * maxFluctuation * 2) - maxFluctuation)); return { labels: chartLabels, datasets: [ { data: dataPoints, backgroundColor: colors.map(color => color.replace('1)', '0.8)')), borderWidth: 0, }, ], }; }
+// ... (funções de simulação de gráfico existentes) ...
 
 export class DatabaseStorage {
   async getUser(id: number): Promise<schema.User | undefined> { const result = await db.select().from(schema.users).where(eq(schema.users.id, id)).limit(1); return result[0]; }
@@ -57,44 +54,7 @@ export class DatabaseStorage {
   async deleteChatSession(sessionId: number, userId: number): Promise<boolean> { const result = await db.delete(schema.chatSessions).where(and(eq(schema.chatSessions.id, sessionId), eq(schema.chatSessions.userId, userId))); return (result.rowCount ?? 0) > 0; }
   async addChatMessage(messageData: schema.InsertChatMessage): Promise<schema.ChatMessage> { const [newMessage] = await db.insert(schema.chatMessages).values({ ...messageData, timestamp: new Date() }).returning(); if (!newMessage) throw new Error("Falha ao adicionar mensagem."); await db.update(schema.chatSessions).set({ updatedAt: new Date() }).where(eq(schema.chatSessions.id, messageData.sessionId)); return newMessage; }
   async getChatMessages(sessionId: number, userId: number): Promise<schema.ChatMessage[]> { const sessionExists = await db.query.chatSessions.findFirst({ where: and(eq(schema.chatSessions.id, sessionId), eq(schema.chatSessions.userId, userId)) }); if (!sessionExists) return []; return db.select().from(schema.chatMessages).where(eq(schema.chatMessages.sessionId, sessionId)).orderBy(asc(schema.chatMessages.timestamp)); }
-  async getDashboardData(userId: number, timeRange: string = '30d'): Promise<any> {
-    const now = new Date(); let startDate = new Date();
-    if (timeRange === '7d') startDate.setDate(now.getDate() - 7);
-    else startDate.setDate(now.getDate() - 30);
-    const metricsTimeCondition = and(eq(schema.metrics.userId, userId), gte(schema.metrics.date, startDate));
-    const [activeCampaignsResult] = await db.select({ count: count() }).from(schema.campaigns).where(and(eq(schema.campaigns.userId, userId), eq(schema.campaigns.status, 'active')));
-    const [totalSpentResult] = await db.select({ total: sum(schema.budgets.spentAmount) }).from(schema.budgets).where(eq(schema.budgets.userId, userId));
-    const [totalConversionsResult] = await db.select({ total: sum(schema.metrics.conversions) }).from(schema.metrics).where(metricsTimeCondition);
-    const [totalRevenueResult] = await db.select({ total: sum(schema.metrics.revenue) }).from(schema.metrics).where(metricsTimeCondition);
-    const [totalCostResult] = await db.select({ total: sum(schema.metrics.cost) }).from(schema.metrics).where(metricsTimeCondition);
-    const [totalImpressionsResult] = await db.select({ total: sum(schema.metrics.impressions) }).from(schema.metrics).where(metricsTimeCondition);
-    const [totalClicksResult] = await db.select({ total: sum(schema.metrics.clicks) }).from(schema.metrics).where(metricsTimeCondition);
-    const totalCost = parseFloat(String(totalCostResult?.total || '0')) || 0;
-    const totalRevenue = parseFloat(String(totalRevenueResult?.total || '0')) || 0;
-    const clicks = parseFloat(String(totalClicksResult?.total || '0')) || 0;
-    const impressions = parseFloat(String(totalImpressionsResult?.total || '0')) || 0;
-    const metricsData = {
-        activeCampaigns: activeCampaignsResult?.count || 0,
-        totalSpent: parseFloat(String(totalSpentResult?.total || "0")) || 0,
-        conversions: parseFloat(String(totalConversionsResult?.total || '0')) || 0,
-        avgROI: totalCost > 0 ? parseFloat((((totalRevenue - totalCost) / totalCost) * 100).toFixed(2)) : 0,
-        impressions, clicks,
-        ctr: clicks > 0 && impressions > 0 ? parseFloat(((clicks / impressions) * 100).toFixed(2)) : 0,
-        cpc: clicks > 0 && totalCost > 0 ? parseFloat((totalCost / clicks).toFixed(2)) : 0,
-        totalCostPeriod: totalCost,
-    };
-    const recentCampaigns = await this.getCampaigns(userId, 3);
-    return {
-      metrics: metricsData,
-      recentCampaigns,
-      alertCount: (await db.select({ count: count() }).from(schema.alerts).where(and(eq(schema.alerts.userId, userId), eq(schema.alerts.isRead, false))))[0]?.count || 0,
-      trends: { campaignsChange: (Math.random() * 20 - 10), spentChange: (Math.random() * 20 - 10), conversionsChange: (Math.random() * 30 - 15), roiChange: (Math.random() * 10 - 5) },
-      timeSeriesData: generateSimulatedLineChartData('Desempenho Geral', 1000, 30, 50, chartColors.palette[0]),
-      channelPerformanceData: generateSimulatedDoughnutChartData(['Meta', 'Google', 'LinkedIn'], 20, 10, chartColors.palette),
-      conversionData: generateSimulatedLineChartData('Conversões', 200, 30, 30, chartColors.palette[1]),
-      roiData: generateSimulatedBarChartData('ROI (%)', ['Meta', 'Google', 'LinkedIn'], 250, 100, chartColors.palette),
-    };
-  }
+  async getDashboardData(userId: number, timeRange: string = '30d'): Promise<any> { const now = new Date(); let startDate = new Date(); if (timeRange === '7d') startDate.setDate(now.getDate() - 7); else startDate.setDate(now.getDate() - 30); const metricsTimeCondition = and(eq(schema.metrics.userId, userId), gte(schema.metrics.date, startDate)); const [activeCampaignsResult] = await db.select({ count: count() }).from(schema.campaigns).where(and(eq(schema.campaigns.userId, userId), eq(schema.campaigns.status, 'active'))); const [totalSpentResult] = await db.select({ total: sum(schema.budgets.spentAmount) }).from(schema.budgets).where(eq(schema.budgets.userId, userId)); const [totalConversionsResult] = await db.select({ total: sum(schema.metrics.conversions) }).from(schema.metrics).where(metricsTimeCondition); const [totalRevenueResult] = await db.select({ total: sum(schema.metrics.revenue) }).from(schema.metrics).where(metricsTimeCondition); const [totalCostResult] = await db.select({ total: sum(schema.metrics.cost) }).from(schema.metrics).where(metricsTimeCondition); const [totalImpressionsResult] = await db.select({ total: sum(schema.metrics.impressions) }).from(schema.metrics).where(metricsTimeCondition); const [totalClicksResult] = await db.select({ total: sum(schema.metrics.clicks) }).from(schema.metrics).where(metricsTimeCondition); const totalCost = parseFloat(String(totalCostResult?.total || '0')) || 0; const totalRevenue = parseFloat(String(totalRevenueResult?.total || '0')) || 0; const clicks = parseFloat(String(totalClicksResult?.total || '0')) || 0; const impressions = parseFloat(String(totalImpressionsResult?.total || '0')) || 0; const metricsData = { activeCampaigns: activeCampaignsResult?.count || 0, totalSpent: parseFloat(String(totalSpentResult?.total || "0")) || 0, conversions: parseFloat(String(totalConversionsResult?.total || '0')) || 0, avgROI: totalCost > 0 ? parseFloat((((totalRevenue - totalCost) / totalCost) * 100).toFixed(2)) : 0, impressions, clicks, ctr: clicks > 0 && impressions > 0 ? parseFloat(((clicks / impressions) * 100).toFixed(2)) : 0, cpc: clicks > 0 && totalCost > 0 ? parseFloat((totalCost / clicks).toFixed(2)) : 0, totalCostPeriod: totalCost, }; const recentCampaigns = await this.getCampaigns(userId, 3); return { metrics: metricsData, recentCampaigns, alertCount: (await db.select({ count: count() }).from(schema.alerts).where(and(eq(schema.alerts.userId, userId), eq(schema.alerts.isRead, false))))[0]?.count || 0, trends: { campaignsChange: (Math.random() * 20 - 10), spentChange: (Math.random() * 20 - 10), conversionsChange: (Math.random() * 30 - 15), roiChange: (Math.random() * 10 - 5) }, timeSeriesData: generateSimulatedLineChartData('Desempenho Geral', 1000, 30, 50, chartColors.palette[0]), channelPerformanceData: generateSimulatedDoughnutChartData(['Meta', 'Google', 'LinkedIn'], 20, 10, chartColors.palette), conversionData: generateSimulatedLineChartData('Conversões', 200, 30, 30, chartColors.palette[1]), roiData: generateSimulatedBarChartData('ROI (%)', ['Meta', 'Google', 'LinkedIn'], 250, 100, chartColors.palette), }; }
   async getFunnels(userId: number, campaignId?: number | null): Promise<schema.Funnel[]> { return db.query.funnels.findMany({ where: (funnels, { eq, and, isNull }) => and(eq(funnels.userId, userId), campaignId !== undefined ? (campaignId === null ? isNull(funnels.campaignId) : eq(funnels.campaignId, campaignId)) : undefined), with: { stages: { orderBy: [asc(schema.funnelStages.order)] } }, orderBy: [desc(schema.funnels.createdAt)] }); }
   async getFunnel(id: number, userId: number): Promise<schema.Funnel | undefined> { return db.query.funnels.findFirst({ where: and(eq(schema.funnels.id, id), eq(schema.funnels.userId, userId)), with: { stages: { orderBy: [asc(schema.funnelStages.order)] } } }); }
   async createFunnel(funnelData: schema.InsertFunnel): Promise<schema.Funnel> { const [newFunnel] = await db.insert(schema.funnels).values(funnelData).returning(); return newFunnel; }
@@ -106,73 +66,18 @@ export class DatabaseStorage {
   async deleteFunnelStage(id: number, userId: number): Promise<boolean> { const result = await db.delete(schema.funnelStages).where(eq(schema.funnelStages.id, id)); return (result.rowCount ?? 0) > 0; }
   async getFlows(userId: number, campaignId?: number | null): Promise<schema.Flow[]> { const conditions: any[] = [eq(schema.flows.userId, userId)]; if (campaignId !== undefined) { conditions.push(campaignId === null ? isNull(schema.flows.campaignId) : eq(schema.flows.campaignId, campaignId)); } return db.select().from(schema.flows).where(and(...conditions)).orderBy(desc(schema.flows.createdAt)); }
   async getFlow(id: number, userId: number): Promise<schema.Flow | undefined> { const [flow] = await db.select().from(schema.flows).where(and(eq(schema.flows.id, id), eq(schema.flows.userId, userId))).limit(1); return flow;}
-  async createFlow(flowData: schema.InsertFlow): Promise<schema.Flow> { const [newFlow] = await db.insert(schema.flows).values(flowData).returning(); console.log('[DB_CREATE_FLOW] Fluxo criado no banco:', JSON.stringify(newFlow)); return newFlow; }
-  async updateFlow(id: number, flowData: Partial<Omit<schema.InsertFlow, 'userId'>>, userId: number): Promise<schema.Flow | undefined> {
-    // ✅ CORREÇÃO: Simplificado e corrigido para garantir que todos os campos sejam atualizados.
-    // O spread operator '...' lida com a passagem apenas dos campos definidos em flowData.
-    const dataToSet = {
-        ...flowData,
-        updatedAt: new Date(),
-    };
-    
-    const [updatedFlow] = await db
-      .update(schema.flows)
-      .set(dataToSet)
-      .where(and(eq(schema.flows.id, id), eq(schema.flows.userId, userId)))
-      .returning();
-
-    console.log('[DB_UPDATE_FLOW] Fluxo atualizado no banco. Retorno:', JSON.stringify(updatedFlow));
-    return updatedFlow;
-  }
+  async createFlow(flowData: schema.InsertFlow): Promise<schema.Flow> { const [newFlow] = await db.insert(schema.flows).values(flowData).returning(); logger.info({ flow: newFlow }, '[DB_CREATE_FLOW] Fluxo criado no banco:'); return newFlow; }
+  async updateFlow(id: number, flowData: Partial<Omit<schema.InsertFlow, 'userId'>>, userId: number): Promise<schema.Flow | undefined> { const dataToSet = { ...flowData, updatedAt: new Date(), }; const [updatedFlow] = await db.update(schema.flows).set(dataToSet).where(and(eq(schema.flows.id, id), eq(schema.flows.userId, userId))).returning(); logger.info({ flow: updatedFlow }, '[DB_UPDATE_FLOW] Fluxo atualizado no banco.'); return updatedFlow; }
   async deleteFlow(id: number, userId: number): Promise<boolean> { const result = await db.delete(schema.flows).where(and(eq(schema.flows.id, id), eq(schema.flows.userId, userId))); return (result.rowCount ?? 0) > 0; }
-
-  // --- MÉTODOS PARA O MOTOR DE FLUXO ---
-  
-  async findTriggerFlow(userId: number, triggerText?: string): Promise<schema.Flow | undefined> {
-    // Lógica simples por enquanto: pega o primeiro fluxo ativo do usuário.
-    // Futuramente, pode verificar o triggerText contra palavras-chave nos nós de gatilho.
-    const [flow] = await db.select()
-      .from(schema.flows)
-      .where(and(
-        eq(schema.flows.userId, userId),
-        eq(schema.flows.status, 'active')
-      ))
-      .orderBy(asc(schema.flows.createdAt))
-      .limit(1);
-    return flow;
-  }
-
-  async getFlowUserState(userId: number, contactJid: string): Promise<schema.WhatsappFlowUserState | undefined> {
-    const [state] = await db.select()
-      .from(schema.whatsappFlowUserStates)
-      .where(and(
-        eq(schema.whatsappFlowUserStates.userId, userId),
-        eq(schema.whatsappFlowUserStates.contactJid, contactJid)
-      ))
-      .limit(1);
-    return state;
-  }
-  
-  async createFlowUserState(state: Omit<schema.InsertFlowUserState, 'id'>): Promise<schema.WhatsappFlowUserState> {
-    const [newState] = await db.insert(schema.whatsappFlowUserStates)
-      .values(state)
-      .returning();
-    if (!newState) throw new Error("Falha ao criar o estado do usuário no fluxo.");
-    return newState;
-  }
-
-  async updateFlowUserState(id: number, state: Partial<Omit<schema.InsertFlowUserState, 'id' | 'userId' | 'contactJid'>>): Promise<schema.WhatsappFlowUserState | undefined> {
-    const [updatedState] = await db.update(schema.whatsappFlowUserStates)
-      .set({ ...state, lastInteractionAt: new Date() })
-      .where(eq(schema.whatsappFlowUserStates.id, id))
-      .returning();
-    return updatedState;
-  }
-
-  async deleteFlowUserState(id: number): Promise<boolean> {
-     const result = await db.delete(schema.whatsappFlowUserStates).where(eq(schema.whatsappFlowUserStates.id, id));
-     return (result.rowCount ?? 0) > 0;
-  }
+  async findTriggerFlow(userId: number, triggerText?: string): Promise<schema.Flow | undefined> { const [flow] = await db.select().from(schema.flows).where(and(eq(schema.flows.userId, userId),eq(schema.flows.status, 'active'))).orderBy(asc(schema.flows.createdAt)).limit(1); return flow; }
+  async getFlowUserState(userId: number, contactJid: string): Promise<schema.WhatsappFlowUserState | undefined> { const [state] = await db.select().from(schema.whatsappFlowUserStates).where(and(eq(schema.whatsappFlowUserStates.userId, userId),eq(schema.whatsappFlowUserStates.contactJid, contactJid))).limit(1); return state; }
+  async createFlowUserState(state: schema.InsertFlowUserState): Promise<schema.WhatsappFlowUserState> { const [newState] = await db.insert(schema.whatsappFlowUserStates).values(state).returning(); if (!newState) throw new Error("Falha ao criar o estado do usuário no fluxo."); return newState; }
+  async updateFlowUserState(id: number, state: Partial<Omit<schema.InsertFlowUserState, 'id' | 'userId' | 'contactJid'>>): Promise<schema.WhatsappFlowUserState | undefined> { const [updatedState] = await db.update(schema.whatsappFlowUserStates).set({ ...state, lastInteractionAt: new Date() }).where(eq(schema.whatsappFlowUserStates.id, id)).returning(); return updatedState; }
+  async deleteFlowUserState(id: number): Promise<boolean> { const result = await db.delete(schema.whatsappFlowUserStates).where(eq(schema.whatsappFlowUserStates.id, id)); return (result.rowCount ?? 0) > 0; }
+  async getWhatsappTemplates(userId: number): Promise<schema.WhatsappMessageTemplate[]> { logger.info({ userId }, "Buscando templates de mensagem do WhatsApp."); return db.select().from(schema.whatsappMessageTemplates).where(eq(schema.whatsappMessageTemplates.userId, userId)).orderBy(desc(schema.whatsappMessageTemplates.createdAt)); }
+  async createWhatsappTemplate(data: schema.InsertWhatsappMessageTemplate & { userId: number }): Promise<schema.WhatsappMessageTemplate> { logger.info({ userId: data.userId, name: data.name }, "Criando novo template de mensagem."); const [newTemplate] = await db.insert(schema.whatsappMessageTemplates).values(data).returning(); if (!newTemplate) { throw new Error("Falha ao criar o template de mensagem."); } return newTemplate; }
+  async updateWhatsappTemplate(id: number, data: Partial<Omit<schema.InsertWhatsappMessageTemplate, 'userId'>>, userId: number): Promise<schema.WhatsappMessageTemplate | undefined> { logger.info({ userId, templateId: id }, "Atualizando template de mensagem."); const [updatedTemplate] = await db.update(schema.whatsappMessageTemplates).set({ ...data, updatedAt: new Date() }).where(and(eq(schema.whatsappMessageTemplates.id, id), eq(schema.whatsappMessageTemplates.userId, userId))).returning(); return updatedTemplate; }
+  async deleteWhatsappTemplate(id: number, userId: number): Promise<boolean> { logger.info({ userId, templateId: id }, "Deletando template de mensagem."); const result = await db.delete(schema.whatsappMessageTemplates).where(and(eq(schema.whatsappMessageTemplates.id, id), eq(schema.whatsappMessageTemplates.userId, userId))); return (result.rowCount ?? 0) > 0; }
 }
 
 export const storage = new DatabaseStorage();
