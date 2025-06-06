@@ -1,18 +1,21 @@
 // server/services/whatsapp-flow.engine.ts
-import { storage } from '../storage';
-import { WhatsappConnectionService } from './whatsapp-connection.service';
-import { externalDataService } from './external-data.service';
-import { getSimpleAiResponse } from '../mcp_handler';
-import * as schema from '../../shared/schema';
-import { Edge, Node } from '@xyflow/react';
-import { logger } from '../logger';
+import { storage } from '../storage.js';
+import { WhatsappConnectionService } from './whatsapp-connection.service.js';
+import { externalDataService } from './external-data.service.js';
+import { getSimpleAiResponse } from '../mcp_handler.js';
+import * as schema from '../../shared/schema.js';
+import { logger } from '../logger.js';
+
+// Tipos locais para substituir a dependência do @xyflow/react no backend
+interface FlowNode { id: string; type?: string; data: any; position: { x: number; y: number };[key: string]: any; }
+interface FlowEdge { id: string; source: string; target: string; sourceHandle?: string | null; targetHandle?: string | null;[key: string]: any; }
 
 export class WhatsappFlowEngine {
 
   private interpolate(text: string, variables: Record<string, any>): string {
     if (!text) return '';
-    return text.replace(/\{\{([a-zA-Z0-9_.-]+)\}\}/g, (match, key) => {
-      const value = key.split('.').reduce((o, i) => (o ? o[i] : undefined), variables);
+    return text.replace(/\{\{([a-zA-Z0-9_.-]+)\}\}/g, (match: string, key: string) => {
+      const value = key.split('.').reduce((o: any, i: any) => (o ? o[i] : undefined), variables);
       return value !== undefined ? String(value) : match;
     });
   }
@@ -93,11 +96,11 @@ export class WhatsappFlowEngine {
     }
   }
 
-  private findStartNode = (flow: schema.Flow): Node | undefined => flow.elements.nodes.find(n => !flow.elements.edges.some(e => e.target === n.id));
-  private findNodeById = (flow: schema.Flow, nodeId: string): Node | undefined => flow.elements.nodes.find(n => n.id === nodeId);
+  private findStartNode = (flow: schema.Flow): FlowNode | undefined => flow.elements.nodes.find((n: FlowNode) => !flow.elements.edges.some((e: FlowEdge) => e.target === n.id));
+  private findNodeById = (flow: schema.Flow, nodeId: string): FlowNode | undefined => flow.elements.nodes.find((n: FlowNode) => n.id === nodeId);
   private isWaitingNode = (type?: string): boolean => ['buttonMessage', 'waitInput'].includes(type || '');
   
-  private async processInput(userState: schema.WhatsappFlowUserState, node: Node, edges: Edge[], messageContent: string): Promise<string | null> {
+  private async processInput(userState: schema.WhatsappFlowUserState, node: FlowNode, edges: FlowEdge[], messageContent: string): Promise<string | null> {
     let nextNodeId: string | null = null;
     try {
       switch (node.type) {
@@ -128,7 +131,7 @@ export class WhatsappFlowEngine {
     return nextNodeId;
   }
 
-  private async executeWaitingNode(userState: schema.WhatsappFlowUserState, node: Node): Promise<void> {
+  private async executeWaitingNode(userState: schema.WhatsappFlowUserState, node: FlowNode): Promise<void> {
     try {
       switch (node.type) {
         case 'buttonMessage': {
@@ -154,7 +157,7 @@ export class WhatsappFlowEngine {
     }
   }
 
-  private async executeActionNode(userState: schema.WhatsappFlowUserState, node: Node, edges: Edge[]): Promise<string | null> {
+  private async executeActionNode(userState: schema.WhatsappFlowUserState, node: FlowNode, edges: FlowEdge[]): Promise<string | null> {
     let success = true;
 
     try {
