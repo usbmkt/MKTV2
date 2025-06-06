@@ -6,7 +6,6 @@ services:
     plan: free
     region: oregon
     healthCheckPath: /api/health
-    # ✅ INÍCIO DA CORREÇÃO: Adiciona as dependências de sistema para o QR Code funcionar
     build:
       apt:
         packages:
@@ -19,7 +18,6 @@ services:
           - libasound2
           - libgbm1
           - chromium-browser
-    # FIM DA CORREÇÃO
     buildCommand: "npm install && npm run build && npm run db:generate"
     startCommand: "npm run migrate:deploy && npm start"
     envVars:
@@ -41,7 +39,8 @@ services:
         fromDatabase:
           name: mktv5-render-db
           property: connectionString
-      - key: PUPPETEER_EXECUTABLE_PATH # ✅ Aponta para o Chromium instalado
+      # ✅ CORREÇÃO: Adicione esta variável para o QR Code funcionar
+      - key: PUPPETEER_EXECUTABLE_PATH
         value: /usr/bin/chromium-browser
 
 databases:
