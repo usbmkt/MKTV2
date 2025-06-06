@@ -1,4 +1,11 @@
 -- Cria os tipos ENUM somente se eles não existirem
+-- migration.sql
+
+-- Cria os tipos ENUM se eles ainda não existirem
+CREATE TYPE public.campaign_status AS ENUM('active', 'paused', 'completed', 'draft');
+CREATE TYPE public.chat_sender AS ENUM('user', 'agent');
+CREATE TYPE public.flow_status AS ENUM('active', 'inactive', 'draft');
+CREATE TYPE public.launch_phase AS ENUM('pre_launch', 'launch', 'post_launch');
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'campaign_status') THEN
