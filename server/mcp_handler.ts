@@ -1,9 +1,9 @@
 // server/mcp_handler.ts
-import { storage } from "./storage";
-import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
-import { GEMINI_API_KEY } from './config';
-import { InsertCampaign, ChatMessage, ChatSession } from "../shared/schema";
-import { logger } from './logger';
+import { storage } from "./storage.js";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GEMINI_API_KEY } from './config.js';
+import { ChatSession } from "../shared/schema.js";
+import { logger } from './logger.js';
 
 let genAI: GoogleGenerativeAI | null = null;
 if (GEMINI_API_KEY) {
@@ -18,12 +18,6 @@ if (GEMINI_API_KEY) {
   logger.warn("[MCP_HANDLER_GEMINI] Chave da API do Gemini (GEMINI_API_KEY) não configurada.");
 }
 
-/**
- * Função genérica para obter uma resposta de texto simples de um modelo de IA.
- * @param prompt O prompt principal para a IA.
- * @param systemContext Uma instrução opcional de como a IA deve se comportar.
- * @returns A resposta de texto da IA.
- */
 export async function getSimpleAiResponse(prompt: string, systemContext?: string): Promise<string> {
   if (!genAI) {
     logger.error("[MCP_HANDLER_AI] Tentativa de usar IA sem o SDK inicializado.");
@@ -33,7 +27,6 @@ export async function getSimpleAiResponse(prompt: string, systemContext?: string
   try {
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
     const fullPrompt = systemContext ? `${systemContext}\n\nPERGUNTA DO USUÁRIO: ${prompt}` : prompt;
-
     const result = await model.generateContent(fullPrompt);
     return result.response.text();
   } catch (error: any) {
@@ -42,38 +35,12 @@ export async function getSimpleAiResponse(prompt: string, systemContext?: string
   }
 }
 
-
 interface MCPResponsePayload {
   reply: string;
   sessionId: number;
   action?: string;
   payload?: any;
 }
-
-function formatCampaignDetailsForChat(campaign: NonNullable<Awaited<ReturnType<typeof storage.createCampaign>>>): string {
-  let details = `Detalhes da Campanha Criada:
-  - ID: ${campaign.id}
-  - Nome: ${campaign.name}
-  - Status: ${campaign.status}`;
-  if (campaign.description) details += `\n  - Descrição: ${campaign.description}`;
-  if (campaign.budget !== null && campaign.budget !== undefined) {
-    details += `\n  - Orçamento: ${campaign.budget}`;
-  }
-  if (campaign.dailyBudget !== null && campaign.dailyBudget !== undefined) {
-    details += `\n  - Orçamento Diário: ${campaign.dailyBudget}`;
-  }
-  if (campaign.avgTicket !== null && campaign.avgTicket !== undefined) {
-    details += `\n  - Ticket Médio: ${campaign.avgTicket}`;
-  }
-  if (campaign.startDate) {
-    details += `\n  - Data de Início: ${new Date(campaign.startDate).toLocaleDateString('pt-BR')}`;
-  }
-  if (campaign.endDate) {
-    details += `\n  - Data de Fim: ${new Date(campaign.endDate).toLocaleDateString('pt-BR')}`;
-  }
-  return details;
-}
-
 
 export async function handleMCPConversation(
   userId: number,
