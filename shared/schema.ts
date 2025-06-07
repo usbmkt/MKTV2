@@ -34,7 +34,7 @@ export const whatsappMessageTemplates = pgTable('whatsapp_message_templates', { 
 export const whatsappFlowUserStates = pgTable('whatsapp_flow_user_states', { id: serial('id').primaryKey(), userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }), contactJid: text('contact_jid').notNull(), activeFlowId: integer('active_flow_id').references(() => flows.id, { onDelete: 'set null' }), currentNodeId: text('current_node_id'), flowVariables: jsonb('flow_variables').$type<Record<string, any>>().default({}), lastInteractionAt: timestamp('last_interaction_at', { withTimezone: true }).defaultNow().notNull(), }, (table) => ({ unq: unique().on(table.userId, table.contactJid),}));
 export const whatsappMessages = pgTable("whatsapp_messages", { id: serial("id").primaryKey(), userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }), contactNumber: text("contact_number").notNull(), contactName: text("contact_name"), message: text("message").notNull(), direction: text("direction", { enum: ["incoming", "outgoing"] }).notNull(), timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow().notNull(), isRead: boolean("is_read").default(false).notNull(),});
 export const chatSessions = pgTable('chat_sessions', { id: serial('id').primaryKey(), userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }), title: text('title').notNull().default('Nova Conversa'), createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),});
-export const chatMessages = pgTable('chat_messages', { id: serial('id').primaryKey(), sessionId: integer('session_id').notNull().references(() => chatSessions.id, { onDelete: 'cascade' }), userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }), sender: chatSenderEnum('sender').notNull(), text: text('text').notNull(), attachmentUrl: text('attachment_url'), createdAt: timestamp('timestamp', { withTimezone: true }).defaultNow().notNull(),});
+export const chatMessages = pgTable('chat_messages', { id: serial('id').primaryKey(), sessionId: integer('session_id').notNull().references(() => chatSessions.id, { onDelete: 'cascade' }), userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }), sender: chatSenderEnum('sender').notNull(), text: text('text').notNull(), attachmentUrl: text('attachment_url'), createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),});
 
 // --- RELATIONS ---
 export const userRelations = relations(users, ({ many }) => ({ campaigns: many(campaigns), creatives: many(creatives), copies: many(copies), alerts: many(alerts), budgets: many(budgets), landingPages: many(landingPages), chatSessions: many(chatSessions), funnels: many(funnels), flows: many(flows), whatsappFlowUserStates: many(whatsappFlowUserStates), whatsappMessageTemplates: many(whatsappMessageTemplates), whatsappMessages: many(whatsappMessages) }));
@@ -54,7 +54,7 @@ export const whatsappMessageTemplateRelations = relations(whatsappMessageTemplat
 export const whatsappMessageRelations = relations(whatsappMessages, ({ one }) => ({ user: one(users, { fields: [whatsappMessages.userId], references: [users.id] })}));
 
 
-// --- INSERT SCHEMAS (ZOD) - EXPORTANDO TODOS ---
+// --- INSERT SCHEMAS (ZOD) ---
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertCampaignSchema = createInsertSchema(campaigns).omit({ id: true, userId: true, createdAt: true, updatedAt: true });
 export const insertCreativeSchema = createInsertSchema(creatives).omit({ id: true, userId: true, createdAt: true, updatedAt: true });
@@ -70,19 +70,33 @@ export const insertWhatsappMessageSchema = createInsertSchema(whatsappMessages).
 export const insertChatSessionSchema = createInsertSchema(chatSessions).omit({ id: true, userId: true, createdAt: true, updatedAt: true });
 export const insertChatMessageSchema = createInsertSchema(chatMessages).omit({ id: true, createdAt: true });
 
-// --- SELECT SCHEMAS & TYPES - EXPORTANDO TODOS ---
+// --- SELECT SCHEMAS & TYPES ---
 export const selectUserSchema = createSelectSchema(users); export type User = z.infer<typeof selectUserSchema>;
+export type InsertUser = z.infer<typeof insertUserSchema>;
 export const selectCampaignSchema = createSelectSchema(campaigns); export type Campaign = z.infer<typeof selectCampaignSchema>;
+export type InsertCampaign = z.infer<typeof insertCampaignSchema>;
 export const selectCreativeSchema = createSelectSchema(creatives); export type Creative = z.infer<typeof selectCreativeSchema>;
+export type InsertCreative = z.infer<typeof insertCreativeSchema>;
 export const selectCopySchema = createSelectSchema(copies);  export type Copy = z.infer<typeof selectCopySchema>;
+export type InsertCopy = z.infer<typeof insertCopySchema>;
 export const selectFunnelSchema = createSelectSchema(funnels); export type Funnel = z.infer<typeof selectFunnelSchema>;
+export type InsertFunnel = z.infer<typeof insertFunnelSchema>;
 export const selectFunnelStageSchema = createSelectSchema(funnelStages); export type FunnelStage = z.infer<typeof selectFunnelStageSchema>;
 export const selectLandingPageSchema = createSelectSchema(landingPages); export type LandingPage = z.infer<typeof selectLandingPageSchema>;
+export type InsertLandingPage = z.infer<typeof insertLandingPageSchema>;
 export const selectBudgetSchema = createSelectSchema(budgets); export type Budget = z.infer<typeof selectBudgetSchema>;
+export type InsertBudget = z.infer<typeof insertBudgetSchema>;
 export const selectAlertSchema = createSelectSchema(alerts); export type Alert = z.infer<typeof selectAlertSchema>;
+export type InsertAlert = z.infer<typeof insertAlertSchema>;
 export const selectFlowSchema = createSelectSchema(flows); export type Flow = z.infer<typeof selectFlowSchema>;
+export type InsertFlow = z.infer<typeof insertFlowSchema>;
 export const selectWhatsappMessageTemplateSchema = createSelectSchema(whatsappMessageTemplates); export type WhatsappMessageTemplate = z.infer<typeof selectWhatsappMessageTemplateSchema>;
+export type InsertWhatsappMessageTemplate = z.infer<typeof insertWhatsappMessageTemplateSchema>;
 export const selectWhatsappFlowUserStateSchema = createSelectSchema(whatsappFlowUserStates); export type WhatsappFlowUserState = z.infer<typeof selectWhatsappFlowUserStateSchema>;
+export type InsertFlowUserState = z.infer<typeof insertFlowUserStateSchema>;
 export const selectWhatsappMessageSchema = createSelectSchema(whatsappMessages); export type WhatsappMessage = z.infer<typeof selectWhatsappMessageSchema>;
+export type InsertWhatsappMessage = z.infer<typeof insertWhatsappMessageSchema>;
 export const selectChatSessionSchema = createSelectSchema(chatSessions); export type ChatSession = z.infer<typeof selectChatSessionSchema>;
+export type InsertChatSession = z.infer<typeof insertChatSessionSchema>;
 export const selectChatMessageSchema = createSelectSchema(chatMessages); export type ChatMessage = z.infer<typeof selectChatMessageSchema>;
+export type InsertChatMessage = z.infer<typeof insertChatMessageSchema>;
