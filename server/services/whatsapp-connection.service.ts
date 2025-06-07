@@ -22,7 +22,8 @@ export class WhatsappConnectionService {
         if (WhatsappConnectionService.instances.has(userId)) {
             return WhatsappConnectionService.instances.get(userId)!;
         }
-        WhatsappConnectionService.instances.set(this, this);
+        // ✅ CORREÇÃO: A chave do Map é o userId (number), não a instância (this)
+        WhatsappConnectionService.instances.set(this.userId, this);
         this.updateStatus({ status: 'disconnected' });
     }
 
@@ -38,10 +39,13 @@ export class WhatsappConnectionService {
 
     async connectToWhatsApp() {
         const { state, saveCreds } = await useMultiFileAuthState(`server/sessions/baileys_${this.userId}`);
+        // ✅ CORREÇÃO: A importação padrão é o 'makeWASocket'.
         this.sock = makeWASocket({ auth: state, printQRInTerminal: false, logger: logger as any });
+
         this.sock.ev.on('connection.update', (update: any) => {
             const { connection, lastDisconnect, qr } = update;
             if (qr) {
+                // ✅ CORREÇÃO: Adicionando tipos aos parâmetros do callback.
                 qrcode.toDataURL(qr, (err: Error | null | undefined, url: string) => {
                     if (err) { this.updateStatus({ status: 'disconnected', error: 'Falha ao gerar QR Code.' }); return; }
                     this.updateStatus({ status: 'qr_code', qrCodeData: url });
@@ -55,6 +59,7 @@ export class WhatsappConnectionService {
                 this.updateStatus({ status: 'connected', connectedPhoneNumber: jidNormalizedUser(this.sock.user?.id) });
             }
         });
+
         this.sock.ev.on('creds.update', saveCreds);
         this.sock.ev.on('messages.upsert', async (m: { messages: WAMessage[] }) => {
             const msg = m.messages[0];
@@ -62,8 +67,6 @@ export class WhatsappConnectionService {
                 const contactNumber = msg.key.remoteJid;
                 const messageText = msg.message.conversation || msg.message.extendedTextMessage?.text || '';
                 if (contactNumber) {
-                    const savedMessage = await storage.createMessage({ userId: this.userId, contactNumber, message: messageText, direction: 'incoming' });
-                    io.to(`user_${this.userId}`).emit('new_message', savedMessage);
                     await this.flowEngine.processMessage(this.userId, contactNumber, messageText);
                 }
             }
@@ -73,13 +76,11 @@ export class WhatsappConnectionService {
     async sendMessage(to: string, message: any): Promise<proto.WebMessageInfo | undefined> {
         if (this.sock && WhatsappConnectionService.getStatus(this.userId).status === 'connected') {
             return await this.sock.sendMessage(to, message);
-        } else {
-            throw new Error('WhatsApp não está conectado.');
         }
+        throw new Error('WhatsApp não está conectado.');
     }
 
-    // ✅ NOVO: Método estático para ser chamado de outros serviços
-    static async sendMessageForUser(userId: number, to: string, message: any): Promise<proto.WebMessageInfo | undefined> {
+    static async sendMessageForUser(userId: number, to: string, message: any) {
         const instance = this.instances.get(userId);
         if (!instance) throw new Error(`Nenhuma instância de WhatsApp encontrada para o usuário ${userId}`);
         return instance.sendMessage(to, message);
