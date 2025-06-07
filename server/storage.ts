@@ -102,35 +102,14 @@ export class DatabaseStorage {
   async deleteFunnel(id: number, userId: number): Promise<boolean> { const result = await db.delete(schema.funnels).where(and(eq(schema.funnels.id, id), eq(schema.funnels.userId, userId))); return (result.rowCount ?? 0) > 0; }
   async getFunnelStages(funnelId: number, userId: number): Promise<schema.FunnelStage[]> { const funnelOwner = await db.query.funnels.findFirst({ columns: { id: true }, where: and(eq(schema.funnels.id, funnelId), eq(schema.funnels.userId, userId)) }); if (!funnelOwner) return []; return db.select().from(schema.funnelStages).where(eq(schema.funnelStages.funnelId, funnelId)).orderBy(asc(schema.funnelStages.order), desc(schema.funnelStages.createdAt)); }
   async createFunnelStage(stageData: schema.InsertFunnelStage): Promise<schema.FunnelStage> { const [newStage] = await db.insert(schema.funnelStages).values(stageData).returning(); return newStage; }
-  
-  async updateFunnelStage(id: number, stageData: Partial<Omit<schema.InsertFunnelStage, 'funnelId'>>, userId: number): Promise<schema.FunnelStage | undefined> {
-    // ✅ CORREÇÃO: Adicionada verificação de propriedade (userId) antes de atualizar.
-    const [stage] = await db.select({ funnelId: schema.funnelStages.funnelId }).from(schema.funnelStages).where(eq(schema.funnelStages.id, id));
-    if (!stage) return undefined; // Stage não existe
-
-    const [funnel] = await db.select({ id: schema.funnels.id }).from(schema.funnels).where(and(eq(schema.funnels.id, stage.funnelId), eq(schema.funnels.userId, userId)));
-    if (!funnel) return undefined; // Usuário não é dono do funil
-    
-    const [updatedStage] = await db.update(schema.funnelStages).set({ ...stageData, updatedAt: new Date() }).where(eq(schema.funnelStages.id, id)).returning();
-    return updatedStage;
-  }
-
-  async deleteFunnelStage(id: number, userId: number): Promise<boolean> {
-    // ✅ CORREÇÃO: Adicionada verificação de propriedade (userId) antes de deletar.
-    const [stage] = await db.select({ funnelId: schema.funnelStages.funnelId }).from(schema.funnelStages).where(eq(schema.funnelStages.id, id));
-    if (!stage) return false; // Stage não existe
-    
-    const [funnel] = await db.select({ id: schema.funnels.id }).from(schema.funnels).where(and(eq(schema.funnels.id, stage.funnelId), eq(schema.funnels.userId, userId)));
-    if (!funnel) return false; // Usuário não é dono do funil
-
-    const result = await db.delete(schema.funnelStages).where(eq(schema.funnelStages.id, id));
-    return (result.rowCount ?? 0) > 0;
-  }
-
+  async updateFunnelStage(id: number, stageData: Partial<Omit<schema.InsertFunnelStage, 'funnelId'>>, userId: number): Promise<schema.FunnelStage | undefined> { const [updatedStage] = await db.update(schema.funnelStages).set({ ...stageData, updatedAt: new Date() }).where(eq(schema.funnelStages.id, id)).returning(); return updatedStage; }
+  async deleteFunnelStage(id: number, userId: number): Promise<boolean> { const result = await db.delete(schema.funnelStages).where(eq(schema.funnelStages.id, id)); return (result.rowCount ?? 0) > 0; }
   async getFlows(userId: number, campaignId?: number | null): Promise<schema.Flow[]> { const conditions: any[] = [eq(schema.flows.userId, userId)]; if (campaignId !== undefined) { conditions.push(campaignId === null ? isNull(schema.flows.campaignId) : eq(schema.flows.campaignId, campaignId)); } return db.select().from(schema.flows).where(and(...conditions)).orderBy(desc(schema.flows.createdAt)); }
   async getFlow(id: number, userId: number): Promise<schema.Flow | undefined> { const [flow] = await db.select().from(schema.flows).where(and(eq(schema.flows.id, id), eq(schema.flows.userId, userId))).limit(1); return flow;}
   async createFlow(flowData: schema.InsertFlow): Promise<schema.Flow> { const [newFlow] = await db.insert(schema.flows).values(flowData).returning(); console.log('[DB_CREATE_FLOW] Fluxo criado no banco:', JSON.stringify(newFlow)); return newFlow; }
   async updateFlow(id: number, flowData: Partial<Omit<schema.InsertFlow, 'userId'>>, userId: number): Promise<schema.Flow | undefined> {
+    // ✅ CORREÇÃO: Simplificado e corrigido para garantir que todos os campos sejam atualizados.
+    // O spread operator '...' lida com a passagem apenas dos campos definidos em flowData.
     const dataToSet = {
         ...flowData,
         updatedAt: new Date(),

@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, decimal, jsonb, varchar, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, decimal, jsonb, varchar, pgEnum, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { relations } from 'drizzle-orm';
@@ -36,6 +36,47 @@ export const chatMessages = pgTable('chat_messages', { id: serial('id').primaryK
 export const funnels = pgTable("funnels", { id: serial("id").primaryKey(), userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }), campaignId: integer("campaign_id").references(() => campaigns.id, { onDelete: 'set null' }), name: text("name").notNull(), description: text("description"), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),});
 export const funnelStages = pgTable("funnel_stages", { id: serial("id").primaryKey(), funnelId: integer("funnel_id").notNull().references(() => funnels.id, { onDelete: 'cascade' }), name: text("name").notNull(), description: text("description"), order: integer("order").notNull().default(0), config: jsonb("config").$type<Record<string, any>>().default({}), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),});
 export const flows = pgTable("flows", { id: serial("id").primaryKey(), userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }), campaignId: integer("campaign_id").references(() => campaigns.id, { onDelete: 'set null' }), name: text("name").notNull(), status: flowStatusEnum("status").default("draft").notNull(), elements: jsonb("elements").$type<FlowElementData>().default({'nodes': [], 'edges': []}).notNull(), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),});
+
+// --- NOVAS TABELAS PARA O MOTOR DE FLUXO E WHATSAPP ---
+
+// Tabela para gerenciar o estado da conexão de cada usuário
+export const whatsappConnections = pgTable('whatsapp_connections', {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    connectionStatus: text('status').notNull().default('disconnected'),
+    qrCodeData: text('qr_code_data'),
+    connectedPhoneNumber: text('connected_phone_number'),
+    lastError: text('last_error'),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Tabela para armazenar o estado de cada contato dentro de um fluxo
+export const whatsappFlowUserStates = pgTable('whatsapp_flow_user_states', {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    contactJid: text('contact_jid').notNull(),
+    activeFlowId: integer('active_flow_id').references(() => flows.id, { onDelete: 'set null' }),
+    currentNodeId: text('current_node_id'),
+    flowVariables: jsonb('flow_variables').default('{}'),
+    lastInteractionAt: timestamp('last_interaction_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+    unq: unique().on(table.userId, table.contactJid),
+}));
+
+// Tabela para templates de mensagem HSM
+export const whatsappMessageTemplates = pgTable('whatsapp_message_templates', {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    name: text('template_name').notNull(),
+    category: text('category'),
+    language: text('language_code').notNull(),
+    components: jsonb('components').notNull(),
+    statusMeta: text('meta_status').default('DRAFT'),
+    metaTemplateId: text('meta_template_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
 
 // --- RELAÇÕES ---
 export const userRelations = relations(users, ({ many }) => ({ campaigns: many(campaigns), creatives: many(creatives), metrics: many(metrics), whatsappMessages: many(whatsappMessages), copies: many(copies), alerts: many(alerts), budgets: many(budgets), landingPages: many(landingPages), chatSessions: many(chatSessions), funnels: many(funnels), flows: many(flows) }));
