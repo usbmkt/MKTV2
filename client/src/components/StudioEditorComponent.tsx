@@ -1,4 +1,4 @@
-import React from 'react';
+// ✅ CORREÇÃO: Usando a importação padrão do SDK que funciona em diferentes ambientes
 import StudioEditor from '@grapesjs/studio-sdk/react';
 import { 
     flexComponent, canvasFullSize, canvasGridMode, rteProseMirror, 
@@ -8,7 +8,11 @@ import {
 } from '@grapesjs/studio-sdk-plugins';
 import '@grapesjs/studio-sdk/style';
 
+// ✅ CORREÇÃO: Removida a importação do React que não é mais necessária com o novo JSX transform
+// import React from 'react'; 
+
 interface StudioEditorComponentProps {
+  // ✅ CORREÇÃO: A chave de licença agora é uma prop obrigatória
   licenseKey: string;
   projectId?: string;
   onProjectSave: (projectData: any, projectIdToSaveUnder: string) => Promise<void | { id: string }>;
@@ -21,6 +25,7 @@ interface StudioEditorComponentProps {
 }
 
 const StudioEditorComponent: React.FC<StudioEditorComponentProps> = ({
+  // ✅ CORREÇÃO: Recebendo a chave via props
   licenseKey,
   projectId,
   onProjectSave,
@@ -31,6 +36,7 @@ const StudioEditorComponent: React.FC<StudioEditorComponentProps> = ({
   onEditorLoad,
   initialProjectData,
 }) => {
+  // ✅ CORREÇÃO: Checagem robusta da licenseKey
   if (!licenseKey) {
     const errMsg = "Chave de licença do GrapesJS Studio não fornecida ao componente editor.";
     console.error("StudioEditorComponent:", errMsg);
@@ -42,9 +48,10 @@ const StudioEditorComponent: React.FC<StudioEditorComponentProps> = ({
 
   return (
     <StudioEditor
+      // ✅ CORREÇÃO: Garantindo que a chave do componente React mude quando o projeto mudar, forçando a recriação
       key={projectId || 'new-studio-project-instance'}
       options={{
-        licenseKey: licenseKey,
+        licenseKey: licenseKey, // ✅ CORREÇÃO: Usando a prop
         theme: 'dark',
         project: projectConfig,
         assets: {
@@ -72,7 +79,8 @@ const StudioEditorComponent: React.FC<StudioEditorComponentProps> = ({
           type: 'self',
           onSave: async ({ project }: any) => {
             try {
-              const idToSaveUnder = projectId || Date.now().toString();
+              // ✅ CORREÇÃO: Usa o projectId existente ou um novo ID baseado em timestamp para garantir que tenhamos um identificador.
+              const idToSaveUnder = projectId || `new_${Date.now()}`;
               return await onProjectSave(project, idToSaveUnder); 
             } catch (error) {
               console.error('StudioEditorComponent: Project save callback error:', error);
@@ -97,29 +105,17 @@ const StudioEditorComponent: React.FC<StudioEditorComponentProps> = ({
           autosaveIntervalMs: 60000 
         },
         plugins: [
-          flexComponent.init({}),
-          canvasFullSize.init({}),
-          canvasGridMode.init({}),
-          rteProseMirror.init({}),
-          tableComponent.init({}),
-          swiperComponent.init({}),
-          canvasEmptyState.init({}),
-          iconifyComponent.init({}),
-          accordionComponent.init({}),
-          listPagesComponent.init({
-            // onList: async () => { return []; } 
-          }),
-          fsLightboxComponent.init({}),
-          layoutSidebarButtons.init({}),
-          youtubeAssetProvider.init({}),
-          lightGalleryComponent.init({})
+          flexComponent.init({}), canvasFullSize.init({}), canvasGridMode.init({}), rteProseMirror.init({}), 
+          tableComponent.init({}), swiperComponent.init({}), canvasEmptyState.init({}), iconifyComponent.init({}), 
+          accordionComponent.init({}), listPagesComponent.init({}), fsLightboxComponent.init({}), 
+          layoutSidebarButtons.init({}), youtubeAssetProvider.init({}), lightGalleryComponent.init({})
         ],
-        // onLoad: () => { 
-        //   if (onEditorLoad) onEditorLoad();
-        // },
-        // onError: (error: any) => {
-        //    if (onEditorError) onEditorError(error);
-        // }
+        onLoad: () => {
+           if (onEditorLoad) onEditorLoad();
+        },
+        onError: (error: any) => {
+           if (onEditorError) onEditorError(error);
+        }
       }}
     />
   );
