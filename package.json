@@ -1,4 +1,5 @@
-"name": "mktv2",
+{
+  "name": "mktv2",
   "version": "1.0.0",
   "description": "Sistema de automação de marketing",
   "main": "dist/index.js",
@@ -57,3 +58,4 @@
     "tsx": "^4.10.2",
     "typescript": "^5.4.5"
   }
+}
