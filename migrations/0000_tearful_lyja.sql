@@ -1,11 +1,11 @@
--- ✅ ESTE É O ARQUIVO DE MIGRAÇÃO COMPLETO E CORRETO PARA CRIAR UM BANCO DE DADOS NOVO
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'campaign_status') THEN
         CREATE TYPE "public"."campaign_status" AS ENUM('active', 'paused', 'completed', 'draft');
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'chat_sender') THEN
-        CREATE TYPE "public"."chat_sender" AS ENUM('user', 'agent');
+    -- ✅ CORREÇÃO: Renomeado para 'chat_role' e adicionado 'system'
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'chat_role') THEN
+        CREATE TYPE "public"."chat_role" AS ENUM('user', 'agent', 'system');
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'flow_status') THEN
         CREATE TYPE "public"."flow_status" AS ENUM('active', 'inactive', 'draft');
@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS "campaigns" (
 CREATE TABLE IF NOT EXISTS "chat_messages" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"session_id" integer NOT NULL,
-	"sender" "chat_sender" NOT NULL,
+	"role" "chat_role" NOT NULL, -- ✅ CORREÇÃO: Alterado de 'sender' para 'role'
 	"text" text NOT NULL,
 	"attachment_url" text,
 	"timestamp" timestamp with time zone DEFAULT now() NOT NULL
