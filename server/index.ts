@@ -1,5 +1,5 @@
-// server/index.ts
-import express from 'express';
+// usbmkt/mktv2/MKTV2-mktv5/server/index.ts
+import express, { Request, Response, NextFunction } from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import { registerRoutes } from './routes.js';
@@ -31,8 +31,10 @@ const clientDistPath = path.join(__dirname, '..', 'dist', 'public');
 app.use(express.static(clientDistPath));
 
 // Servir o index.html para todas as outras rotas (para o React Router funcionar)
-app.get('*', (req, res) => {
-  res.sendFile(path.join(clientDistPath, 'index.html'));
+app.get('*', (req: Request, res: Response) => {
+  if (!req.path.startsWith('/api/')) {
+    res.sendFile(path.join(clientDistPath, 'index.html'));
+  }
 });
 
 io.on('connection', (socket) => {
