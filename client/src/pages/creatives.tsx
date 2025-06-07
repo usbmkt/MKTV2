@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+// client/src/pages/creatives.tsx
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,10 +7,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { api } from '@/lib/api'; // ✅ CORREÇÃO: Importando o objeto 'api'
+import { apiRequest } from '@/lib/api';
 import UploadModal from '@/components/upload-modal';
 import ErrorBoundary from '@/components/ErrorBoundary';
-import { Creative as CreativeType } from '@shared/schema'; // Usando o tipo do schema compartilhado
 import {
   Plus,
   Search,
@@ -22,19 +22,30 @@ import {
   Trash2,
   Play,
   AlertTriangle,
-  Loader2
 } from 'lucide-react';
 
-// A interface CreativeEditData pode continuar local, pois é específica para o formulário/modal
+interface Creative {
+  id: number;
+  name: string;
+  type: 'image' | 'video' | 'text' | 'carousel';
+  fileUrl?: string | null; // Pode ser null
+  content?: string;
+  status: string;
+  platforms: string[]; // JSONB agora é string[] no schema, então está ok
+  campaignId?: number | null; // Pode ser number ou null
+  createdAt: string;
+}
+
 interface CreativeEditData {
   id?: number;
   name: string;
   type: 'image' | 'video' | 'text' | 'carousel';
-  campaignId?: number | null;
+  campaignId?: number | null; // Pode ser number ou null
   content?: string;
   platforms?: string[];
-  fileUrl?: string | null;
+  fileUrl?: string | null; // Pode ser null
 }
+
 
 export default function Creatives() {
   const [showUploadOrEditModal, setShowUploadOrEditModal] = useState(false);
@@ -46,15 +57,28 @@ export default function Creatives() {
   const { toast } = useToast();
   const [errorBoundaryKey, setErrorBoundaryKey] = useState(0);
 
-  const { data: creatives = [], isLoading, error: creativesError } = useQuery<CreativeType[], Error>({
-    queryKey: ['creatives'], // ✅ CORREÇÃO: Usando chave de query mais simples
-    queryFn: () => api.get<CreativeType[]>('/api/creatives'), // ✅ CORREÇÃO: Usando api.get diretamente
+  const { data: creatives = [], isLoading, error: creativesError } = useQuery<Creative[], Error>({
+    queryKey: ['/api/creatives'],
+    queryFn: async () => {
+      const response = await apiRequest('GET', '/api/creatives');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: `HTTP error! status: ${response.status}` }));
+        throw new Error(errorData.message || `Failed to fetch creatives: ${response.status}`);
+      }
+      return response.json();
+    },
   });
 
   const deleteMutation = useMutation<void, Error, number>({
-    mutationFn: (id: number) => api.delete(`/api/creatives/${id}`), // ✅ CORREÇÃO: Usando api.delete diretamente
+    mutationFn: async (id: number) => {
+      const response = await apiRequest('DELETE', `/api/creatives/${id}`);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: `HTTP error! status: ${response.status}` }));
+        throw new Error(errorData.message || `Failed to delete creative: ${response.status}`);
+      }
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['creatives'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/creatives'] });
       toast({
         title: 'Criativo excluído',
         description: 'O criativo foi excluído com sucesso.',
@@ -69,21 +93,21 @@ export default function Creatives() {
       });
     },
   });
-  
-  const filteredCreatives = useMemo(() => {
-    return creatives.filter(creative => {
-      const nameMatch = creative.name.toLowerCase().includes(searchTerm.toLowerCase());
-      const typeMatch = typeFilter === 'all' || creative.type === typeFilter;
-      const statusMatch = statusFilter === 'all' || creative.status === statusFilter;
-      return nameMatch && typeMatch && statusMatch;
-    });
-  }, [creatives, searchTerm, typeFilter, statusFilter]);
+
+  const filteredCreatives = creatives.filter(creative => {
+    const matchesSearch = creative.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesType = typeFilter === 'all' || creative.type === typeFilter;
+    const matchesStatus = statusFilter === 'all' || creative.status === statusFilter;
+    return matchesSearch && matchesType && matchesStatus;
+  });
 
   const getTypeIcon = (type: string) => {
-    const icons: Record<string, React.ElementType> = { image: ImageIcon, video: Video, text: FileText, carousel: ImageIcon };
+    const icons: Record<string, React.ElementType> = {
+      image: ImageIcon, video: Video, text: FileText, carousel: ImageIcon,
+    };
     return icons[type] || FileText;
   };
-  
+
   const getStatusBadge = (status: string) => {
     const statusConfig: Record<string, { variant: 'default' | 'secondary' | 'destructive' | 'outline', label: string, className: string }> = {
       approved: { variant: 'default', label: 'Aprovado', className: 'bg-green-500 hover:bg-green-600 text-white dark:bg-green-600 dark:hover:bg-green-700' },
@@ -115,15 +139,15 @@ export default function Creatives() {
     setShowUploadOrEditModal(true);
   };
 
-  const handleEditCreative = (creative: CreativeType) => {
+  const handleEditCreative = (creative: Creative) => {
     const editData: CreativeEditData = {
       id: creative.id,
       name: creative.name,
-      type: creative.type as CreativeEditData['type'],
-      campaignId: creative.campaignId,
-      content: creative.content || undefined,
-      platforms: creative.platforms || [],
-      fileUrl: creative.fileUrl,
+      type: creative.type,
+      campaignId: creative.campaignId, // Usar diretamente o tipo number | null
+      content: creative.content,
+      platforms: creative.platforms,
+      fileUrl: creative.fileUrl, // Usar diretamente o tipo string | null
     };
     setEditingCreative(editData);
     setErrorBoundaryKey(prevKey => prevKey + 1);
@@ -137,25 +161,24 @@ export default function Creatives() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-screen p-6">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      <div className="flex items-center justify-center h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
         <p className="ml-4 text-muted-foreground">Carregando criativos...</p>
       </div>
     );
   }
-
   if (creativesError) {
     return (
       <div className="p-8 text-center">
         <AlertTriangle className="w-16 h-16 text-destructive mx-auto mb-4" />
         <h2 className="text-2xl font-semibold text-destructive mb-2">Erro ao carregar criativos</h2>
         <p className="text-muted-foreground mb-4">{creativesError.message}</p>
-        <Button onClick={() => queryClient.refetchQueries({ queryKey: ['creatives'] })}>
+        <Button onClick={() => queryClient.refetchQueries({ queryKey: ['/api/creatives'] })}>
           Tentar Novamente
         </Button>
       </div>
     );
-  }
+   }
 
   return (
     <div className="p-4 md:p-8 space-y-6">
@@ -217,17 +240,16 @@ export default function Creatives() {
             const TypeSpecificIcon = getTypeIcon(creative.type);
             const statusConfig = getStatusBadge(creative.status);
             const typeConfig = getTypeBadge(creative.type);
-            const imageUrl = creative.fileUrl || `https://placehold.co/600x400/27272a/FFF?text=Criativo`;
 
             return (
               <Card key={creative.id} className="creative-card flex flex-col overflow-hidden shadow-lg hover:shadow-xl transition-shadow duration-300 dark:bg-card">
                  <div className="aspect-[16/10] bg-muted/30 relative overflow-hidden">
-                  {creative.type === 'image' ? (
+                  {creative.type === 'image' && creative.fileUrl ? (
                     <img
-                      src={imageUrl}
+                      src={creative.fileUrl}
                       alt={creative.name}
                       className="w-full h-full object-cover"
-                      onError={(e) => { (e.currentTarget as HTMLImageElement).src = `https://placehold.co/600x400/ef4444/FFF?text=Erro!`; }}
+                      onError={(e) => (e.currentTarget.src = 'https://via.placeholder.com/300x200?text=Imagem+Indisponível')}
                     />
                   ) : creative.type === 'video' && creative.fileUrl ? (
                     <div className="w-full h-full bg-black/80 flex items-center justify-center cursor-pointer hover:bg-black/70 transition-colors">
@@ -293,7 +315,7 @@ export default function Creatives() {
                         variant="ghost" size="icon"
                         className="h-8 w-8 text-destructive hover:text-destructive-foreground hover:bg-destructive/90"
                         onClick={() => deleteCreative(creative.id)}
-                        disabled={deleteMutation.isPending && deleteMutation.variables === creative.id}
+                        disabled={deleteMutation.isPending}
                         title="Excluir"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -364,7 +386,7 @@ export default function Creatives() {
             onClose={closeModal}
             onSuccess={() => {
               closeModal();
-              queryClient.invalidateQueries({ queryKey: ['creatives'] });
+              queryClient.invalidateQueries({ queryKey: ['/api/creatives'] });
               toast({
                 title: editingCreative ? 'Criativo Atualizado!' : 'Upload Concluído!',
                 description: editingCreative ? 'As alterações foram salvas.' : 'Seu criativo foi enviado com sucesso.',
