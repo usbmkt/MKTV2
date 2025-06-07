@@ -1,9 +1,9 @@
 // server/logger.ts
-import Pino from 'pino';
+import pino from 'pino'; // <-- CORREÇÃO: Importação padrão
 
 const isDevelopment = process.env.NODE_ENV === 'development';
 
-export const logger = Pino({
+export const logger = pino({ // <-- CORREÇÃO: Usando a variável importada
   level: isDevelopment ? 'trace' : 'info',
   ...(isDevelopment && {
     transport: {
