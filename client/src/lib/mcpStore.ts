@@ -1,15 +1,18 @@
 import { create } from 'zustand';
 import { useAuthStore } from './auth';
+import { useLocation } from 'wouter'; 
 
+// Definir a interface da mensagem de chat que o frontend usa
 export interface Message {
   id: string;
   text: string;
   sender: 'user' | 'agent' | 'system';
   timestamp: Date;
   sessionId?: number; 
-  role?: 'user' | 'agent' | 'system'; // Adicionado para compatibilidade com dados do backend
+  role?: 'user' | 'agent' | 'system';
 }
 
+// Para a resposta da API do MCP
 interface MCPResponse {
   reply: string;
   action?: 'navigate';
@@ -17,6 +20,7 @@ interface MCPResponse {
   sessionId: number; 
 }
 
+// Interface para as sessões de chat salvas (do banco)
 export interface ChatSession {
   id: number;
   userId: number;
@@ -30,9 +34,9 @@ interface MCPState {
   messages: Message[];
   currentInput: string;
   isLoading: boolean;
-  currentSessionId: number | null;
+  currentSessionId: number | null; 
   chatSessions: ChatSession[]; 
-  isSessionsLoading: boolean; 
+  isSessionsLoading: boolean;
   
   togglePanel: () => void;
   addMessage: (message: Message) => void;
@@ -75,7 +79,7 @@ export const useMCPStore = create<MCPState>((set, get) => ({
   setCurrentInput: (input) => set({ currentInput: input }),
   clearCurrentInput: () => set({ currentInput: '' }),
   setLoading: (loading) => set({ isLoading: loading }),
-  
+
   setChatSessions: (sessions) => set({ chatSessions: sessions }),
   
   loadChatSessions: async () => {
@@ -156,11 +160,10 @@ export const useMCPStore = create<MCPState>((set, get) => ({
       if (!response.ok) throw new Error('Falha ao carregar histórico da sessão.');
       const messagesFromBackend: Message[] = await response.json();
       
-      // ✅ CORREÇÃO: Mapeia a propriedade 'role' do backend para 'sender' no frontend
       const formattedMessages: Message[] = messagesFromBackend.map(msg => ({
         id: String(msg.id),
         text: msg.text,
-        sender: msg.role as ('user' | 'agent' | 'system'), // Usa 'role' do backend
+        sender: msg.role as ('user' | 'agent' | 'system'), 
         timestamp: new Date(msg.timestamp),
         sessionId: msg.sessionId,
       }));
@@ -249,3 +252,103 @@ export const useMCPStore = create<MCPState>((set, get) => ({
     }
   }
 }));
+
+// ✅ CORREÇÃO: Adicionada a palavra-chave "export" aqui
+export const sendMessageToMCP = async (text: string): Promise<void> => {
+  const { addMessage, setLoading, navigate, currentSessionId, startNewChat } = useMCPStore.getState();
+  const token = useAuthStore.getState().token;
+
+  if (!text.trim()) return;
+  if (!token) {
+    addMessage({
+      id: `error-no-token-${Date.now()}`,
+      text: 'Você precisa estar logado para conversar com o Agente MCP.',
+      sender: 'system',
+      timestamp: new Date(),
+    });
+    return;
+  }
+
+  let sessionToUseId = currentSessionId;
+  if (sessionToUseId === null) {
+    await startNewChat(); 
+    sessionToUseId = useMCPStore.getState().currentSessionId;
+    if (sessionToUseId === null) {
+      addMessage({
+        id: `error-session-creation-${Date.now()}`,
+        text: 'Não foi possível iniciar uma nova sessão de chat. Tente reiniciar.',
+        sender: 'system',
+        timestamp: new Date(),
+      });
+      return;
+    }
+  }
+
+  const userMessage: Message = {
+    id: `user-${Date.now()}`,
+    text,
+    sender: 'user',
+    timestamp: new Date(),
+    sessionId: sessionToUseId,
+  };
+  addMessage(userMessage);
+  setLoading(true);
+
+  try {
+    const response = await fetch('/api/mcp/converse', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ message: text, sessionId: sessionToUseId }),
+    });
+
+    setLoading(false);
+
+    if (!response.ok) {
+      let errorMessage = 'Erro ao contatar o Agente MCP.';
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.error || errorData.message || errorMessage;
+      } catch (e) { /* silent */ }
+      console.error("MCP API Error:", response.status, errorMessage);
+      addMessage({
+        id: `error-api-${Date.now()}`,
+        text: `Erro: ${errorMessage}`,
+        sender: 'system',
+        timestamp: new Date(),
+      });
+      return;
+    }
+
+    const data: MCPResponse = await response.json();
+
+    const agentMessage: Message = {
+      id: `agent-${Date.now()}`,
+      text: data.reply,
+      sender: 'agent',
+      timestamp: new Date(),
+      sessionId: data.sessionId,
+    };
+    addMessage(agentMessage);
+
+    if (data.action === 'navigate' && data.payload && navigate) {
+      console.log(`[MCP_STORE] Navegando para: ${data.payload}`);
+      setTimeout(() => {
+        navigate(data.payload || '/', { replace: false });
+        useMCPStore.getState().togglePanel();
+      }, 1000); 
+    }
+
+  } catch (error) {
+    setLoading(false);
+    console.error('Falha ao enviar mensagem para o MCP:', error);
+    addMessage({
+      id: `error-network-${Date.now()}`,
+      text: 'Falha de conexão ao tentar falar com o Agente MCP.',
+      sender: 'system',
+      timestamp: new Date(),
+    });
+  }
+};
