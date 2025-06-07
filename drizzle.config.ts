@@ -6,10 +6,11 @@ export default defineConfig({
   out: "./migrations",
   schema: "./shared/schema.ts",
   dialect: "postgresql",
-  driver: "pglite", // ✅ CORREÇÃO: Voltado para 'pglite' para o build funcionar
+  // ✅ CORREÇÃO: Driver ajustado para 'pg' para compatibilidade com a Render
+  driver: "pg", 
   dbCredentials: {
-    // Para 'pglite', a URL é apenas um placeholder e não será usada para conectar
-    url: process.env.DATABASE_URL || "postgres://user:pass@host:port/db",
+    // Para 'pg', a URL de conexão é essencial e virá das variáveis de ambiente
+    url: process.env.DATABASE_URL || "",
   },
   verbose: true,
   strict: true,
