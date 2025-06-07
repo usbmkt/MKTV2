@@ -3,7 +3,7 @@
 import { pgTable, text, serial, integer, boolean, timestamp, decimal, jsonb, varchar, pgEnum, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
-import { relations } from 'drizzle-orm';
+import { relations, sql } from 'drizzle-orm';
 
 // --- ENUMS ---
 export const campaignStatusEnum = pgEnum('campaign_status', ['active', 'paused', 'completed', 'draft']);
@@ -88,17 +88,6 @@ export const funnels = pgTable("funnels", {
     campaignId: integer("campaign_id").references(() => campaigns.id, { onDelete: 'set null' }),
     name: text("name").notNull(),
     description: text("description"),
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-});
-
-export const funnelStages = pgTable("funnel_stages", {
-    id: serial("id").primaryKey(),
-    funnelId: integer("funnel_id").notNull().references(() => funnels.id, { onDelete: 'cascade' }),
-    name: text("name").notNull(),
-    description: text("description"),
-    order: integer("order").notNull().default(0),
-    config: jsonb("config").$type<Record<string, any>>().default({}),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
@@ -199,14 +188,14 @@ export const chatSessions = pgTable('chat_sessions', {
 export const chatMessages = pgTable('chat_messages', {
     id: serial('id').primaryKey(),
     sessionId: integer('session_id').notNull().references(() => chatSessions.id, { onDelete: 'cascade' }),
-    userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }), // Adicionado
+    userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
     sender: chatSenderEnum('sender').notNull(),
     text: text('text').notNull(),
     attachmentUrl: text('attachment_url'),
-    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(), // Renomeado para consistência
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
-// --- RELATIONS ---
+// --- RELATIONS (Verificadas) ---
 export const userRelations = relations(users, ({ many }) => ({ campaigns: many(campaigns), creatives: many(creatives), copies: many(copies), alerts: many(alerts), budgets: many(budgets), landingPages: many(landingPages), chatSessions: many(chatSessions), funnels: many(funnels), flows: many(flows), whatsappFlowUserStates: many(whatsappFlowUserStates), whatsappMessageTemplates: many(whatsappMessageTemplates), whatsappMessages: many(whatsappMessages) }));
 export const campaignRelations = relations(campaigns, ({ one, many }) => ({ user: one(users, { fields: [campaigns.userId], references: [users.id] }), creatives: many(creatives), copies: many(copies), alerts: many(alerts), budgets: many(budgets), funnels: many(funnels), flows: many(flows) }));
 export const creativeRelations = relations(creatives, ({ one }) => ({ user: one(users, { fields: [creatives.userId], references: [users.id] }), campaign: one(campaigns, { fields: [creatives.campaignId], references: [campaigns.id] })}));
@@ -223,69 +212,51 @@ export const whatsappFlowUserStateRelations = relations(whatsappFlowUserStates, 
 export const whatsappMessageTemplateRelations = relations(whatsappMessageTemplates, ({ one }) => ({ user: one(users, { fields: [whatsappMessageTemplates.userId], references: [users.id] })}));
 export const whatsappMessageRelations = relations(whatsappMessages, ({ one }) => ({ user: one(users, { fields: [whatsappMessages.userId], references: [users.id] })}));
 
-
 // --- INSERT SCHEMAS (ZOD) ---
-export const insertUserSchema = createInsertSchema(users, { email: z.string().email("Email inválido."), username: z.string().min(3, "Nome de usuário deve ter pelo menos 3 caracteres."), password: z.string().min(6, "Senha deve ter pelo menos 6 caracteres."), }).omit({ id: true, createdAt: true, updatedAt: true });
-export const insertCampaignSchema = createInsertSchema(campaigns, { name: z.string().min(1, "Nome da campanha é obrigatório."), budget: z.preprocess( (val) => (typeof val === 'string' && val.trim() !== '' ? parseFloat(val) : (typeof val === 'number' ? val : undefined)), z.number({ invalid_type_error: "Orçamento deve ser um número" }).nullable().optional() ), dailyBudget: z.preprocess( (val) => (typeof val === 'string' && val.trim() !== '' ? parseFloat(val) : (typeof val === 'number' ? val : undefined)), z.number({ invalid_type_error: "Orçamento diário deve ser um número" }).nullable().optional() ), avgTicket: z.preprocess( (val) => (typeof val === 'string' && val.trim() !== '' ? parseFloat(val) : (typeof val === 'number' ? val : undefined)), z.number({ invalid_type_error: "Ticket médio deve ser um número" }).nullable().optional() ), startDate: z.preprocess( (arg) => { if (typeof arg === "string" || arg instanceof Date) return new Date(arg); return undefined; }, z.date().optional().nullable() ), endDate: z.preprocess( (arg) => { if (typeof arg === "string" || arg instanceof Date) return new Date(arg); return undefined; }, z.date().optional().nullable() ), platforms: z.preprocess( (val) => { if (Array.isArray(val)) return val; if (typeof val === 'string') return val.split(',').map(s => s.trim()).filter(s => s); return []; }, z.array(z.string()).default([]) ), objectives: z.preprocess( (val) => { if (Array.isArray(val)) return val; if (typeof val === 'string') return val.split(',').map(s => s.trim()).filter(s => s); return []; }, z.array(z.string()).default([]) ), }).omit({ id: true, createdAt: true, updatedAt: true, userId: true });
-export const insertCreativeSchema = createInsertSchema(creatives, { name: z.string().min(1, "Nome do criativo é obrigatório."), type: z.enum(creatives.type.enumValues as [string, ...string[]]), status: z.enum(creatives.status.enumValues as [string, ...string[]]).optional(), platforms: z.preprocess( (val) => { if (Array.isArray(val)) { return val; } if (typeof val === 'string') { return val.split(',').map(s => s.trim()).filter(s => s.length > 0); } return []; }, z.array(z.string()).optional() ), fileUrl: z.string().nullable().optional(), thumbnailUrl: z.string().nullable().optional(), campaignId: z.preprocess( (val) => { if (val === "NONE" || val === null || val === undefined || val === "") { return null; } const parsed = parseInt(String(val)); return isNaN(parsed) ? null : parsed; }, z.number().int().positive().nullable().optional() ),}).omit({ id: true, createdAt: true, updatedAt: true, userId: true });
-export const insertCopySchema = createInsertSchema(copies, { userId: z.number().int().positive({ message: "ID do usuário é obrigatório." }), title: z.string().min(1, "Título é obrigatório."), content: z.string().min(1, "Conteúdo é obrigatório."), purposeKey: z.string().min(1, "Chave da finalidade é obrigatória."), launchPhase: z.enum(launchPhaseEnum.enumValues, { required_error: "Fase de lançamento é obrigatória." }), campaignId: z.preprocess( (val) => (val === undefined || val === null || val === "" ? null : parseInt(String(val))), z.number().int().positive().nullable().optional() ), }).omit({ id: true, createdAt: true, lastUpdatedAt: true });
-export const insertFunnelSchema = createInsertSchema(funnels, { name: z.string().min(1, "O nome do funil é obrigatório."), campaignId: z.preprocess( (val) => (val === undefined || val === null || val === "" ? null : parseInt(String(val))), z.number().int().positive().nullable().optional() ), }).omit({ id: true, createdAt: true, updatedAt: true, userId: true });
-export const insertFlowSchema = createInsertSchema(flows, { name: z.string().min(1, "Nome do fluxo é obrigatório."), status: z.enum(flowStatusEnum.enumValues).default('draft'), elements: z.object({ nodes: z.array(z.any()), edges: z.array(z.any()) }).optional().nullable(), campaignId: z.preprocess( (val) => (val === undefined || val === null || val === "" ? null : parseInt(String(val))), z.number().int().positive().nullable().optional() ),}).omit({ id: true, createdAt: true, updatedAt: true, userId: true });
-export const insertWhatsappMessageTemplateSchema = createInsertSchema(whatsappMessageTemplates, { name: z.string().min(1, "O nome do template é obrigatório"), language: z.string().min(1, "O código do idioma é obrigatório"), components: z.record(z.any()), }).omit({ id: true, createdAt: true, updatedAt: true, userId: true });
+export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertCampaignSchema = createInsertSchema(campaigns).omit({ id: true, userId: true, createdAt: true, updatedAt: true });
+export const insertCreativeSchema = createInsertSchema(creatives).omit({ id: true, userId: true, createdAt: true, updatedAt: true });
+export const insertCopySchema = createInsertSchema(copies).omit({ id: true, userId: true, createdAt: true, lastUpdatedAt: true });
+export const insertFunnelSchema = createInsertSchema(funnels).omit({ id: true, userId: true, createdAt: true, updatedAt: true });
+export const insertFlowSchema = createInsertSchema(flows).omit({ id: true, userId: true, createdAt: true, updatedAt: true });
+export const insertLandingPageSchema = createInsertSchema(landingPages).omit({ id: true, userId: true, createdAt: true, updatedAt: true });
+export const insertBudgetSchema = createInsertSchema(budgets).omit({ id: true, userId: true, createdAt: true });
+export const insertAlertSchema = createInsertSchema(alerts).omit({ id: true, userId: true, createdAt: true, isRead: true });
+export const insertWhatsappMessageTemplateSchema = createInsertSchema(whatsappMessageTemplates).omit({ id: true, userId: true, createdAt: true, updatedAt: true });
+export const insertFlowUserStateSchema = createInsertSchema(whatsappFlowUserStates).omit({ id: true });
+export const insertWhatsappMessageSchema = createInsertSchema(whatsappMessages).omit({ id: true, userId: true });
+export const insertChatSessionSchema = createInsertSchema(chatSessions).omit({ id: true, userId: true, createdAt: true, updatedAt: true });
+export const insertChatMessageSchema = createInsertSchema(chatMessages).omit({ id: true, createdAt: true });
 
-// SELECT SCHEMAS & TYPES
+
+// --- SELECT SCHEMAS & TYPES ---
 export const selectUserSchema = createSelectSchema(users);
 export type User = z.infer<typeof selectUserSchema>;
-export type InsertUser = z.infer<typeof insertUserSchema>;
-
 export const selectCampaignSchema = createSelectSchema(campaigns);
 export type Campaign = z.infer<typeof selectCampaignSchema>;
-export type InsertCampaign = z.infer<typeof insertCampaignSchema>;
-
 export const selectCreativeSchema = createSelectSchema(creatives);
 export type Creative = z.infer<typeof selectCreativeSchema>;
-export type InsertCreative = z.infer<typeof insertCreativeSchema>;
-
 export const selectCopySchema = createSelectSchema(copies);
 export type Copy = z.infer<typeof selectCopySchema>;
-export type InsertCopy = z.infer<typeof insertCopySchema>;
-
 export const selectFunnelSchema = createSelectSchema(funnels);
 export type Funnel = z.infer<typeof selectFunnelSchema>;
-export type InsertFunnel = z.infer<typeof insertFunnelSchema>;
-
 export const selectFunnelStageSchema = createSelectSchema(funnelStages);
 export type FunnelStage = z.infer<typeof selectFunnelStageSchema>;
-
 export const selectLandingPageSchema = createSelectSchema(landingPages);
 export type LandingPage = z.infer<typeof selectLandingPageSchema>;
-export type InsertLandingPage = z.infer<typeof insertLandingPageSchema>;
-
 export const selectBudgetSchema = createSelectSchema(budgets);
 export type Budget = z.infer<typeof selectBudgetSchema>;
-
 export const selectAlertSchema = createSelectSchema(alerts);
 export type Alert = z.infer<typeof selectAlertSchema>;
-
 export const selectFlowSchema = createSelectSchema(flows);
 export type Flow = z.infer<typeof selectFlowSchema>;
-export type InsertFlow = z.infer<typeof insertFlowSchema>;
-
 export const selectWhatsappMessageTemplateSchema = createSelectSchema(whatsappMessageTemplates);
 export type WhatsappMessageTemplate = z.infer<typeof selectWhatsappMessageTemplateSchema>;
-export type InsertWhatsappMessageTemplate = z.infer<typeof insertWhatsappMessageTemplateSchema>;
-
 export const selectWhatsappFlowUserStateSchema = createSelectSchema(whatsappFlowUserStates);
 export type WhatsappFlowUserState = z.infer<typeof selectWhatsappFlowUserStateSchema>;
-export type InsertFlowUserState = z.infer<typeof insertFlowUserStateSchema>;
-
 export const selectWhatsappMessageSchema = createSelectSchema(whatsappMessages);
 export type WhatsappMessage = z.infer<typeof selectWhatsappMessageSchema>;
-
 export const selectChatSessionSchema = createSelectSchema(chatSessions);
 export type ChatSession = z.infer<typeof selectChatSessionSchema>;
-export type InsertChatSession = z.infer<typeof insertChatSessionSchema>;
-
 export const selectChatMessageSchema = createSelectSchema(chatMessages);
 export type ChatMessage = z.infer<typeof selectChatMessageSchema>;
-export type InsertChatMessage = z.infer<typeof insertChatMessageSchema>;
