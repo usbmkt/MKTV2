@@ -6,20 +6,9 @@ import StudioEditorComponent from '@/components/StudioEditorComponent';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
-import { useAuthStore } from '@/lib/auth'; // Importar o seu auth store
-
-const GRAPESJS_STUDIO_LICENSE_KEY = 'a588bab57a26417d829a73e27616d0233b3b7ba518ea4156a72f28517c14f616';
-
-interface LandingPageItem {
-  id: string;
-  name: string;
-  studioProjectId?: string; 
-  createdAt: string;
-  status: 'draft' | 'published';
-  urlSlug?: string;
-  publicUrl?: string;
-  grapesJsData?: any; 
-}
+import { LandingPage as LandingPageItem } from '@shared/schema';
+import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 
 export default function LandingPagesPage() {
   const queryClient = useQueryClient();
@@ -27,6 +16,8 @@ export default function LandingPagesPage() {
   const [showStudioEditor, setShowStudioEditor] = useState(false);
   const [editingLp, setEditingLp] = useState<LandingPageItem | null>(null);
   const [isEditorLoading, setIsEditorLoading] = useState(false);
+  const [isNewLpModalOpen, setIsNewLpModalOpen] = useState(false);
+  const [newLpName, setNewLpName] = useState("");
 
   const { data: landingPages = [], isLoading: isLoadingLps, error: lpsError, refetch: refetchLps } = useQuery<LandingPageItem[], Error>({
     queryKey: ['myStudioLandingPages'],
@@ -34,82 +25,78 @@ export default function LandingPagesPage() {
       const response = await apiRequest('GET', '/api/landingpages');
       if (!response.ok) {
         const errData = await response.json().catch(() => ({ message: 'Falha ao carregar landing pages.' }));
-        throw new Error(errData.message);
+        throw new Error(errData.error || errData.message);
       }
       return response.json();
     }
   });
 
-  const saveLpMutation = useMutation<LandingPageItem, Error, { projectData: any, lpMetadata: Partial<Omit<LandingPageItem, 'id' | 'createdAt' | 'grapesJsData'>> & { id?: string, grapesJsData: any } }>({
-    mutationFn: async ({ lpMetadata }) => {
-      const method = lpMetadata.id ? 'PUT' : 'POST';
-      const endpoint = lpMetadata.id ? `/api/landingpages/${lpMetadata.id}` : '/api/landingpages';
-      
-      const payload = {
-        name: lpMetadata.name,
-        studioProjectId: lpMetadata.studioProjectId,
-        status: lpMetadata.status,
-        slug: lpMetadata.urlSlug || lpMetadata.name?.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
-        grapesJsData: lpMetadata.grapesJsData,
-        publicUrl: lpMetadata.publicUrl, 
-      };
-      if (lpMetadata.id) {
-        (payload as any).id = lpMetadata.id;
-      }
+  const saveLpMutation = useMutation<LandingPageItem, Error, Partial<Omit<LandingPageItem, 'id' | 'createdAt' | 'updatedAt'>> & { id?: number, grapesJsData?: any, studioProjectId?: string }>({
+    mutationFn: async (lpData) => {
+        const method = lpData.id ? 'PUT' : 'POST';
+        const endpoint = lpData.id ? `/api/landingpages/${lpData.id}` : '/api/landingpages';
 
-      const response = await apiRequest(method, endpoint, payload);
-      if (!response.ok) {
-        const errorResult = await response.json().catch(() => ({ message: 'Erro desconhecido ao salvar' }));
-        throw new Error(errorResult.message);
-      }
-      return response.json();
+        const payload = {
+            name: lpData.name,
+            studioProjectId: lpData.studioProjectId,
+            status: lpData.status || 'draft',
+            slug: lpData.slug || lpData.name?.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
+            grapesJsData: lpData.grapesJsData,
+        };
+        
+        const response = await apiRequest(method, endpoint, payload);
+        if (!response.ok) {
+            const errorResult = await response.json().catch(() => ({ error: 'Erro desconhecido ao salvar' }));
+            throw new Error(errorResult.error || "Falha ao salvar a landing page");
+        }
+        return response.json();
     },
     onSuccess: (savedLp) => {
-      queryClient.invalidateQueries({ queryKey: ['myStudioLandingPages'] });
-      setShowStudioEditor(false);
-      setEditingLp(null);
-      toast({ title: "Sucesso", description: `Landing page "${savedLp.name}" salva no seu backend.` });
+        queryClient.invalidateQueries({ queryKey: ['myStudioLandingPages'] });
+        if (showStudioEditor) {
+            setEditingLp(savedLp); // Atualiza o estado de edição com a LP salva (importante para obter o ID)
+        } else {
+            setEditingLp(null);
+        }
+        toast({ title: "Sucesso", description: `Landing page "${savedLp.name}" salva.` });
     },
     onError: (error) => {
-      toast({ title: "Erro ao Salvar LP", description: error.message, variant: "destructive" });
+        toast({ title: "Erro ao Salvar LP", description: error.message, variant: "destructive" });
     }
   });
 
   const handleProjectSave = async (projectData: any, studioProjectIdFromEditor: string): Promise<{ id: string } | void > => {
     setIsEditorLoading(true);
-    let lpName = editingLp?.name || "Nova Landing Page";
-    let lpIdInOurDb = editingLp?.id;
+    const lpNameToSave = editingLp?.name || newLpName;
+    const lpIdToSave = editingLp?.id;
 
-    if (!editingLp) {
-        const newName = prompt("Defina o Nome da Landing Page:", lpName);
-        if (!newName || newName.trim() === "") {
-            toast({ title: "Ação Cancelada", description: "Nome é obrigatório para nova landing page.", variant: "destructive"});
-            setIsEditorLoading(false);
-            throw new Error("Nome é obrigatório");
-        }
-        lpName = newName;
+    if (!lpNameToSave) {
+        toast({ title: "Nome é obrigatório", variant: "destructive" });
+        setIsEditorLoading(false);
+        throw new Error("Nome da Landing Page é obrigatório.");
     }
-    
+
     try {
       const savedLp = await saveLpMutation.mutateAsync({ 
-        projectData, 
-        lpMetadata: { 
-            id: lpIdInOurDb, 
-            name: lpName, 
-            studioProjectId: studioProjectIdFromEditor, 
-            status: 'draft',
-            grapesJsData: projectData 
-        } 
+          id: lpIdToSave,
+          name: lpNameToSave, 
+          studioProjectId: studioProjectIdFromEditor, 
+          grapesJsData: projectData,
       });
       setIsEditorLoading(false);
+      
+      if (!editingLp) { // Se era uma nova LP, agora temos o objeto completo
+        setEditingLp(savedLp);
+      }
+
       if (!savedLp.studioProjectId) {
-        console.error("Backend não retornou studioProjectId para a landing page salva.", savedLp);
+        console.error("Backend não retornou studioProjectId.", savedLp);
         throw new Error("Falha ao obter ID do projeto do Studio do backend.");
       }
-      return { id: savedLp.studioProjectId }; 
+      return { id: savedLp.studioProjectId };
     } catch (error) {
       setIsEditorLoading(false);
-      console.error("Falha na mutação saveLpMutation em handleProjectSave:", error);
+      console.error("Falha na mutação saveLpMutation:", error);
       throw error; 
     }
   };
@@ -117,139 +104,78 @@ export default function LandingPagesPage() {
   const handleProjectLoad = async (projectIdToLoad: string): Promise<{ project: any }> => {
     setIsEditorLoading(true);
     try {
-      console.log(`[LP_PAGE] handleProjectLoad: Carregando projeto com studioProjectId: ${projectIdToLoad}`);
       const response = await apiRequest('GET', `/api/landingpages/studio-project/${projectIdToLoad}`);
       if (!response.ok) {
-        const errData = await response.json().catch(() => ({ message: `Projeto ${projectIdToLoad} não encontrado ou erro ao carregar.` }));
-        throw new Error(errData.message);
+        const errData = await response.json().catch(() => ({ message: `Projeto ${projectIdToLoad} não encontrado.` }));
+        throw new Error(errData.error || errData.message);
       }
-      const lpData : any = await response.json();
+      const lpData : { project: any } = await response.json();
       setIsEditorLoading(false);
-      if (!lpData || typeof lpData.project !== 'object' || lpData.project === null) {
-        console.warn(`[LP_PAGE] handleProjectLoad: Dados do projeto ${projectIdToLoad} estão vazios, malformados ou não contêm a chave 'project'. Resposta:`, lpData);
-        return { project: {} };
-      }
-      console.log(`[LP_PAGE] handleProjectLoad: Projeto ${projectIdToLoad} carregado.`);
-      return { project: lpData.project };
+      return { project: lpData.project || {} };
     } catch (error) {
         setIsEditorLoading(false);
-        console.error("[LP_PAGE] handleProjectLoad: Erro ao carregar dados do projeto do backend:", error);
         toast({title: "Erro ao Carregar Projeto", description: (error as Error).message, variant: "destructive"})
         throw error;
     }
   };
 
-  const handleAssetsUpload = async (files: File[]): Promise<{ src: string }[]> => {
+   const handleAssetsUpload = async (files: File[]): Promise<{ src: string }[]> => {
     setIsEditorLoading(true);
-    console.log("[LP_PAGE] handleAssetsUpload: Iniciando upload para", files.length, "arquivo(s).");
-    
-    const token = useAuthStore.getState().token; // TENTANDO PEGAR DO STORE ZUSTAND
-    // const token = localStorage.getItem('token'); // Linha antiga
-
-    console.log("[LP_PAGE] handleAssetsUpload: Token obtido:", token ? `SIM (primeiros 10: ${token.substring(0,10)}...)` : 'NÃO ENCONTRADO');
-
-    if (!token) {
-        toast({ title: "Erro de Autenticação", description: "Token não encontrado para upload de asset.", variant: "destructive" });
-        setIsEditorLoading(false);
-        throw new Error("Token de autenticação não encontrado para upload de asset.");
-    }
-
     try {
-      const uploadedAssetsPromises = files.map(async (file) => {
+      const uploadPromises = files.map(file => {
         const formData = new FormData();
         formData.append('file', file);
-
-        const response = await fetch('/api/assets/lp-upload', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`, 
-          },
-          body: formData,
-        });
-
-        if (!response.ok) {
-          const errData = await response.json().catch(() => ({ message: `Falha no upload do arquivo: ${file.name}` }));
-          console.error(`[LP_PAGE] handleAssetsUpload: Erro no backend para ${file.name}`, errData);
-          throw new Error(errData.message);
-        }
-        const result = await response.json(); 
-        console.log(`[LP_PAGE] handleAssetsUpload: Resposta do backend para ${file.name}`, result);
-
-        if (Array.isArray(result) && result.length > 0 && result[0].src) {
-          return result[0]; 
-        } else {
-          console.error("[LP_PAGE] handleAssetsUpload: Formato de resposta inesperado do upload de asset:", result);
-          throw new Error(`API de upload não retornou a URL formatada corretamente para ${file.name}`);
-        }
+        return apiRequest('POST', '/api/assets/lp-upload', formData, true);
       });
-
-      const results = await Promise.all(uploadedAssetsPromises);
-      setIsEditorLoading(false);
-      console.log("[LP_PAGE] handleAssetsUpload: Todos os assets processados:", results);
-      return results; 
+      const responses = await Promise.all(uploadPromises);
+      const results = await Promise.all(responses.map(res => res.json()));
+      const urls = results.flat().map(r => ({ src: r.src })); // A API retorna [{src: 'url'}]
+      toast({ title: "Upload Concluído", description: `${files.length} arquivo(s) enviado(s).`});
+      return urls;
     } catch (error) {
+      toast({ title: "Erro no Upload", description: (error as Error).message, variant: "destructive" });
+      return [];
+    } finally {
       setIsEditorLoading(false);
-      console.error("[LP_PAGE] handleAssetsUpload: Erro geral:", error);
-      toast({ title: "Erro Upload de Assets", description: (error as Error).message, variant: "destructive" });
-      throw error; 
     }
   };
 
   const handleAssetsDelete = async (assets: { src: string }[]): Promise<void> => {
-    setIsEditorLoading(true);
-    console.log("[LP_PAGE] handleAssetsDelete: Deletando assets:", assets);
-    try {
-      const response = await apiRequest('POST', '/api/assets/lp-delete', { assets }); 
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({ message: 'Falha ao deletar assets' }));
-        throw new Error(errData.message);
-      }
-      setIsEditorLoading(false);
-      toast({title: "Assets Deletados", description: `${assets.length} asset(s) marcados para remoção.`});
-    } catch (error) {
-        setIsEditorLoading(false);
-        console.error("[LP_PAGE] handleAssetsDelete: Erro ao deletar assets no backend:", error);
-        toast({title: "Erro ao Deletar Assets", description: (error as Error).message, variant: "destructive"})
-        throw error;
-    }
+     try {
+       await apiRequest('POST', '/api/assets/lp-delete', { assets });
+       toast({ title: "Assets Deletados", description: `${assets.length} asset(s) removido(s).` });
+     } catch (error) {
+       toast({ title: "Erro ao Deletar Assets", description: (error as Error).message, variant: "destructive" });
+     }
   };
   
   const handleEditorError = (error: any) => {
-    console.error("[LP_PAGE] Studio Editor - Erro Global Recebido:", error);
+    console.error("[LP_PAGE] Studio Editor - Erro:", error);
     toast({ title: "Erro no Editor", description: error?.message || "Ocorreu um problema com o editor.", variant: "destructive"});
-    setShowStudioEditor(false); 
   };
 
-  const handleCreateNew = () => {
-    if (!GRAPESJS_STUDIO_LICENSE_KEY) {
-      toast({ title: "Configuração Inválida", description: "Chave de licença do GrapesJS Studio está ausente.", variant: "destructive" });
+  const handleOpenNewModal = () => {
+    setNewLpName("");
+    setIsNewLpModalOpen(true);
+  };
+  
+  const handleConfirmNewLp = () => {
+    if (!newLpName.trim()) {
+      toast({ title: "Nome inválido", description: "Por favor, insira um nome para a nova landing page.", variant: "destructive" });
       return;
     }
-    setEditingLp(null);
+    setEditingLp(null); // Garante que estamos criando uma nova
+    setIsNewLpModalOpen(false);
     setShowStudioEditor(true);
   };
 
   const handleEdit = (page: LandingPageItem) => {
-     if (!GRAPESJS_STUDIO_LICENSE_KEY ) {
-      toast({ title: "Configuração Inválida", description: "Chave de licença do GrapesJS Studio está ausente.", variant: "destructive" });
-      return;
-    }
-    if (!page.studioProjectId && !page.grapesJsData) {
-      toast({ title: "Dados Incompletos", description: "Landing page sem ID de projeto do Studio ou dados para carregar.", variant: "destructive"});
-      return;
-    }
     setEditingLp(page);
     setShowStudioEditor(true);
   };
 
-  const deleteLpMutation = useMutation<void, Error, string>({
-    mutationFn: async (pageId: string) => {
-        const response = await apiRequest('DELETE', `/api/landingpages/${pageId}`);
-        if(!response.ok) {
-            const errorResult = await response.json().catch(() => ({ message: 'Erro desconhecido ao excluir' }));
-            throw new Error(errorResult.message || "Falha ao excluir landing page");
-        }
-    },
+  const deleteLpMutation = useMutation<void, Error, number>({
+    mutationFn: (pageId) => apiRequest('DELETE', `/api/landingpages/${pageId}`),
     onSuccess: () => {
         queryClient.invalidateQueries({queryKey: ['myStudioLandingPages']});
         toast({title: "Excluído", description: "Landing page excluída com sucesso."});
@@ -260,7 +186,7 @@ export default function LandingPagesPage() {
   });
 
   const handleDelete = (page: LandingPageItem) => {
-    if (window.confirm(`Tem certeza que deseja excluir a landing page "${page.name}"? Esta ação não pode ser desfeita.`)) {
+    if (window.confirm(`Tem certeza que deseja excluir a landing page "${page.name}"?`)) {
       deleteLpMutation.mutate(page.id);
     }
   };
@@ -274,11 +200,21 @@ export default function LandingPagesPage() {
     );
   }
 
+  if (lpsError) {
+    return (
+      <div className="p-8 text-center text-destructive">
+          <AlertTriangle className="h-12 w-12 mx-auto mb-2" />
+          Erro ao carregar landing pages: {lpsError.message}
+          <Button variant="link" className="p-0 h-auto text-destructive-foreground hover:underline ml-7 mt-1" onClick={() => refetchLps()}>Tentar novamente</Button>
+      </div>
+    );
+  }
+
   if (showStudioEditor) {
     return (
       <div className="p-0 md:p-0 h-screen flex flex-col bg-background relative">
         {(isEditorLoading || saveLpMutation.isPending) && (
-            <div className="absolute inset-0 bg-black/30 flex items-center justify-center z-50">
+            <div className="absolute inset-0 bg-black/30 flex items-center justify-center z-50 backdrop-blur-sm">
                 <Loader2 className="h-10 w-10 animate-spin text-white"/>
             </div>
         )}
@@ -287,22 +223,21 @@ export default function LandingPagesPage() {
             ← Voltar para Lista
           </Button>
           <h2 className="text-lg font-semibold truncate px-2">
-            {editingLp ? `Editando: ${editingLp.name}` : 'Nova Landing Page'}
+            {editingLp ? `Editando: ${editingLp.name}` : `Nova: ${newLpName}`}
           </h2>
-          <div style={{width: '96px'}}></div>
+          <div className="w-24"></div>
         </div>
         <div className="flex-grow min-h-0">
           <StudioEditorComponent
-            key={editingLp?.id || 'new-studio-lp'}
-            licenseKey={GRAPESJS_STUDIO_LICENSE_KEY}
-            projectId={editingLp?.studioProjectId}
-            initialProjectData={editingLp?.grapesJsData}
+            key={editingLp?.id || newLpName}
             onProjectSave={handleProjectSave}
             onProjectLoad={handleProjectLoad}
             onAssetsUpload={handleAssetsUpload}
             onAssetsDelete={handleAssetsDelete}
             onEditorError={handleEditorError}
-            onEditorLoad={() => console.log("[LP_PAGE] Studio Editor Component Carregado e Pronto!")}
+            onEditorLoad={() => console.log("[LP_PAGE] Studio Editor Carregado!")}
+            initialProjectData={editingLp?.grapesJsData}
+            projectId={editingLp?.studioProjectId}
           />
         </div>
       </div>
@@ -311,7 +246,8 @@ export default function LandingPagesPage() {
 
   return (
     <div className="p-4 md:p-8 space-y-6">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      {/* ... (código da lista de LPs, sem alterações) ... */}
+       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-foreground flex items-center">
             <LayoutTemplate className="w-7 h-7 mr-3 text-primary" />
@@ -321,24 +257,11 @@ export default function LandingPagesPage() {
             Crie e gerencie suas páginas de destino com o GrapesJS Studio.
           </p>
         </div>
-        <Button onClick={handleCreateNew}>
+        <Button onClick={handleOpenNewModal}>
           <Plus className="w-4 h-4 mr-2" />
           Criar Nova Landing Page
         </Button>
       </div>
-
-      {lpsError && (
-         <Card className="border-destructive bg-destructive/10">
-            <CardContent className="p-4 text-destructive-foreground">
-                <div className="flex items-center">
-                    <AlertTriangle className="w-5 h-5 mr-2" />
-                    <p className="font-semibold">Erro ao carregar landing pages:</p>
-                </div>
-                <p className="text-sm ml-7">{lpsError.message}</p>
-                <Button variant="link" className="p-0 h-auto text-destructive-foreground hover:underline ml-7 mt-1" onClick={() => refetchLps()}>Tentar novamente</Button>
-            </CardContent>
-         </Card>
-      )}
 
       <Card>
         <CardHeader>
@@ -353,7 +276,7 @@ export default function LandingPagesPage() {
               <LayoutTemplate className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
               <h3 className="text-xl font-semibold mb-2">Nenhuma Landing Page Criada</h3>
               <p className="text-muted-foreground mb-4">Comece criando sua primeira página de destino.</p>
-              <Button onClick={handleCreateNew}>
+              <Button onClick={handleOpenNewModal}>
                 <Plus className="w-4 h-4 mr-2" />
                 Criar Primeira Landing Page
               </Button>
@@ -370,25 +293,9 @@ export default function LandingPagesPage() {
                         {page.status === 'published' ? 'Publicada' : 'Rascunho'}
                       </span>
                     </p>
-                    {page.publicUrl && page.status === 'published' && (
-                       <a 
-                         href={page.publicUrl} 
-                         target="_blank" 
-                         rel="noopener noreferrer" 
-                         className="text-xs text-primary hover:underline flex items-center mt-1"
-                       >
-                         {page.publicUrl} <ExternalLink className="w-3 h-3 ml-1" />
-                       </a>
-                    )}
-                    {page.studioProjectId && <p className="text-xs text-muted-foreground mt-1">Studio Project ID: {page.studioProjectId}</p>}
                   </div>
                   <div className="flex items-center space-x-2 flex-shrink-0">
-                    {page.status === 'published' && page.publicUrl && (
-                      <Button variant="outline" size="sm" onClick={() => window.open(page.publicUrl, '_blank')}>
-                        <Eye className="w-4 h-4 mr-1 sm:mr-2" /> <span className="hidden sm:inline">Ver</span>
-                      </Button>
-                    )}
-                    <Button variant="outline" size="sm" onClick={() => handleEdit(page)} disabled={!page.studioProjectId && !page.grapesJsData}>
+                    <Button variant="outline" size="sm" onClick={() => handleEdit(page)}>
                       <Edit2 className="w-4 h-4 mr-1 sm:mr-2" /> <span className="hidden sm:inline">Editar</span>
                     </Button>
                     <Button variant="destructive" size="sm" onClick={() => handleDelete(page)}>
@@ -401,6 +308,28 @@ export default function LandingPagesPage() {
           )}
         </CardContent>
       </Card>
+      
+      <Dialog open={isNewLpModalOpen} onOpenChange={setIsNewLpModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Criar Nova Landing Page</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <Label htmlFor="lp-name">Nome da Landing Page</Label>
+            <Input 
+              id="lp-name"
+              value={newLpName}
+              onChange={(e) => setNewLpName(e.target.value)}
+              placeholder="Ex: Lançamento de Inverno"
+              className="mt-2"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsNewLpModalOpen(false)}>Cancelar</Button>
+            <Button onClick={handleConfirmNewLp}>Abrir Editor</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
