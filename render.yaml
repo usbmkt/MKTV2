@@ -18,7 +18,7 @@ services:
           - libasound2
           - libgbm1
           - chromium-browser
-    # ✅ CORREÇÃO FINAL: Removido 'npm run db:generate'.
+    # ✅ CORREÇÃO DEFINITIVA: Removido 'npm run db:generate'.
     # O build agora apenas instala as dependências e constrói a aplicação.
     buildCommand: "npm install && npm run build"
     
