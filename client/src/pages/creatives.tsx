@@ -1,5 +1,5 @@
 // client/src/pages/creatives.tsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { api } from '@/lib/api'; // ✅ CORREÇÃO: Importando o objeto 'api'
+import { apiRequest } from '@/lib/api';
 import UploadModal from '@/components/upload-modal';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import {
@@ -22,19 +22,17 @@ import {
   Trash2,
   Play,
   AlertTriangle,
-  Loader2
 } from 'lucide-react';
 
-// Interfaces (sem alteração)
 interface Creative {
   id: number;
   name: string;
   type: 'image' | 'video' | 'text' | 'carousel';
-  fileUrl?: string | null;
+  fileUrl?: string | null; // Pode ser null
   content?: string;
   status: string;
-  platforms: string[];
-  campaignId?: number | null;
+  platforms: string[]; // JSONB agora é string[] no schema, então está ok
+  campaignId?: number | null; // Pode ser number ou null
   createdAt: string;
 }
 
@@ -42,10 +40,10 @@ interface CreativeEditData {
   id?: number;
   name: string;
   type: 'image' | 'video' | 'text' | 'carousel';
-  campaignId?: number | null;
+  campaignId?: number | null; // Pode ser number ou null
   content?: string;
   platforms?: string[];
-  fileUrl?: string | null;
+  fileUrl?: string | null; // Pode ser null
 }
 
 
@@ -60,14 +58,27 @@ export default function Creatives() {
   const [errorBoundaryKey, setErrorBoundaryKey] = useState(0);
 
   const { data: creatives = [], isLoading, error: creativesError } = useQuery<Creative[], Error>({
-    queryKey: ['creatives'], // ✅ CORREÇÃO: Usando chave mais simples
-    queryFn: () => api.get<Creative[]>('/api/creatives'), // ✅ CORREÇÃO: Usando api.get
+    queryKey: ['/api/creatives'],
+    queryFn: async () => {
+      const response = await apiRequest('GET', '/api/creatives');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: `HTTP error! status: ${response.status}` }));
+        throw new Error(errorData.message || `Failed to fetch creatives: ${response.status}`);
+      }
+      return response.json();
+    },
   });
 
   const deleteMutation = useMutation<void, Error, number>({
-    mutationFn: (id: number) => api.delete(`/api/creatives/${id}`), // ✅ CORREÇÃO: Usando api.delete
+    mutationFn: async (id: number) => {
+      const response = await apiRequest('DELETE', `/api/creatives/${id}`);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: `HTTP error! status: ${response.status}` }));
+        throw new Error(errorData.message || `Failed to delete creative: ${response.status}`);
+      }
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['creatives'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/creatives'] });
       toast({
         title: 'Criativo excluído',
         description: 'O criativo foi excluído com sucesso.',
@@ -83,10 +94,6 @@ export default function Creatives() {
     },
   });
 
-  // O resto do componente (lógica de filtro, JSX, etc.) permanece o mesmo...
-  // ... (Cole aqui o restante do seu componente Creatives.tsx a partir da linha 80)
-  // Como o restante do arquivo é grande e não muda, vou omiti-lo por brevidade,
-  // mas as mudanças principais estão na importação e nas chamadas de query/mutation.
   const filteredCreatives = creatives.filter(creative => {
     const matchesSearch = creative.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesType = typeFilter === 'all' || creative.type === typeFilter;
@@ -137,10 +144,10 @@ export default function Creatives() {
       id: creative.id,
       name: creative.name,
       type: creative.type,
-      campaignId: creative.campaignId,
+      campaignId: creative.campaignId, // Usar diretamente o tipo number | null
       content: creative.content,
       platforms: creative.platforms,
-      fileUrl: creative.fileUrl,
+      fileUrl: creative.fileUrl, // Usar diretamente o tipo string | null
     };
     setEditingCreative(editData);
     setErrorBoundaryKey(prevKey => prevKey + 1);
@@ -166,7 +173,7 @@ export default function Creatives() {
         <AlertTriangle className="w-16 h-16 text-destructive mx-auto mb-4" />
         <h2 className="text-2xl font-semibold text-destructive mb-2">Erro ao carregar criativos</h2>
         <p className="text-muted-foreground mb-4">{creativesError.message}</p>
-        <Button onClick={() => queryClient.refetchQueries({ queryKey: ['creatives'] })}>
+        <Button onClick={() => queryClient.refetchQueries({ queryKey: ['/api/creatives'] })}>
           Tentar Novamente
         </Button>
       </div>
@@ -308,7 +315,7 @@ export default function Creatives() {
                         variant="ghost" size="icon"
                         className="h-8 w-8 text-destructive hover:text-destructive-foreground hover:bg-destructive/90"
                         onClick={() => deleteCreative(creative.id)}
-                        disabled={deleteMutation.isPending && deleteMutation.variables === creative.id}
+                        disabled={deleteMutation.isPending}
                         title="Excluir"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -379,7 +386,7 @@ export default function Creatives() {
             onClose={closeModal}
             onSuccess={() => {
               closeModal();
-              queryClient.invalidateQueries({ queryKey: ['creatives'] });
+              queryClient.invalidateQueries({ queryKey: ['/api/creatives'] });
               toast({
                 title: editingCreative ? 'Criativo Atualizado!' : 'Upload Concluído!',
                 description: editingCreative ? 'As alterações foram salvas.' : 'Seu criativo foi enviado com sucesso.',
