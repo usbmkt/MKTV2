@@ -1,7 +1,7 @@
-// server/index.ts
+// server/index.ts (CORRIGIDO E COMPLETO)
 import express from 'express';
 import { createServer } from 'http';
-import { Server } from 'socket.io';
+import { Server, Socket } from 'socket.io'; // ✅ CORREÇÃO: Importando tipos
 import { registerRoutes } from './routes.js';
 import { logger } from './logger.js';
 import cors from 'cors';
@@ -19,26 +19,25 @@ export const io = new Server(server, {
 });
 
 app.use(cors());
-
-// Registra as rotas da API
 registerRoutes(app);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Servir os arquivos estáticos do cliente (Vite build output)
-const clientDistPath = path.join(__dirname, '..', 'client', 'dist');
+// Servir arquivos estáticos do cliente
+const clientDistPath = path.resolve(__dirname, '..', 'public');
 app.use(express.static(clientDistPath));
-
-// Servir o index.html para todas as outras rotas (para o React Router funcionar)
 app.get('*', (req, res) => {
-  res.sendFile(path.join(clientDistPath, 'index.html'));
+  if (!req.path.startsWith('/api/')) {
+    res.sendFile(path.resolve(clientDistPath, 'index.html'));
+  }
 });
 
-io.on('connection', (socket) => {
+// ✅ CORREÇÃO: Adicionando tipos para 'socket' e 'userId'
+io.on('connection', (socket: Socket) => {
   logger.info('A user connected via WebSocket');
   
-  socket.on('join_user_room', (userId) => {
+  socket.on('join_user_room', (userId: number | string) => {
     socket.join(`user_${userId}`);
     logger.info(`Socket ${socket.id} joined room for user ${userId}`);
   });
