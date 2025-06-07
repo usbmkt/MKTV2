@@ -1,21 +1,25 @@
+// usbmkt/mktv2/MKTV2-mktv5/server/db.ts
+
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { config } from './config.js';
+import * as schema from '../shared/schema.js'; // <-- IMPORTANTE: Importa todo o schema
 
-// Create the connection
+// Cria a conexão
 const connectionString = config.DATABASE_URL;
 
 if (!connectionString) {
   throw new Error('DATABASE_URL is not defined');
 }
 
-// Create postgres client
+// Cria o cliente postgres
 const client = postgres(connectionString, {
   prepare: false,
-  ssl: 'require'
+  ssl: config.NODE_ENV === 'production' ? 'require' : undefined, // Ajuste para não usar SSL em dev
 });
 
-// Create drizzle instance
-export const db = drizzle(client);
+// Cria a instância do Drizzle, passando o schema
+// Esta é a correção fundamental que resolve a maioria dos erros.
+export const db = drizzle(client, { schema });
 
 export default db;
