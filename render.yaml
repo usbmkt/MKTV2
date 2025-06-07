@@ -18,7 +18,7 @@ services:
           - libasound2
           - libgbm1
           - chromium-browser
-    # ✅ CORREÇÃO DEFINITIVA APLICADA AQUI
+    # ✅ CORREÇÃO APLICADA AQUI
     buildCommand: "rm -rf node_modules package-lock.json && npm install && npm run build"
     startCommand: "npm run migrate:deploy && npm start"
     envVars:
@@ -33,7 +33,16 @@ services:
       - key: PUPPETEER_EXECUTABLE_PATH
         value: /usr/bin/chromium-browser
       # Adicione aqui as outras variáveis que corrigimos (APP_BASE_URL, etc.)
-
+      - key: JWT_SECRET
+      value: k3jHs9aF3dLmN5pQrT7vWxYz1bC4eI0oP2uV6iM/s=
+        generateValue: true
+      - key: GEMINI_API_KEY
+      value : AIzaSyBT9JrtIatLC_9sWL1LAOmu8OqqRbERuRw
+        sync: false
+      - key: APP_BASE_URL
+        value: https://mktv2.onrender.com
+        - key: GRAPESJS_STUDIO_LICENSE_KEY
+          value: a588bab57a26417d829a73e27616d0233b3b7ba518ea4156a72f28517c14f616
 databases:
   - name: mktv5-render-db
     plan: free
