@@ -1,21 +1,12 @@
 import { useAuthStore } from './auth';
 
-// A URL base da API. Em produção, será a URL do seu servidor.
-// Como eliminamos o Vite, ele usará o caminho relativo, que é o correto.
 const API_BASE_URL = '/api';
 
-/**
- * Lida com a resposta de uma requisição da API, parseando o corpo em caso de sucesso
- * ou extraindo uma mensagem de erro detalhada em caso de falha.
- * @param response O objeto Response do fetch.
- * @returns Os dados da resposta em JSON.
- * @throws Uma `Error` com uma mensagem descritiva se a resposta não for 'ok'.
- */
+// --- Função de tratamento de resposta (interna) ---
 async function handleApiResponse<T>(response: Response): Promise<T> {
   if (response.status === 204) {
     return null as T;
   }
-
   let payload;
   try {
     payload = await response.json();
@@ -23,24 +14,15 @@ async function handleApiResponse<T>(response: Response): Promise<T> {
     const textPayload = await response.text();
     payload = { error: textPayload || response.statusText };
   }
-  
   if (!response.ok) {
     const errorMessage = payload?.error || payload?.message || `API Error: ${response.status}`;
     throw new Error(errorMessage);
   }
-
   return payload as T;
 }
 
-/**
- * Função interna genérica para realizar requisições à API.
- * @param method O método HTTP.
- * @param endpoint O caminho do endpoint (ex: '/users').
- * @param body O corpo da requisição (pode ser um objeto ou FormData).
- * @param isFormData Flag para indicar se o corpo é FormData.
- * @returns Uma promessa que resolve para os dados da API.
- */
-async function request<T>(
+// --- Nova função de requisição (interna) ---
+async function internalRequest<T>(
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   endpoint: string,
   body?: any,
@@ -48,62 +30,88 @@ async function request<T>(
 ): Promise<T> {
   const { token } = useAuthStore.getState();
   const headers: HeadersInit = {};
-
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
-
-  const config: RequestInit = {
-    method,
-    headers,
-  };
-
+  const config: RequestInit = { method, headers };
   if (body) {
     if (isFormData) {
-      // Para FormData, o browser define o 'Content-Type' com o boundary correto.
       config.body = body;
     } else {
       headers['Content-Type'] = 'application/json';
       config.body = JSON.stringify(body);
     }
   }
-
   const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
   return handleApiResponse<T>(response);
 }
 
-// Objeto singleton exportado com métodos fáceis de usar para a API.
+// --- Objeto 'api' (novo padrão) ---
 export const api = {
-  get: <T>(endpoint: string) => 
-    request<T>('GET', endpoint),
-    
-  post: <T>(endpoint: string, data: any) => 
-    request<T>('POST', endpoint, data),
+  get: <T>(endpoint: string) => internalRequest<T>('GET', endpoint),
+  post: <T>(endpoint: string, data: any) => internalRequest<T>('POST', endpoint, data),
+  put: <T>(endpoint: string, data: any) => internalRequest<T>('PUT', endpoint, data),
+  delete: <T>(endpoint: string) => internalRequest<T>('DELETE', endpoint),
+};
 
-  put: <T>(endpoint: string, data: any) => 
-    request<T>('PUT', endpoint, data),
-    
-  delete: <T>(endpoint: string) => 
-    request<T>('DELETE', endpoint),
+// --- Função 'apiRequest' (padrão antigo) para compatibilidade ---
+// ✅ CORREÇÃO: Readicionando a função antiga que as outras páginas usam
+export async function apiRequest(
+  method: string,
+  url: string, // url aqui é o endpoint completo, ex: /api/campaigns
+  data?: unknown
+): Promise<Response> {
+  const { token } = useAuthStore.getState();
+  const headers: HeadersInit = { 'Content-Type': 'application/json' };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
 
-  upload: <T>(endpoint: string, file: File, additionalData?: Record<string, any>, method: 'POST' | 'PUT' = 'POST'): Promise<T> => {
+  const response = await fetch(url, {
+    method,
+    headers: data ? headers : { 'Authorization': `Bearer ${token}` }, // Evita Content-Type em GET
+    body: data ? JSON.stringify(data) : undefined,
+  });
+  
+  // A versão antiga retornava a response bruta, vamos manter isso
+  // if (!response.ok) {
+  //   const errorData = await response.json().catch(() => ({ message: 'Erro desconhecido' }));
+  //   throw new Error(errorData.message || `Erro na requisição para ${url}`);
+  // }
+  return response;
+}
+
+// ✅ CORREÇÃO: Readicionando a função de upload que o modal usa
+export async function uploadFile(
+    endpoint: string,
+    file: File,
+    additionalData: Record<string, any> = {},
+    method: 'POST' | 'PUT' = 'POST'
+): Promise<Response> {
+    const { token } = useAuthStore.getState();
+    const headers: HeadersInit = {};
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
+
     const formData = new FormData();
     formData.append('file', file);
     
-    if (additionalData) {
-      for (const key in additionalData) {
-         if (additionalData[key] !== undefined && additionalData[key] !== null) {
+    for (const key in additionalData) {
+        if (additionalData[key] !== undefined && additionalData[key] !== null) {
             if (Array.isArray(additionalData[key])) {
-                additionalData[key].forEach((item: string) => {
-                    formData.append(`${key}[]`, item);
-                });
+                additionalData[key].forEach((item: string) => formData.append(`${key}[]`, item));
             } else {
                 formData.append(key, String(additionalData[key]));
             }
         }
-      }
     }
-    
-    return request<T>(method, endpoint, formData, true);
-  },
-};
+
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        method,
+        headers,
+        body: formData,
+    });
+
+    return response;
+}
