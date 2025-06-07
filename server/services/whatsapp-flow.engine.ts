@@ -6,86 +6,81 @@ import { getSimpleAiResponse } from '../mcp_handler.js';
 import * as schema from '../../shared/schema.js';
 import { logger } from '../logger.js';
 
-interface FlowNode { id: string; type?: string; data: any; position: { x: number; y: number }; [key: string]: any; }
-interface FlowEdge { id: string; source: string; target: string; sourceHandle?: string | null; targetHandle?: string | null; [key: string]: any; }
+// Tipos locais para nós e arestas do fluxo
+interface FlowNode { id: string; type?: string; data: any; [key: string]: any; }
+interface FlowEdge { id: string; source: string; target: string; sourceHandle?: string | null; [key: string]: any; }
 
 export class WhatsappFlowEngine {
     private interpolate(text: string, variables: Record<string, any>): string {
         if (!text) return '';
-        return text.replace(/\{\{([a-zA-Z0-9_.-]+)\}\}/g, (match: string, key: string) => {
-            const value = key.split('.').reduce((o: any, i: any) => (o ? o[i] : undefined), variables);
+        return text.replace(/\{\{([a-zA-Z0-9_.-]+)\}\}/g, (match, key) => {
+            const value = key.split('.').reduce((o: any, i: string) => o?.[i], variables);
             return value !== undefined ? String(value) : match;
         });
     }
 
     public async processMessage(userId: number, contactJid: string, messageContent: string): Promise<void> {
-        logger.info({ contactJid, userId, messageContent }, `Processando mensagem.`);
-        
         let userState = await storage.getFlowUserState(userId, contactJid);
         let flow: schema.Flow | undefined;
-        let isNewSession = false;
 
         if (!userState) {
-            isNewSession = true;
-            const triggerFlow = await storage.findTriggerFlow(userId, messageContent);
-            if (!triggerFlow) { logger.warn({ userId }, `Nenhum fluxo de gatilho ativo ou válido encontrado.`); return; }
-            flow = triggerFlow;
-            const firstNode = this.findStartNode(flow);
-            if (!firstNode) { logger.error({ flowId: flow.id }, `Fluxo não possui um nó inicial.`); return; }
-            userState = await storage.createFlowUserState({ userId, contactJid, activeFlowId: flow.id, currentNodeId: firstNode.id, flowVariables: {} });
-        } else {
-            if (!userState.activeFlowId) { await storage.deleteFlowUserState(userState.id); return; }
+            flow = await storage.findTriggerFlow(userId, messageContent);
+            if (!flow) return;
+            const startNode = this.findStartNode(flow);
+            if (!startNode) return;
+            userState = await storage.createFlowUserState({ userId, contactJid, activeFlowId: flow.id, currentNodeId: startNode.id, flowVariables: {} });
+            await this.executeNode(userState, flow);
+        } else if (userState.activeFlowId && userState.currentNodeId) {
             flow = await storage.getFlow(userState.activeFlowId, userId);
+            if (!flow) { await storage.deleteFlowUserState(userState.id); return; }
+            await this.executeNode(userState, flow, messageContent);
         }
+    }
+    
+    private async executeNode(userState: schema.WhatsappFlowUserState, flow: schema.Flow, userInput?: string): Promise<void> {
+        let currentNode = this.findNodeById(flow, userState.currentNodeId!);
+        if (!currentNode) { await storage.deleteFlowUserState(userState.id); return; }
+
+        let nextNodeId: string | null = null;
         
-        if (!flow || !userState?.currentNodeId) {
-            if (userState) await storage.deleteFlowUserState(userState.id);
-            return;
-        }
-
-        let currentNode = this.findNodeById(flow, userState.currentNodeId);
-        let nextNodeId: string | null = currentNode?.id ?? null;
-
-        if (currentNode && this.isWaitingNode(currentNode.type) && !isNewSession) {
-            const updatedState = await storage.getFlowUserState(userId, contactJid);
-            if (!updatedState) return;
-            nextNodeId = await this.processInput(updatedState, currentNode, flow.elements?.nodes || [], messageContent);
+        if (this.isWaitingNode(currentNode.type) && userInput) {
+             nextNodeId = await this.processInput(userState, currentNode, flow.elements?.edges ?? [], userInput);
+        } else if (!this.isWaitingNode(currentNode.type)) {
+             nextNodeId = await this.executeActionNode(userState, currentNode, flow.elements?.edges ?? []);
+        } else {
+             await this.executeWaitingNode(userState, currentNode);
+             return; 
         }
 
         while (nextNodeId) {
-            const nodeToExecute = this.findNodeById(flow, nextNodeId);
-            if (!nodeToExecute) break;
-
-            const currentState = await storage.getFlowUserState(userId, contactJid);
+            const nextNode = this.findNodeById(flow, nextNodeId);
+            if (!nextNode) { await storage.deleteFlowUserState(userState.id); return; }
+            
+            const currentState = await storage.getFlowUserState(userState.userId, userState.contactJid);
             if (!currentState) return;
-
-            if (this.isWaitingNode(nodeToExecute.type)) {
-                await storage.updateFlowUserState(currentState.id, { currentNodeId: nodeToExecute.id });
-                await this.executeWaitingNode(currentState, nodeToExecute);
-                return; 
+            
+            if (this.isWaitingNode(nextNode.type)) {
+                await storage.updateFlowUserState(currentState.id, { currentNodeId: nextNode.id });
+                await this.executeWaitingNode(currentState, nextNode);
+                return;
             }
             
-            nextNodeId = await this.executeActionNode(currentState, nodeToExecute, flow.elements?.edges || []);
+            nextNodeId = await this.executeActionNode(currentState, nextNode, flow.elements?.edges ?? []);
         }
-    }
-
-    private findStartNode = (flow: schema.Flow): FlowNode | undefined => flow.elements?.nodes.find((n: FlowNode) => !flow.elements?.edges.some((e: FlowEdge) => e.target === n.id));
-    private findNodeById = (flow: schema.Flow, nodeId: string): FlowNode | undefined => flow.elements?.nodes.find((n: FlowNode) => n.id === nodeId);
-    private isWaitingNode = (type?: string): boolean => ['buttonMessage', 'waitInput'].includes(type || '');
-
-    private async processInput(userState: schema.WhatsappFlowUserState, node: FlowNode, edges: FlowEdge[], messageContent: string): Promise<string | null> {
-        // ... (lógica interna, agora com as funções de storage disponíveis)
-        return null; // Implementação de exemplo
+        
+        if (!nextNodeId) await storage.deleteFlowUserState(userState.id);
     }
     
-    private async executeWaitingNode(userState: schema.WhatsappFlowUserState, node: FlowNode): Promise<void> {
-        // ✅ CORREÇÃO: Usando o método estático para enviar a mensagem
-        await WhatsappConnectionService.sendMessageForUser(userState.userId, userState.contactJid, { text: "Mensagem de espera..." });
-    }
+    private findStartNode = (flow: schema.Flow): FlowNode | undefined => flow.elements?.nodes.find((n: any) => !flow.elements?.edges.some((e: any) => e.target === n.id));
+    private findNodeById = (flow: schema.Flow, nodeId: string): FlowNode | undefined => flow.elements?.nodes.find((n: any) => n.id === nodeId);
+    private isWaitingNode = (type?: string): boolean => ['buttonMessage', 'waitInput'].includes(type || '');
 
+    private async processInput(userState: schema.WhatsappFlowUserState, node: FlowNode, edges: FlowEdge[], messageContent: string): Promise<string | null> { return null; /* Implementar lógica de processamento de input */ }
+    private async executeWaitingNode(userState: schema.WhatsappFlowUserState, node: FlowNode): Promise<void> { await WhatsappConnectionService.sendMessageForUser(userState.userId, userState.contactJid, { text: "Mensagem de espera..." }); }
     private async executeActionNode(userState: schema.WhatsappFlowUserState, node: FlowNode, edges: FlowEdge[]): Promise<string | null> {
-         // ✅ CORREÇÃO: Usando o método estático para enviar a mensagem
-        await WhatsappConnectionService.sendMessageForUser(userState.userId, userState.contactJid, { text: "Mensagem de ação..." });
-        return null; // Implementação de exemplo
+        // ✅ CORREÇÃO: Chamando o método estático para enviar a mensagem.
+        await WhatsappConnectionService.sendMessageForUser(userState.userId, userState.contactJid, { text: `Executando nó: ${node.data.label || node.type}` });
+        const edge = edges.find(e => e.source === node.id);
+        return edge?.target || null;
     }
 }
