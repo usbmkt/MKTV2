@@ -13,35 +13,43 @@ export async function handleMCPConversation(
 ) {
     let currentSessionId = sessionId;
 
+    // Se não há sessão, cria uma nova
     if (!currentSessionId) {
         const newSession = await storage.createChatSession(userId, message.substring(0, 30));
         currentSessionId = newSession.id;
     }
 
+    // Salva a mensagem do usuário
     await storage.createChatMessage({
         sessionId: currentSessionId,
         sender: 'user',
-        text: message
+        text: message,
+        userId: userId, // <-- CORREÇÃO: Adicionado userId
+        attachmentUrl: attachmentUrl || null,
     });
 
+    // Pega o histórico para dar contexto à IA
     const history = await storage.getChatMessages(currentSessionId, userId);
     const model = genAI.getGenerativeModel({ model: "gemini-pro" });
 
     const chat = model.startChat({
         history: history.map(msg => ({
-            role: msg.sender as 'user' | 'model',
+            role: msg.sender as 'user' | 'model', // 'model' é o esperado pelo Gemini
             parts: [{ text: msg.text || '' }]
         })),
     });
 
+    // Envia a mensagem para a IA e obtém a resposta
     const result = await chat.sendMessage(message);
     const response = await result.response;
     const text = response.text();
 
+    // Salva a resposta do agente (IA)
     const modelMessage = await storage.createChatMessage({
         sessionId: currentSessionId,
         sender: 'agent',
-        text: text
+        text: text,
+        userId: userId, // <-- CORREÇÃO: Adicionado userId
     });
 
     return {
