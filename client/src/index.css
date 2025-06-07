@@ -1,0 +1,496 @@
+/* client/src/index.css */
+
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+/* Adicione ao seu client/src/index.css */
+@layer base {
+  :root {
+    /* Cores base para o tema claro (fallback) - ajuste conforme seu tema claro se necessário */
+    --background-light: 220 15% 97%; --foreground-light: 220 10% 20%;
+    --card-light: 0 0% 100%; --card-foreground-light: 220 10% 20%;
+    --popover-light: 0 0% 100%; --popover-foreground-light: 220 10% 20%;
+    --primary-light: 210 85% 50%; 
+    --primary-foreground-light: 0 0% 100%;
+    --secondary-light: 220 10% 95%; --secondary-foreground-light: 220 10% 20%;
+    --muted-light: 220 10% 95%; --muted-foreground-light: 220 5% 50%;
+    --accent-light: 220 10% 95%; --accent-foreground-light: 220 10% 20%;
+    --destructive-light: 0 84% 60%; --destructive-foreground-light: 0 0% 100%;
+    --border-light: 220 13% 91%; --input-light: 220 13% 93%; --ring-light: 210 85% 55%;
+    --radius: 0.75rem;
+
+    --neu-shadow-light-light-theme: rgba(255, 255, 255, 0.9);
+    --neu-shadow-dark-light-theme: rgba(190, 190, 210, 0.5);
+
+    /* Variáveis Neomórficas para tema claro - ajuste as cores se necessário */
+    --neu-shadow-dark-source-hsl-light: 220 15% 70%; /* Sombra escura no claro */
+    --neu-shadow-light-source-hsl-light: 0 0% 100%; /* Sombra clara no claro */
+  }
+
+  .dark {
+    --background: 224 71% 4%; /* Azul escuro profundo - neoBgMain */
+    --foreground: 210 20% 98%; /* Branco suave - neoTextPrimary */
+
+    --card: 224 71% 9%; /* Azul um pouco mais claro que o fundo - neoBgBase */
+    --card-foreground: 210 20% 91%; /* neoTextSecondary */
+
+    --popover: 224 71% 6%; 
+    --popover-foreground: 210 20% 91%;
+
+    --primary: 260 85% 65%; /* Roxo vibrante */
+    --primary-foreground: 210 20% 98%;
+
+    --secondary: 224 71% 12%; 
+    --secondary-foreground: 210 15% 92%;
+
+    --muted: 224 71% 12%; 
+    --muted-foreground: 210 15% 60%; 
+
+    --accent: 260 85% 65%; /* Roxo para acentos */
+    --accent-foreground: 210 20% 98%;
+
+    --destructive: 0 63% 50%; 
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 224 71% 15%; 
+    --input: 224 71% 7%;   
+    --ring: 260 85% 70%;   
+
+    /* Variáveis Neomórficas para tema escuro */
+    --neu-shadow-dark-source-hsl: 224 70% 2%; /* Sombra escura no escuro */
+    --neu-shadow-light-source-hsl: 224 70% 12%; /* Sombra clara no escuro */
+  }
+
+  /* Definições comuns de sombras neomórficas */
+  :root, .dark {
+    --neu-outset-offset: 5px; 
+    --neu-outset-blur: 10px;
+    --neu-outset-spread: 0px;
+
+    --neu-pressed-offset: 4px;
+    --neu-pressed-blur: 8px;
+
+    --neu-inset-offset: 4px;
+    --neu-inset-blur: 8px;
+  }
+
+  .dark {
+    --neu-shadow-outset: 
+      var(--neu-outset-offset) var(--neu-outset-offset) var(--neu-outset-blur) var(--neu-outset-spread) hsl(var(--neu-shadow-dark-source-hsl) / 0.7), 
+      calc(-1 * var(--neu-outset-offset)) calc(-1 * var(--neu-outset-offset)) var(--neu-outset-blur) var(--neu-outset-spread) hsl(var(--neu-shadow-light-source-hsl) / 0.6);
+    --neu-shadow-pressed: 
+      inset var(--neu-pressed-offset) var(--neu-pressed-offset) var(--neu-pressed-blur) hsl(var(--neu-shadow-dark-source-hsl) / 0.75), 
+      inset calc(-1 * var(--neu-pressed-offset)) calc(-1 * var(--neu-pressed-offset)) var(--neu-pressed-blur) hsl(var(--neu-shadow-light-source-hsl) / 0.65);
+    --neu-shadow-inset: 
+      inset var(--neu-inset-offset) var(--neu-inset-offset) var(--neu-inset-blur) hsl(var(--neu-shadow-dark-source-hsl) / 0.8), 
+      inset calc(-1 * var(--neu-inset-offset)) calc(-1 * var(--neu-inset-offset)) var(--neu-inset-blur) hsl(var(--neu-shadow-light-source-hsl) / 0.7);
+  }
+
+  :root:not(.dark) {
+    --neu-shadow-outset: 
+      var(--neu-outset-offset) var(--neu-outset-offset) var(--neu-outset-blur) var(--neu-outset-spread) hsl(var(--neu-shadow-dark-source-hsl-light) / 0.2), 
+      calc(-1 * var(--neu-outset-offset)) calc(-1 * var(--neu-outset-offset)) var(--neu-outset-blur) var(--neu-outset-spread) hsl(var(--neu-shadow-light-source-hsl-light) / 0.7);
+    --neu-shadow-pressed: 
+      inset var(--neu-pressed-offset) var(--neu-pressed-offset) var(--neu-pressed-blur) hsl(var(--neu-shadow-dark-source-hsl-light) / 0.25), 
+      inset calc(-1 * var(--neu-pressed-offset)) calc(-1 * var(--neu-pressed-offset)) var(--neu-pressed-blur) hsl(var(--neu-shadow-light-source-hsl-light) / 0.75);
+    --neu-shadow-inset: 
+      inset var(--neu-inset-offset) var(--neu-inset-offset) var(--neu-inset-blur) hsl(var(--neu-shadow-dark-source-hsl-light) / 0.3), 
+      inset calc(-1 * var(--neu-inset-offset)) calc(-1 * var(--neu-inset-offset)) var(--neu-inset-blur) hsl(var(--neu-shadow-light-source-hsl-light) / 0.8);
+  }
+
+  * { @apply border-border; } /* Garante que a cor da borda padrão seja usada */
+  body {
+    @apply bg-background text-foreground font-sans antialiased transition-colors duration-300;
+    font-family: 'Montserrat', sans-serif; /* Se você adicionou Montserrat */
+  }
+}
+
+@layer components {
+  .neo-card { 
+    @apply rounded-xl bg-card shadow-[var(--neu-shadow-outset)] transition-all duration-300 ease-out;
+  }
+  .neo-card:hover {
+     /* Ajuste leve para hover, pode ser mais sutil ou pronunciado */
+    box-shadow: 
+      calc(var(--neu-outset-offset) * 1.2) calc(var(--neu-outset-offset) * 1.2) calc(var(--neu-outset-blur) * 1.2) var(--neu-outset-spread) hsl(var(--neu-shadow-dark-source-hsl) / 0.75), 
+      calc(-1 * var(--neu-outset-offset) * 1.2) calc(-1 * var(--neu-outset-offset) * 1.2) calc(var(--neu-outset-blur) * 1.2) var(--neu-outset-spread) hsl(var(--neu-shadow-light-source-hsl) / 0.65);
+    transform: translateY(-1px);
+  }
+  .neo-card-inset {
+    @apply rounded-lg bg-input shadow-[var(--neu-shadow-inset)] text-foreground;
+  }
+  .neo-button {
+    @apply rounded-lg px-4 py-2 text-sm font-medium transition-all duration-150 ease-out active:scale-[0.97] flex items-center justify-center
+           bg-card text-foreground shadow-[var(--neu-shadow-outset)];
+  }
+  .neo-button:hover:not(:disabled) {
+    filter: brightness(1.15);
+  }
+  .neo-button:active:not(:disabled) {
+    box-shadow: var(--neu-shadow-pressed); 
+    filter: brightness(0.95);
+  }
+  .neo-button-primary {
+    @apply neo-button bg-primary text-primary-foreground;
+  }
+  .neo-button-primary:hover:not(:disabled) {
+    @apply bg-primary/90;
+    filter: brightness(1.1);
+  }
+  .neo-input {
+    @apply w-full p-3 rounded-lg bg-input text-foreground placeholder:text-muted-foreground shadow-[var(--neu-shadow-inset)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background transition-shadow duration-200;
+  }
+  .neo-textarea {
+    @apply w-full p-3 rounded-lg bg-input text-foreground placeholder:text-muted-foreground shadow-[var(--neu-shadow-inset)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background transition-shadow duration-200 min-h-[80px];
+  }
+  .neo-select-trigger {
+     @apply w-full p-3 h-auto min-h-10 rounded-lg bg-input text-foreground shadow-[var(--neu-shadow-inset)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background transition-shadow duration-200 flex items-center justify-between;
+  }
+   .neo-select-content {
+    @apply bg-popover text-popover-foreground border-border shadow-[var(--neu-shadow-outset)];
+  }
+  .neo-select-item {
+    @apply hover:bg-accent focus:bg-accent;
+  }
+   .neo-badge {
+    @apply inline-flex items-center rounded-full border border-transparent px-2.5 py-0.5 text-xs font-semibold shadow-[var(--neu-shadow-outset)] transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2;
+  }
+  .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+  .custom-scrollbar::-webkit-scrollbar-track { background: hsl(var(--muted) / 0.3); border-radius: 3px; }
+  .custom-scrollbar::-webkit-scrollbar-thumb { background: hsl(var(--muted-foreground) / 0.5); border-radius: 3px; }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground) / 0.7); }
+}
+@layer base {
+  :root {
+    /* Cores base para o tema claro (fallback) */
+    --background-light: 220 15% 97%; --foreground-light: 220 10% 20%;
+    --card-light: 0 0% 100%; --card-foreground-light: 220 10% 20%;
+    --popover-light: 0 0% 100%; --popover-foreground-light: 220 10% 20%;
+    --primary-light: 210 85% 50%; 
+    --primary-foreground-light: 0 0% 100%;
+    --secondary-light: 220 10% 95%; --secondary-foreground-light: 220 10% 20%;
+    --muted-light: 220 10% 95%; --muted-foreground-light: 220 5% 50%;
+    --accent-light: 220 10% 95%; --accent-foreground-light: 220 10% 20%;
+    --destructive-light: 0 84% 60%; --destructive-foreground-light: 0 0% 100%;
+    --border-light: 220 13% 91%; --input-light: 220 13% 93%; --ring-light: 210 85% 55%;
+    --radius: 0.75rem;
+
+    --neu-shadow-light-light-theme: rgba(255, 255, 255, 0.9);
+    --neu-shadow-dark-light-theme: rgba(190, 190, 210, 0.5);
+    --neu-inset-light-light-theme: rgba(190, 190, 210, 0.3);
+    --neu-inset-dark-light-theme: rgba(255, 255, 255, 1);
+    
+    --chart-1: 210 90% 60%; --chart-2: 160 70% 50%; --chart-3: 45 90% 55%; --chart-4: 0 80% 65%; --chart-5: 260 75% 65%;
+    --chart-line-neon-1: hsl(var(--chart-1));
+    --chart-line-neon-2: hsl(var(--chart-2));
+    --chart-line-neon-3: hsl(var(--chart-3));
+    --success: 142 71% 45%; --warning: 45 93% 47%;
+  }
+
+  .dark {
+    --background: 220 15% 5%; 
+    --foreground: 210 15% 92%; 
+    --card: 220 15% 8%; 
+    --card-foreground: 210 15% 88%;
+    --popover: 220 15% 10%; 
+    --popover-foreground: 210 15% 88%;
+    --primary: 210 90% 55%; 
+    --primary-foreground: 210 20% 98%; 
+    --secondary: 220 15% 12%; 
+    --secondary-foreground: 210 15% 92%;
+    --muted: 220 15% 15%; 
+    --muted-foreground: 210 10% 60%; 
+    --accent: 220 15% 12%; 
+    --accent-foreground: 210 15% 95%;
+    --destructive: 0 75% 60%; 
+    --destructive-foreground: 0 0% 98%;
+    --border: 220 15% 18%; 
+    --input: 220 15% 7%;   
+    --ring: 210 90% 60%;   
+
+    --neu-shadow-dark-source-hsl: 220 20% 2%;
+    --neu-shadow-light-source-hsl: 220 10% 18%; 
+    
+    --neu-outset-offset: 4px; 
+    --neu-outset-blur: 8px;
+    --neu-outset-spread: 0px;
+    --neu-shadow-outset: 
+      var(--neu-outset-offset) var(--neu-outset-offset) var(--neu-outset-blur) var(--neu-outset-spread) hsl(var(--neu-shadow-dark-source-hsl) / 0.7), 
+      calc(-1 * var(--neu-outset-offset)) calc(-1 * var(--neu-outset-offset)) var(--neu-outset-blur) var(--neu-outset-spread) hsl(var(--neu-shadow-light-source-hsl) / 0.6);
+
+    --neu-pressed-offset: 3px;
+    --neu-pressed-blur: 6px;
+    --neu-shadow-pressed: 
+      inset var(--neu-pressed-offset) var(--neu-pressed-offset) var(--neu-pressed-blur) hsl(var(--neu-shadow-dark-source-hsl) / 0.75), 
+      inset calc(-1 * var(--neu-pressed-offset)) calc(-1 * var(--neu-pressed-offset)) var(--neu-pressed-blur) hsl(var(--neu-shadow-light-source-hsl) / 0.65);
+
+    --neu-inset-offset: 3px;
+    --neu-inset-blur: 6px;
+    --neu-shadow-inset: 
+      inset var(--neu-inset-offset) var(--neu-inset-offset) var(--neu-inset-blur) hsl(var(--neu-shadow-dark-source-hsl) / 0.8), 
+      inset calc(-1 * var(--neu-inset-offset)) calc(-1 * var(--neu-inset-offset)) var(--neu-inset-blur) hsl(var(--neu-shadow-light-source-hsl) / 0.7);
+
+    --neon-glow-primary: 0 0 5px hsl(var(--primary) / 0.7), 0 0 10px hsl(var(--primary) / 0.5), 0 0 15px hsl(var(--primary) / 0.3);
+    --text-neon-glow-primary: 0 0 3px hsl(var(--primary) / 0.9), 0 0 6px hsl(var(--primary) / 0.7); 
+
+    --sidebar-background: 220 18% 4%; 
+    --sidebar-foreground: 210 12% 70%; 
+    --sidebar-border: 220 15% 8%;   
+    --sidebar-accent-bg: hsl(var(--primary) / 0.1); 
+    --sidebar-accent-fg: hsl(var(--primary)); 
+  }
+
+  :root:not(.dark) {
+    --background: var(--background-light); --foreground: var(--foreground-light);
+    --card: var(--card-light); --card-foreground: var(--card-foreground-light);
+    --popover: var(--popover-light); --popover-foreground: var(--popover-foreground-light);
+    --primary: var(--primary-light); --primary-foreground: var(--primary-foreground-light);
+    /* ... (restante das variáveis do tema claro) ... */
+    --secondary: var(--secondary-light); --secondary-foreground: var(--secondary-foreground-light);
+    --muted: var(--muted-light); --muted-foreground: var(--muted-foreground-light);
+    --accent: var(--accent-light); --accent-foreground: var(--accent-foreground-light);
+    --destructive: var(--destructive-light); --destructive-foreground: var(--destructive-foreground-light);
+    --border: var(--border-light); --input: var(--input-light); --ring: var(--ring-light);
+    
+    --neu-outset-offset: 4px; --neu-outset-blur: 8px; --neu-outset-spread: 0px;
+    --neu-shadow-outset: 
+      var(--neu-outset-offset) var(--neu-outset-offset) var(--neu-outset-blur) var(--neu-outset-spread) var(--neu-shadow-dark-light-theme),
+      calc(-1 * var(--neu-outset-offset)) calc(-1 * var(--neu-outset-offset)) var(--neu-outset-blur) var(--neu-outset-spread) var(--neu-shadow-light-light-theme);
+    
+    --neu-pressed-offset: 3px; --neu-pressed-blur: 6px;
+    --neu-shadow-pressed:
+      inset var(--neu-pressed-offset) var(--neu-pressed-offset) var(--neu-pressed-blur) var(--neu-shadow-dark-light-theme),
+      inset calc(-1 * var(--neu-pressed-offset)) calc(-1 * var(--neu-pressed-offset)) var(--neu-pressed-blur) var(--neu-shadow-light-light-theme);
+
+    --neu-inset-offset: 3px; --neu-inset-blur: 6px;
+    --neu-shadow-inset: 
+      inset var(--neu-inset-offset) var(--neu-inset-offset) var(--neu-inset-blur) var(--neu-shadow-dark-light-theme),
+      inset calc(-1 * var(--neu-inset-offset)) calc(-1 * var(--neu-inset-offset)) var(--neu-inset-blur) var(--neu-shadow-light-light-theme);
+
+    --sidebar-background: 220 15% 96%; 
+    --sidebar-foreground: 220 10% 35%; 
+    --sidebar-border: 220 13% 90%; 
+    --sidebar-accent-bg: hsl(var(--primary) / 0.1);
+    --sidebar-accent-fg: hsl(var(--primary));
+    --text-neon-glow-primary: none; 
+  }
+
+  * { @apply border-border; }
+  body {
+    @apply bg-background text-foreground font-sans antialiased transition-colors duration-300;
+    font-family: 'Montserrat', sans-serif;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    background-size: cover; background-position: center; background-repeat: no-repeat; background-attachment: fixed;
+  }
+  html, body { height: 100%; padding: 0; margin: 0; }
+  * { box-sizing: border-box; }
+  *:focus-visible { @apply outline-none ring-2 ring-offset-2 ring-ring ring-offset-background; }
+}
+
+@layer components {
+  .neu-card { 
+    @apply rounded-xl; 
+    background-color: hsl(var(--card));
+    box-shadow: var(--neu-shadow-outset); 
+    transition: box-shadow 0.3s ease-out, transform 0.3s ease-out;
+  }
+  .neu-card:hover {
+    transform: translateY(-2px) scale(1.01);
+     box-shadow: 
+      calc(var(--neu-outset-offset) * 1.3) calc(var(--neu-outset-offset) * 1.3) calc(var(--neu-outset-blur) * 1.3) var(--neu-outset-spread) hsl(var(--neu-shadow-dark-source-hsl) / 0.75), 
+      calc(-1 * var(--neu-outset-offset) * 1.3) calc(-1 * var(--neu-outset-offset) * 1.3) calc(var(--neu-outset-blur) * 1.3) var(--neu-outset-spread) hsl(var(--neu-shadow-light-source-hsl) / 0.7);
+  }
+  .neu-card-inset, .neu-frame { 
+    @apply rounded-lg; 
+    background-color: hsl(var(--input)); 
+    box-shadow: var(--neu-shadow-inset); 
+    color: hsl(var(--foreground));
+  }
+
+  .neu-button {
+    @apply rounded-lg px-4 py-2 text-sm font-medium transition-all duration-150 ease-out active:scale-[0.97] flex items-center justify-center;
+    background-color: hsl(var(--card)); 
+    color: hsl(var(--foreground));
+    box-shadow: var(--neu-shadow-outset); 
+  }
+  .neu-button:hover:not(:disabled) {
+    filter: brightness(1.1);
+    box-shadow: 
+      calc(var(--neu-outset-offset) * 1.15) calc(var(--neu-outset-offset) * 1.15) calc(var(--neu-outset-blur) * 1.15) var(--neu-outset-spread) hsl(var(--neu-shadow-dark-source-hsl) / 0.75), 
+      calc(-1 * var(--neu-outset-offset) * 1.15) calc(-1 * var(--neu-outset-offset) * 1.15) calc(var(--neu-outset-blur) * 1.15) var(--neu-outset-spread) hsl(var(--neu-shadow-light-source-hsl) / 0.7);
+  }
+  .neu-button:active:not(:disabled) {
+    box-shadow: var(--neu-shadow-pressed); 
+    filter: brightness(0.9);
+  }
+  .neu-button:disabled { @apply opacity-50 cursor-not-allowed shadow-none filter-none; }
+
+  .neu-button-primary {
+    @apply neu-button bg-primary text-primary-foreground;
+  }
+  .neu-button-primary:hover:not(:disabled) {
+    @apply bg-primary/90; 
+    filter: brightness(1.15); 
+    text-shadow: var(--text-neon-glow-primary);
+  }
+  .neu-button-primary:active:not(:disabled) { @apply bg-primary/85; }
+
+  .neu-input { 
+    @apply neu-frame w-full px-3 py-2 text-sm placeholder:text-muted-foreground;
+  }
+  .neu-input:focus {
+    @apply ring-1 ring-ring ring-offset-0; 
+     box-shadow: var(--neu-shadow-inset), 0 0 8px hsl(var(--ring) / 0.3); 
+  }
+
+  .neu-sidebar {
+    @apply transition-all duration-300 ease-in-out;
+    background-color: hsl(var(--sidebar-background));
+    border-right: 1px solid hsl(var(--sidebar-border));
+    box-shadow: 3px 0px 15px hsl(var(--neu-shadow-dark-source-hsl) / 0.5);
+  }
+  
+  .sidebar-link {
+    @apply flex items-center px-3 py-2.5 rounded-md cursor-pointer 
+           transition-all duration-200 ease-out text-sidebar-foreground relative;
+    font-size: 0.8125rem; 
+    line-height: 1.125rem; 
+    font-weight: 500; 
+    background-color: hsl(var(--sidebar-background)); 
+    box-shadow: var(--neu-shadow-outset); 
+  }
+  .sidebar-link:hover {
+    /* A cor do texto e ícone é controlada pelas classes filhas .sidebar-link-text e .sidebar-link-icon */
+    background-color: hsl(var(--sidebar-accent-bg)); 
+    box-shadow: /* Sombra outset um pouco mais pronunciada no hover */
+      calc(var(--neu-outset-offset) * 1.1) calc(var(--neu-outset-offset) * 1.1) calc(var(--neu-outset-blur) * 1.1) var(--neu-outset-spread) hsl(var(--neu-shadow-dark-source-hsl) / 0.75), 
+      calc(-1 * var(--neu-outset-offset) * 1.1) calc(-1 * var(--neu-outset-offset) * 1.1) calc(var(--neu-outset-blur) * 1.1) var(--neu-outset-spread) hsl(var(--neu-shadow-light-source-hsl) / 0.65);
+    transform: translateY(-1px);
+  }
+  .sidebar-link.active {
+    /* A cor do texto e ícone é controlada pelas classes filhas .sidebar-link-text e .sidebar-link-icon */
+    font-weight: 600; /* Mais peso para ativo */
+    background-color: hsl(var(--sidebar-accent-bg) / 0.7); 
+    box-shadow: var(--neu-shadow-pressed); /* Sombra inset/pressed para ativo */
+  }
+
+  /* Efeito Neon para texto e ícone dentro do link da sidebar */
+  .sidebar-link .sidebar-link-text, 
+  .sidebar-link .sidebar-link-icon {
+    transition: text-shadow 0.2s ease-out, color 0.2s ease-out, filter 0.2s ease-out;
+    color: hsl(var(--sidebar-foreground)); /* Cor padrão do texto/ícone da sidebar */
+  }
+  .sidebar-link:hover .sidebar-link-text,
+  .sidebar-link.active .sidebar-link-text {
+    color: hsl(var(--sidebar-accent-fg)); /* Cor neon */
+    text-shadow: var(--text-neon-glow-primary);
+  }
+  .sidebar-link:hover .sidebar-link-icon,
+  .sidebar-link.active .sidebar-link-icon {
+    color: hsl(var(--sidebar-accent-fg)); /* Cor neon */
+    filter: drop-shadow(var(--text-neon-glow-primary)); 
+  }
+  
+  .alert-badge { 
+    @apply ml-auto bg-destructive text-destructive-foreground text-[0.65rem]
+           w-4 h-4 flex items-center justify-center rounded-full font-bold; 
+    box-shadow: 
+      1px 1px 2px hsl(var(--neu-shadow-dark-source-hsl) / 0.6),
+      -0.5px -0.5px 1px hsl(var(--neu-shadow-light-source-hsl) / 0.6);
+  }
+  
+  .theme-toggle-button { 
+    @apply neu-button p-1.5; 
+  }
+
+  .chart-container { @apply p-4 rounded-lg neu-frame; } 
+    
+  .gradient-primary {
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary) / 0.7));
+  }
+
+  .neu-badge {
+    @apply inline-flex items-center rounded-md border border-transparent transition-all duration-150 ease-out;
+    font-size: 0.7rem; 
+    line-height: 1rem; 
+    padding: 0.1rem 0.4rem; 
+    font-weight: 500;
+    background-color: hsl(var(--card) / 0.8); 
+    color: hsl(var(--card-foreground) / 0.9);
+    box-shadow: 
+      inset 1px 1px 2px hsl(var(--neu-shadow-dark-source-hsl) / 0.6),
+      inset -1px -1px 2px hsl(var(--neu-shadow-light-source-hsl) / 0.5);
+  }
+  .neu-badge:hover { filter: brightness(1.1); }
+  .neu-badge-sm { @apply neu-badge; font-size: 0.65rem; padding: 0.05rem 0.3rem; }
+
+  .neu-badge.bg-green-500\/20 { 
+     background-color: hsl(var(--success) / 0.15) !important; 
+     border-color: hsl(var(--success) / 0.3) !important;
+     color: hsl(var(--success)) !important;
+     text-shadow: 0 0 2px hsl(var(--success) / 0.5);
+  }
+   .neu-badge.bg-yellow-500\/20 { 
+     background-color: hsl(var(--warning) / 0.15) !important;
+     border-color: hsl(var(--warning) / 0.3) !important;
+     color: hsl(var(--warning)) !important;
+     text-shadow: 0 0 2px hsl(var(--warning) / 0.5);
+  }
+  .neu-badge.border-blue-600\/30 { 
+    background-color: hsl(217, 71%, 53%, 0.1) !important; 
+    border-color: hsl(217, 71%, 53%, 0.3) !important;
+    color: hsl(217, 71%, 60%) !important; 
+    text-shadow: 0 0 2px hsl(217, 71%, 53%, 0.5);
+  }
+}
+
+@layer utilities {
+  .text-neon-glow { text-shadow: var(--text-neon-glow-primary); }
+  .icon-neon-glow { filter: drop-shadow(var(--text-neon-glow-primary)); }
+  @keyframes float { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-1px); } }
+  @keyframes glow {
+    0%, 100% { box-shadow: var(--neu-shadow-outset), 0 0 8px hsl(var(--primary) / 0.3); }
+    50% { box-shadow: var(--neu-shadow-outset), 0 0 15px hsl(var(--primary) / 0.5), 0 0 20px hsl(var(--primary) / 0.2); }
+  }
+  @keyframes slideIn { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes scaleIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
+  
+  .animate-float { animation: float 3s ease-in-out infinite; }
+  .animate-glow { animation: glow 2.5s ease-in-out infinite alternate; }
+  .animate-slide-in { animation: slideIn 0.5s ease-out; }
+  .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+  .animate-scale-in { animation: scaleIn 0.3s ease-out; }
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: hsl(var(--background) / 0.5); border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: hsl(var(--muted-foreground) / 0.4); border-radius: 3px; transition: background 0.2s; }
+::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground) / 0.6); }
+
+@layer components {
+  .button { @apply neu-button; }
+  .button[variant="outline"] {
+    @apply neu-button border border-border bg-transparent text-foreground;
+    background-color: hsl(var(--card)) !important; 
+  }
+  .button[variant="ghost"] {
+    @apply neu-button border-none bg-transparent text-foreground;
+    background-color: hsl(var(--card)) !important;
+    box-shadow: none; 
+  }
+  .button[variant="ghost"]:hover { background-color: hsl(var(--accent)) !important; }
+  
+  .input { @apply neu-input; }
+  .textarea { @apply neu-input h-auto min-h-[70px]; }
+  .select-trigger { @apply neu-input justify-between; }
+  .card { @apply neu-card; }
+  .tabs-trigger {
+    @apply neu-button text-xs px-2.5 py-1 h-auto data-[state=active]:shadow-[var(--neu-shadow-pressed)] data-[state=active]:brightness-90;
+  }
+  .popover-content { @apply neu-card p-2; } 
+  .dropdown-menu-content { @apply neu-card p-1; } 
+  .dialog-content { @apply neu-card p-0; } 
+}
