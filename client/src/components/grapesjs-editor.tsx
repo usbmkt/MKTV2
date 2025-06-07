@@ -1,11 +1,14 @@
+// client/src/components/grapesjs-editor.tsx
 import React, { useEffect, useRef } from 'react';
 import grapesjs, { Editor } from 'grapesjs';
 import 'grapesjs/dist/css/grapes.min.css';
+// Se você for usar o preset de webpage, descomente a linha abaixo
 // import grapesjsPresetWebpage from 'grapesjs-preset-webpage';
 
 interface GrapesJsEditorProps {
-  initialData?: any;
+  initialData?: string;
   onSave: (jsonData: string, htmlData: string, cssData: string) => void;
+  pageName?: string;
 }
 
 const GrapesJsEditor: React.FC<GrapesJsEditorProps> = ({ initialData, onSave }) => {
@@ -17,40 +20,46 @@ const GrapesJsEditor: React.FC<GrapesJsEditorProps> = ({ initialData, onSave }) 
       const editor = grapesjs.init({
         container: editorRef.current,
         fromElement: false,
-        height: 'calc(100vh - 150px)',
-        width: 'auto',
-        storageManager: { autosave: false },
-        assetManager: {
-            // Configurações básicas, idealmente você integraria com seu backend
-            assets: [],
-            upload: false, // Desabilitar upload nativo se for usar um manager customizado
+        // ✅ CORREÇÃO: Altura e largura flexíveis para preencher o container
+        height: '100%',
+        width: '100%',
+        storageManager: {
+          type: 'local',
+          autosave: true,
+          stepsBeforeSave: 5,
         },
+        // Adicionar plugins aqui se desejar
         // plugins: [grapesjsPresetWebpage],
       });
 
       if (initialData) {
         try {
-          // GrapesJS espera um objeto, não uma string JSON
-          const dataToLoad = typeof initialData === 'string' ? JSON.parse(initialData) : initialData;
-          editor.loadProjectData(dataToLoad);
+          editor.loadProjectData(JSON.parse(initialData));
         } catch (e) {
-          console.error("Erro ao carregar dados no GrapesJS:", e);
+          console.error("GrapesJS: Erro ao carregar dados do projeto.", e);
         }
+      } else {
+        editor.setComponents(`
+          <div style="font-family: Arial, sans-serif; text-align: center; padding: 50px; color: #333;">
+            <h1>Sua Landing Page Começa Aqui!</h1>
+            <p>Arraste e solte os blocos da barra lateral para construir.</p>
+          </div>
+        `);
       }
-
+      
       editor.Panels.addButton('options', [{
         id: 'save-db',
         className: 'fa fa-floppy-o',
-        label: 'Salvar',
+        label: '<i class="fa fa-floppy-o"></i>',
         command: () => {
-          const projectData = editor.getProjectData();
+          const jsonData = JSON.stringify(editor.getProjectData());
           const htmlData = editor.getHtml();
           const cssData = editor.getCss();
-          onSave(JSON.stringify(projectData), htmlData, cssData);
+          onSave(jsonData, htmlData, cssData);
         },
         attributes: { title: 'Salvar no Banco de Dados' }
       }]);
-      
+
       editorInstance.current = editor;
     }
 
@@ -62,7 +71,8 @@ const GrapesJsEditor: React.FC<GrapesJsEditorProps> = ({ initialData, onSave }) 
     };
   }, [initialData, onSave]);
 
-  return <div ref={editorRef} className="grapesjs-editor-wrapper" />;
+  // ✅ CORREÇÃO: O container do editor também deve ser flexível
+  return <div ref={editorRef} className="h-full w-full" />;
 };
 
 export default GrapesJsEditor;
