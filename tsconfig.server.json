@@ -1,3 +1,4 @@
+// usbmkt/mktv2/MKTV2-mktv5/tsconfig.server.json
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
@@ -10,7 +11,8 @@
     "declaration": false,
     "isolatedModules": false,
     "allowImportingTsExtensions": false,
-    "types": ["node"]
+    "types": ["node"],
+    "typeRoots": ["./node_modules/@types"] // Adicionado para garantir que os tipos sejam encontrados
   },
   "include": [
     "server/**/*.ts",
