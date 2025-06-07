@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { api } from './api'; // ✅ CORREÇÃO: Importar o objeto 'api' em vez de 'apiRequest'
+// ✅ CORREÇÃO: A importação estática de 'api' foi removida daqui para quebrar o ciclo.
 
-// Tipos compartilhados
+// --- Tipos (sem alterações) ---
 interface User {
   id: number;
   username: string;
@@ -27,6 +27,7 @@ interface AuthState {
   clearError: () => void;
 }
 
+// --- Store (com a correção) ---
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
@@ -39,8 +40,8 @@ export const useAuthStore = create<AuthState>()(
       login: async (email, password) => {
         set({ isLoading: true, error: null });
         try {
-          // ✅ CORREÇÃO: Usar 'api.post' que já retorna os dados ou lança um erro formatado.
-          // O código fica muito mais limpo sem a verificação manual de 'response.ok'.
+          // ✅ CORREÇÃO: Importação dinâmica para quebrar o ciclo de dependência no build.
+          const { api } = await import('./api');
           const data = await api.post<AuthResponse>('/auth/login', { email, password });
           
           if (data.token && data.user) {
@@ -53,7 +54,6 @@ export const useAuthStore = create<AuthState>()(
             });
             return true;
           }
-          // Este 'else' é uma salvaguarda, mas o 'handleApiResponse' em api.ts já deve garantir os dados.
           throw new Error('Resposta de login inválida do servidor.');
 
         } catch (error: any) {
@@ -67,7 +67,8 @@ export const useAuthStore = create<AuthState>()(
       register: async (username, email, password) => {
         set({ isLoading: true, error: null });
         try {
-          // ✅ CORREÇÃO: Usar 'api.post' aqui também.
+          // ✅ CORREÇÃO: Importação dinâmica aqui também.
+          const { api } = await import('./api');
           const data = await api.post<AuthResponse>('/auth/register', { username, email, password });
 
           if (data.token && data.user) {
@@ -102,11 +103,11 @@ export const useAuthStore = create<AuthState>()(
       },
       
       checkAuth: () => {
-        // Bypass de autenticação para desenvolvimento/teste (lógica mantida, está ótima!)
         const forceBypass = import.meta.env.VITE_FORCE_AUTH_BYPASS === 'true' || 
                            window.location.hostname.includes('all-hands.dev');
         
         if (forceBypass) {
+          if (get().isAuthenticated) return; // Evita re-renders desnecessários
           console.log('[AUTH] Frontend bypass ativo - autenticando automaticamente');
           set({
             user: { id: 1, username: 'dev-admin', email: 'admin@usbmkt.com' },
