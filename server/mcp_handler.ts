@@ -2,7 +2,7 @@
 import { storage } from "./storage";
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import { GEMINI_API_KEY } from './config';
-import { InsertCampaign, ChatMessage, ChatSession } from "../shared/schema";
+import { InsertCampaign, ChatMessage, ChatSession, User } from "../shared/schema";
 
 let genAI: GoogleGenerativeAI | null = null;
 if (GEMINI_API_KEY) {
@@ -81,7 +81,6 @@ export async function handleMCPConversation(
     if (existingSession) {
       activeSession = existingSession;
     } else {
-      // Se o ID da sessão foi fornecido mas não encontrado, cria uma nova.
       const newSessionTitle = message ? `Conversa sobre "${message.substring(0, 20)}..." (ID antigo: ${currentSessionId})` : `Nova Conversa (ID antigo: ${currentSessionId}) ${new Date().toLocaleDateString('pt-BR')}`;
       console.warn(`[MCP_HANDLER] Sessão ${currentSessionId} não encontrada para usuário ${userId}. Criando nova sessão.`);
       activeSession = await storage.createChatSession(userId, newSessionTitle);
@@ -92,9 +91,10 @@ export async function handleMCPConversation(
     activeSession = await storage.createChatSession(userId, newSessionTitle);
   }
 
+  // ✅ CORREÇÃO: 'sender' alterado para 'role'
   await storage.addChatMessage({
     sessionId: activeSession.id,
-    sender: 'user',
+    role: 'user',
     text: message || (attachmentUrl ? `Anexo: ${attachmentUrl}` : 'Mensagem vazia.'),
     attachmentUrl: attachmentUrl || null,
   });
@@ -144,19 +144,17 @@ export async function handleMCPConversation(
             objectives: [],
           };
           const createdCampaign = await storage.createCampaign(newCampaignData);
-          
-          // Mensagem simples de sucesso para o log
           const simpleSuccessMessage = `Campanha "${createdCampaign.name}" criada com sucesso como rascunho!`;
-          agentReplyText = simpleSuccessMessage; // Define para a resposta inicial
+          agentReplyText = simpleSuccessMessage;
           
+          // ✅ CORREÇÃO: 'sender' alterado para 'role'
           await storage.addChatMessage({
             sessionId: activeSession.id,
-            sender: 'agent',
+            role: 'agent',
             text: simpleSuccessMessage,
           });
-          messageAlreadySavedBySpecialFlow = true; // Marca que a mensagem principal foi salva
-
-          // Adiciona detalhes para a resposta ao usuário
+          messageAlreadySavedBySpecialFlow = true;
+          
           const campaignDetailsMessage = formatCampaignDetailsForChat(createdCampaign);
           agentReplyText += `\n\n${campaignDetailsMessage}`; 
           
@@ -168,39 +166,39 @@ export async function handleMCPConversation(
       } else {
         agentReplyText = "Entendi que você quer criar uma nova campanha, mas não consegui identificar o nome. Poderia me dizer qual nome você gostaria de dar para a nova campanha?";
       }
-    } else { // Resposta geral da IA
+    } else { 
       console.log(`[MCP_HANDLER] Nenhuma ação específica detectada. Usando IA geral.`);
       const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
       const messagesFromDbForContext: ChatMessage[] = await storage.getChatMessages(activeSession.id, userId);
       
       const historyForGemini = messagesFromDbForContext
-        .filter(msg => msg.sender === 'user' || msg.sender === 'agent') // Inclui apenas user e agent
+        .filter(msg => msg.role === 'user' || msg.role === 'agent') // ✅ CORREÇÃO: Usando 'role'
         .map(msg => ({
-          role: msg.sender === 'user' ? 'user' : 'model',
+          role: msg.role === 'user' ? 'user' : 'model', // ✅ CORREÇÃO: Usando 'role'
           parts: [{ text: msg.text }]
       }));
 
       const systemPrompt = { role: "user", parts: [{ text: "Você é o Agente MCP. Responda em Português do Brasil, de forma concisa." }] };
       const chat = model.startChat({
-        history: [systemPrompt, ...historyForGemini.slice(0, -1)], // Exclui a última mensagem do usuário (já adicionada)
+        history: [systemPrompt, ...historyForGemini.slice(0, -1)], 
          safetySettings: [
             { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
             { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
           ],
       });
-      const result = await chat.sendMessage(message); // Envia a mensagem atual do usuário
+      const result = await chat.sendMessage(message); 
       agentReplyText = result.response.text();
     }
   } else {
     agentReplyText = `Recebido: "${message || 'Anexo'}". ${!genAI ? 'O serviço de IA não está configurado.' : 'Por favor, envie uma mensagem de texto.'}`;
   }
 
-  // Salva a resposta do agente no banco de dados, a menos que já tenha sido salva por um fluxo especial (criação de campanha)
   if (!messageAlreadySavedBySpecialFlow) {
+    // ✅ CORREÇÃO: 'sender' alterado para 'role'
     await storage.addChatMessage({
       sessionId: activeSession.id,
-      sender: 'agent',
-      text: agentReplyText, // Salva a resposta completa que será enviada ao usuário
+      role: 'agent',
+      text: agentReplyText,
     });
   }
 
