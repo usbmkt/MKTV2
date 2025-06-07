@@ -1,25 +1,18 @@
-// usbmkt/mktv2/MKTV2-mktv5/server/db.ts
+// server/db.ts
+import dotenv from 'dotenv';
+dotenv.config();
 
-import { drizzle } from 'drizzle-orm/postgres-js';
-import postgres from 'postgres';
-import { config } from './config.js';
-import * as schema from '../shared/schema.js'; // <-- IMPORTANTE: Importa todo o schema
+import { drizzle, NodePgDatabase } from 'drizzle-orm/node-postgres';
+import { Pool } from 'pg';
+import * as schema from '../shared/schema'; // Importa todo o schema para o drizzle
 
-// Cria a conexão
-const connectionString = config.DATABASE_URL;
-
-if (!connectionString) {
-  throw new Error('DATABASE_URL is not defined');
+if (!process.env.DATABASE_URL) {
+  throw new Error("DATABASE_URL não está definida nas variáveis de ambiente.");
 }
 
-// Cria o cliente postgres
-const client = postgres(connectionString, {
-  prepare: false,
-  ssl: config.NODE_ENV === 'production' ? 'require' : undefined, // Ajuste para não usar SSL em dev
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
 });
 
-// Cria a instância do Drizzle, passando o schema
-// Esta é a correção fundamental que resolve a maioria dos erros.
-export const db = drizzle(client, { schema });
-
-export default db;
+export const db: NodePgDatabase<typeof schema> = drizzle(pool, { schema });
