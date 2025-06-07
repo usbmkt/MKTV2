@@ -1,7 +1,7 @@
-// server/index.ts (CORRIGIDO E COMPLETO)
+// server/index.ts
 import express from 'express';
 import { createServer } from 'http';
-import { Server, Socket } from 'socket.io'; // Importando tipos
+import { Server } from 'socket.io';
 import { registerRoutes } from './routes.js';
 import { logger } from './logger.js';
 import cors from 'cors';
@@ -9,9 +9,9 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const app = express();
-const httpServer = createServer(app);
+const server = createServer(app);
 
-export const io = new Server(httpServer, {
+export const io = new Server(server, {
   cors: {
     origin: "*", 
     methods: ["GET", "POST"]
@@ -20,40 +20,35 @@ export const io = new Server(httpServer, {
 
 app.use(cors());
 
-// A função registerRoutes agora retorna o httpServer, mas nós já o temos aqui.
-// A chamada original pode ser mantida, pois ela anexa as rotas ao 'app'.
+// Registra as rotas da API
 registerRoutes(app);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Servir os arquivos estáticos do cliente (saída do Vite)
-const clientDistPath = path.join(__dirname, '..', 'public');
+// Servir os arquivos estáticos do cliente (Vite build output)
+const clientDistPath = path.join(__dirname, '..', 'client', 'dist');
 app.use(express.static(clientDistPath));
 
-// Fallback para SPA - servir index.html para rotas do frontend
-app.get('*', (req, res, next) => {
-  if (req.path.startsWith('/api/')) {
-    return next(); // Deixa as rotas da API passarem
-  }
-  res.sendFile(path.resolve(clientDistPath, 'index.html'));
+// Servir o index.html para todas as outras rotas (para o React Router funcionar)
+app.get('*', (req, res) => {
+  res.sendFile(path.join(clientDistPath, 'index.html'));
 });
 
-// Tipando os parâmetros do callback do Socket.io
-io.on('connection', (socket: Socket) => {
-  logger.info(`A user connected via WebSocket: ${socket.id}`);
+io.on('connection', (socket) => {
+  logger.info('A user connected via WebSocket');
   
-  socket.on('join_user_room', (userId: number | string) => {
+  socket.on('join_user_room', (userId) => {
     socket.join(`user_${userId}`);
     logger.info(`Socket ${socket.id} joined room for user ${userId}`);
   });
   
   socket.on('disconnect', () => {
-    logger.info(`User disconnected: ${socket.id}`);
+    logger.info('User disconnected');
   });
 });
 
 const PORT = process.env.PORT || 5000;
-httpServer.listen(PORT, () => {
+server.listen(PORT, () => {
   logger.info(`Server is running on port ${PORT}`);
 });
