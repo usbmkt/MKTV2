@@ -1,7 +1,6 @@
-// usbmkt/mktv2/MKTV2-mktv5/server/vite.ts
 import { type ViteDevServer, createServer as createViteServer } from "vite";
-import type { Express } from "express";
-import type { Server as HttpServer } from "http"; // Adicionado import de tipo para HttpServer
+import type { Express, Request, Response, NextFunction } from "express";
+import type { Server as HttpServer } from "http";
 import path from 'path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
@@ -28,7 +27,7 @@ export async function setupVite(app: Express, httpServer: HttpServer) {
   app.use(vite.middlewares);
   log('Vite Dev Server configurado e middleware adicionado.', 'setupVite');
   
-  app.use('*', async (req, res, next) => {
+  app.use('*', async (req: Request, res: Response, next: NextFunction) => {
     if (req.originalUrl.startsWith('/api')) {
       return next();
     }
@@ -38,15 +37,9 @@ export async function setupVite(app: Express, httpServer: HttpServer) {
       let template = fs.readFileSync(templatePath, 'utf-8');
       template = await vite.transformIndexHtml(url, template);
       res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
-    } catch (e) {
-      if (e instanceof Error) {
-         vite.ssrFixStacktrace(e);
-         log(`Erro no middleware SPA fallback do Vite: ${e.message}`, 'setupVite-error');
-         next(e);
-      } else {
-         log(`Erro desconhecido no middleware SPA fallback do Vite`, 'setupVite-error');
-         next(new Error('Erro desconhecido no processamento da requisição SPA.'));
-      }
+    } catch (e: any) {
+      vite.ssrFixStacktrace(e);
+      next(e);
     }
   });
   log('Middleware SPA fallback do Vite configurado.', 'setupVite');
@@ -54,18 +47,17 @@ export async function setupVite(app: Express, httpServer: HttpServer) {
 
 export function serveStatic(app: Express) {
   const clientDistPath = path.resolve(__dirname, "..", "dist", "public");
-  log(`[StaticServing] Servindo assets do frontend de: ${clientDistPath}`, 'serveStatic');
+  log(`[StaticServing] Servindo assets de: ${clientDistPath}`, 'serveStatic');
   
   app.use(express.static(clientDistPath));
 
-  app.get("*", (req, res, next) => {
+  app.get("*", (req: Request, res: Response, next: NextFunction) => {
     if (req.originalUrl.startsWith('/api')) {
         return next();
     }
     if (req.originalUrl.includes('.')) {
         return next();
     }
-    log(`[SPA Fallback] Servindo index.html para ${req.originalUrl}`, 'serveStatic');
     res.sendFile(path.resolve(clientDistPath, "index.html"));
   });
 }
