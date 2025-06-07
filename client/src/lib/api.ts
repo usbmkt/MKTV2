@@ -1,115 +1,137 @@
+// client/src/lib/api.ts
 import { useAuthStore } from './auth';
 
-// A URL base da API. Em produção, será a URL do seu servidor.
-// Em desenvolvimento (com proxy no vite.config.js), pode ser simplesmente '/api'.
-const API_BASE_URL = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
-
-/**
- * Lida com a resposta de uma requisição da API, parseando o corpo em caso de sucesso
- * ou extraindo uma mensagem de erro detalhada em caso de falha.
- * @param response O objeto Response do fetch.
- * @returns Os dados da resposta em JSON.
- * @throws Uma `Error` com uma mensagem descritiva se a resposta não for 'ok'.
- */
-async function handleApiResponse<T>(response: Response): Promise<T> {
-  // Requisições bem-sucedidas sem conteúdo (ex: DELETE, 204 No Content)
-  if (response.status === 204) {
-    return null as T;
+// Helper para construir a URL completa da API
+function getApiUrl(path: string): string {
+  const apiUrlFromEnv = import.meta.env.VITE_API_URL;
+  if (apiUrlFromEnv && typeof apiUrlFromEnv === 'string' && apiUrlFromEnv.trim() !== '') {
+    // Remove barras extras e junta
+    const base = apiUrlFromEnv.replace(/\/$/, '');
+    const endpoint = path.startsWith('/') ? path : `/${path}`;
+    return `${base}${endpoint}`;
   }
-
-  // Tenta obter o corpo da resposta, seja JSON ou texto
-  let payload;
-  try {
-    payload = await response.json();
-  } catch (e) {
-    // Se falhar o parse do JSON, pode ser um erro de servidor (ex: HTML de erro)
-    const textPayload = await response.text();
-    payload = { error: textPayload || response.statusText };
-  }
-  
-  if (!response.ok) {
-    // Extrai a mensagem de erro do payload, se disponível, ou usa o statusText.
-    const errorMessage = payload?.error || payload?.message || `API Error: ${response.status}`;
-    throw new Error(errorMessage);
-  }
-
-  return payload as T;
+  // Se VITE_API_URL não estiver definida, assume que a URL já é completa ou relativa à origem (para proxy)
+  return path;
 }
 
-/**
- * Função interna genérica para realizar requisições à API.
- * @param endpoint O caminho do endpoint (ex: '/users').
- * @param method O método HTTP.
- * @param body O corpo da requisição (pode ser um objeto ou FormData).
- * @param isFormData Flag para indicar se o corpo é FormData.
- * @returns Uma promessa que resolve para os dados da API.
- */
-async function request<T>(
-  endpoint: string,
-  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
-  body?: any,
+export async function apiRequest(
+  method: string,
+  url: string, // url agora é o PATH da API, ex: /auth/login
+  data?: unknown,
   isFormData: boolean = false
-): Promise<T> {
+): Promise<Response> {
   const { token } = useAuthStore.getState();
-  const headers: HeadersInit = {};
+  const fullApiUrl = getApiUrl(url); // Constrói a URL completa
+
+  const headers: Record<string, string> = {};
+
+  if (!isFormData && data) {
+    headers['Content-Type'] = 'application/json';
+  }
 
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const config: RequestInit = {
-    method,
-    headers,
-  };
-
-  if (body) {
-    if (isFormData) {
-      // Para FormData, o browser define o 'Content-Type' com o boundary correto.
-      config.body = body;
-    } else {
-      headers['Content-Type'] = 'application/json';
-      config.body = JSON.stringify(body);
-    }
+  let body;
+  if (isFormData && data instanceof FormData) {
+    body = data;
+  } else if (data) {
+    body = JSON.stringify(data);
+  } else {
+    body = undefined;
   }
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
-  return handleApiResponse<T>(response);
+  const response = await fetch(fullApiUrl, { // Usa fullApiUrl
+    method,
+    headers,
+    body,
+  });
+
+  if (!response.ok) {
+    let errorMessage;
+    try {
+      const errorPayload = await response.json();
+      if (errorPayload && typeof errorPayload === 'object') {
+        if (errorPayload.error && typeof errorPayload.error === 'string' && errorPayload.error.trim() !== '') {
+          errorMessage = errorPayload.error;
+        } else if (errorPayload.message && typeof errorPayload.message === 'string' && errorPayload.message.trim() !== '') {
+          errorMessage = errorPayload.message;
+        }
+      }
+    } catch (e) {
+      try {
+        const errorText = await response.text();
+        if (errorText && errorText.trim() !== '') {
+          errorMessage = errorText;
+        }
+      } catch (textError) {}
+    }
+
+    if (!errorMessage) {
+      errorMessage = `API Error: ${response.status} ${response.statusText || ''}`.trim();
+    }
+    throw new Error(errorMessage);
+  }
+
+  return response;
 }
 
-// Objeto singleton exportado com métodos fáceis de usar para a API.
-export const api = {
-  get: <T>(endpoint: string) => 
-    request<T>(endpoint, 'GET'),
-    
-  post: <T>(endpoint: string, data: any) => 
-    request<T>(endpoint, 'POST', data),
+export async function uploadFile(
+  url: string, // url agora é o PATH da API, ex: /creatives
+  file: File,
+  additionalData?: Record<string, string>,
+  method: string = 'POST'
+): Promise<Response> {
+  const { token } = useAuthStore.getState();
+  const fullApiUrl = getApiUrl(url); // Constrói a URL completa
 
-  put: <T>(endpoint: string, data: any) => 
-    request<T>(endpoint, 'PUT', data),
+  const formData = new FormData();
+  formData.append('file', file); 
 
-  patch: <T>(endpoint: string, data: any) => 
-    request<T>(endpoint, 'PATCH', data),
-    
-  delete: <T>(endpoint: string) => 
-    request<T>(endpoint, 'DELETE'),
+  if (additionalData) {
+    Object.entries(additionalData).forEach(([key, value]) => {
+      formData.append(key, value);
+    });
+  }
 
-  /**
-   * Realiza o upload de um arquivo para um endpoint da API.
-   * @param endpoint O caminho do endpoint (ex: '/creatives/upload').
-   * @param file O arquivo a ser enviado.
-   * @param additionalData Dados adicionais a serem enviados junto com o arquivo.
-   * @returns Uma promessa que resolve para os dados da API.
-   */
-  upload: <T>(endpoint: string, file: File, additionalData?: Record<string, string>): Promise<T> => {
-    const formData = new FormData();
-    formData.append('file', file);
-    
-    if (additionalData) {
-      for (const key in additionalData) {
-        formData.append(key, additionalData[key]);
+  const headers: Record<string, string> = {};
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const response = await fetch(fullApiUrl, { // Usa fullApiUrl
+    method: method,
+    headers,
+    body: formData,
+  });
+
+  if (!response.ok) {
+    let errorMessage;
+    try {
+      const errorPayload = await response.json();
+      if (errorPayload && typeof errorPayload === 'object') {
+        if (errorPayload.error && typeof errorPayload.error === 'string' && errorPayload.error.trim() !== '') {
+          errorMessage = errorPayload.error;
+        } else if (errorPayload.message && typeof errorPayload.message === 'string' && errorPayload.message.trim() !== '') {
+          errorMessage = errorPayload.message;
+        }
       }
+    } catch (e) {
+      try {
+        const errorText = await response.text();
+        if (errorText && errorText.trim() !== '') {
+          errorMessage = errorText;
+        }
+      } catch (textError) {}
     }
-    
-    return request<T>(endpoint, 'POST', formData, true);
-  },
-};
+
+    if (!errorMessage) {
+      errorMessage = `Upload Error: ${response.status} ${response.statusText || ''}`.trim();
+    }
+    throw new Error(errorMessage);
+  }
+
+  return response;
+}
