@@ -1,4 +1,3 @@
-// usbmkt/mktv2/MKTV2-mktv5/server/index.ts
 import express, { Request, Response, NextFunction } from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
@@ -20,27 +19,25 @@ export const io = new Server(server, {
 
 app.use(cors());
 
-// Registra as rotas da API
 registerRoutes(app);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Servir os arquivos estáticos do cliente (Vite build output)
 const clientDistPath = path.join(__dirname, '..', 'dist', 'public');
 app.use(express.static(clientDistPath));
 
-// Servir o index.html para todas as outras rotas (para o React Router funcionar)
-app.get('*', (req: Request, res: Response) => {
-  if (!req.path.startsWith('/api/')) {
-    res.sendFile(path.join(clientDistPath, 'index.html'));
+app.get('*', (req: Request, res: Response, next: NextFunction) => {
+  if (req.path.startsWith('/api/')) {
+    return next();
   }
+  res.sendFile(path.join(clientDistPath, 'index.html'));
 });
 
 io.on('connection', (socket) => {
   logger.info('A user connected via WebSocket');
   
-  socket.on('join_user_room', (userId) => {
+  socket.on('join_user_room', (userId: string | number) => {
     socket.join(`user_${userId}`);
     logger.info(`Socket ${socket.id} joined room for user ${userId}`);
   });
