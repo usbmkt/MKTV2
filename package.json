@@ -7,7 +7,7 @@
     "dev": "npm run dev:css -- --watch & tsx --watch server/index.ts",
     "dev:css": "tailwindcss -i ./client/src/index.css -o ./client/dist/output.css",
     "build:css": "tailwindcss -i ./client/src/index.css -o ./dist/public/output.css --minify",
-    "build:client": "esbuild client/src/main.tsx --bundle --outdir=dist/public --platform=browser --format=esm --splitting --loader:.png=file --loader:.svg=file --jsx=automatic --minify --sourcemap",
+    "build:client": "esbuild client/src/main.tsx --bundle --outdir=dist/public --platform=browser --format=esm --splitting --loader:.png=file --loader:.svg=file --jsx=automatic --minify --sourcemap --define:import.meta.env.VITE_FORCE_AUTH_BYPASS='\"false\"' --define:import.meta.env.VITE_API_URL='\"\"'",
     "build:server": "esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "build": "rm -rf dist && mkdir -p dist/public && cp client/index.html dist/public/ && npm run build:css && npm run build:client && npm run build:server",
     "start": "NODE_ENV=production node dist/index.js",
