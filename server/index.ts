@@ -27,7 +27,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Servir os arquivos estáticos do cliente (Vite build output)
-const clientDistPath = path.join(__dirname, '..', 'client', 'dist');
+const clientDistPath = path.join(__dirname, '..', 'dist', 'public');
 app.use(express.static(clientDistPath));
 
 // Servir o index.html para todas as outras rotas (para o React Router funcionar)

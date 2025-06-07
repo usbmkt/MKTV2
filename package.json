@@ -5,15 +5,15 @@
   "main": "dist/index.js",
   "type": "module",
   "scripts": {
-    "dev": "NODE_ENV=development tsx watch server/index.ts",
+    "dev": "NODE_ENV=development npx tsx watch server/index.ts",
     "start": "node dist/index.js",
     "build": "npm run build:server && npm run build:client",
     "build:client": "cd client && npm install && npm run build",
-    "build:server": "tsc -p tsconfig.server.json",
-    "db:generate": "drizzle-kit generate:pg",
-    "db:migrate": "tsx migrate-deploy.ts",
+    "build:server": "node_modules/.bin/tsc -p tsconfig.server.json",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "npx tsx migrate-deploy.ts",
     "db:studio": "drizzle-kit studio",
-    "migrate:deploy": "tsx migrate-deploy.ts",
+    "migrate:deploy": "npx tsx migrate-deploy.ts",
     "init:db": "node scripts/init-db.js",
     "create:admin": "node create-admin.js"
   },
@@ -23,14 +23,17 @@
   "dependencies": {
     "@google/generative-ai": "^0.12.0",
     "@hapi/boom": "^10.0.1",
-    "@neondatabase/serverless": "^0.9.1",
     "@radix-ui/react-slot": "^1.0.2",
+    "@replit/vite-plugin-cartographer": "^0.2.7",
+    "@supabase/supabase-js": "^2.39.0",
+    "@tailwindcss/typography": "^0.5.16",
     "@types/bcrypt": "^5.0.2",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/jsonwebtoken": "^9.0.6",
     "@types/multer": "^1.4.11",
     "@types/pg": "^8.11.6",
+    "@vitejs/plugin-react": "^4.5.1",
     "@whiskeysockets/baileys": "^6.7.2",
     "bcrypt": "^5.1.1",
     "clsx": "^2.1.1",
@@ -43,8 +46,13 @@
     "multer": "^1.4.5-lts.1",
     "pg": "^8.11.5",
     "pino": "^9.1.0",
+    "postgres": "^3.4.3",
     "qrcode": "^1.5.3",
     "socket.io": "^4.7.5",
+    "tailwindcss": "^4.1.8",
+    "tailwindcss-animate": "^1.0.7",
+    "typescript": "^5.4.5",
+    "vite": "^6.3.5",
     "zod": "^3.23.8"
   },
   "devDependencies": {
@@ -52,7 +60,6 @@
     "@types/qrcode": "^1.5.5",
     "drizzle-kit": "^0.21.4",
     "pino-pretty": "^11.0.0",
-    "tsx": "^4.10.2",
-    "typescript": "^5.4.5"
+    "tsx": "^4.10.2"
   }
 }

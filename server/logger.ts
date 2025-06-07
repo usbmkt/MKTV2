@@ -1,9 +1,9 @@
 // server/logger.ts
-import pino from 'pino';
+import Pino from 'pino';
 
 const isDevelopment = process.env.NODE_ENV === 'development';
 
-export const logger = pino({
+export const logger = Pino({
   level: isDevelopment ? 'trace' : 'info',
   ...(isDevelopment && {
     transport: {

@@ -1,30 +1,34 @@
-// migrate-deploy.ts
-import { drizzle } from 'drizzle-orm/neon-http';
-import { neon } from '@neondatabase/serverless';
-import { migrate } from 'drizzle-orm/neon-http/migrator';
-import * as schema from './shared/schema.js';
-import 'dotenv/config';
+import { drizzle } from 'drizzle-orm/postgres-js';
+import { migrate } from 'drizzle-orm/postgres-js/migrator';
+import postgres from 'postgres';
+import { config } from './server/config.js';
 
-console.log('Iniciando script de migração no deploy...');
+const connectionString = config.DATABASE_URL;
 
-const dbUrl = process.env.DATABASE_URL;
-if (!dbUrl) {
-  throw new Error('DATABASE_URL não definida nas variáveis de ambiente');
+if (!connectionString) {
+  console.error('DATABASE_URL is not defined');
+  process.exit(1);
 }
 
-const sql = neon(dbUrl);
-const db = drizzle(sql, { schema, logger: false });
+const client = postgres(connectionString, {
+  max: 1,
+  ssl: 'require'
+});
 
-async function runMigrations() {
+const db = drizzle(client);
+
+async function main() {
+  console.log('Running migrations...');
+  
   try {
-    console.log('Conectado ao banco de dados. Aplicando migrações...');
     await migrate(db, { migrationsFolder: './migrations' });
-    console.log('Migrações concluídas com sucesso.');
-    console.log('Conexão com o banco de dados fechada.');
+    console.log('Migrations completed successfully');
   } catch (error) {
-    console.error('Erro durante a migração:', error);
+    console.error('Migration failed:', error);
     process.exit(1);
+  } finally {
+    await client.end();
   }
 }
 
-runMigrations();
+main();
