@@ -1,137 +1,94 @@
-// client/src/lib/api.ts
 import { useAuthStore } from './auth';
 
-// Helper para construir a URL completa da API
-function getApiUrl(path: string): string {
-  const apiUrlFromEnv = import.meta.env.VITE_API_URL;
-  if (apiUrlFromEnv && typeof apiUrlFromEnv === 'string' && apiUrlFromEnv.trim() !== '') {
-    // Remove barras extras e junta
-    const base = apiUrlFromEnv.replace(/\/$/, '');
-    const endpoint = path.startsWith('/') ? path : `/${path}`;
-    return `${base}${endpoint}`;
+const API_BASE_URL = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
+
+async function handleApiResponse<T>(response: Response): Promise<T> {
+  if (response.status === 204) return null as T;
+
+  let payload;
+  try {
+    payload = await response.json();
+  } catch (e) {
+    const textPayload = await response.text();
+    payload = { error: textPayload || response.statusText };
   }
-  // Se VITE_API_URL não estiver definida, assume que a URL já é completa ou relativa à origem (para proxy)
-  return path;
+  
+  if (!response.ok) {
+    const errorMessage = payload?.error || payload?.message || `API Error: ${response.status}`;
+    throw new Error(errorMessage);
+  }
+
+  return payload as T;
+}
+
+// ✅ CORREÇÃO: Função dedicada para upload de arquivos
+export async function uploadFile<T>(
+    endpoint: string,
+    file: File,
+    additionalData: Record<string, any> = {},
+    method: 'POST' | 'PUT' = 'POST'
+): Promise<Response> {
+    const { token } = useAuthStore.getState();
+    const headers: HeadersInit = {};
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    // Adiciona outros campos ao FormData
+    for (const key in additionalData) {
+        if (additionalData[key] !== undefined && additionalData[key] !== null) {
+            // Converte arrays para múltiplos campos se necessário (para compatibilidade com multer)
+            if (Array.isArray(additionalData[key])) {
+                additionalData[key].forEach((item: string) => {
+                    formData.append(`${key}[]`, item);
+                });
+            } else {
+                formData.append(key, String(additionalData[key]));
+            }
+        }
+    }
+
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        method,
+        headers,
+        body: formData,
+    });
+    
+    // Não usamos handleApiResponse aqui porque o upload pode não retornar JSON
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: `HTTP error! status: ${response.statusText}` }));
+        throw new Error(errorData.message || 'Erro no upload do arquivo');
+    }
+    
+    return response; // Retorna a resposta bruta para ser processada
 }
 
 export async function apiRequest(
-  method: string,
-  url: string, // url agora é o PATH da API, ex: /auth/login
-  data?: unknown,
-  isFormData: boolean = false
+  endpoint: string,
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+  body?: unknown,
+  isFormData: boolean = false, // Mantido por compatibilidade
 ): Promise<Response> {
   const { token } = useAuthStore.getState();
-  const fullApiUrl = getApiUrl(url); // Constrói a URL completa
-
-  const headers: Record<string, string> = {};
-
-  if (!isFormData && data) {
-    headers['Content-Type'] = 'application/json';
-  }
+  const headers: HeadersInit = {};
 
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  let body;
-  if (isFormData && data instanceof FormData) {
-    body = data;
-  } else if (data) {
-    body = JSON.stringify(data);
-  } else {
-    body = undefined;
-  }
+  const config: RequestInit = { method, headers };
 
-  const response = await fetch(fullApiUrl, { // Usa fullApiUrl
-    method,
-    headers,
-    body,
-  });
-
-  if (!response.ok) {
-    let errorMessage;
-    try {
-      const errorPayload = await response.json();
-      if (errorPayload && typeof errorPayload === 'object') {
-        if (errorPayload.error && typeof errorPayload.error === 'string' && errorPayload.error.trim() !== '') {
-          errorMessage = errorPayload.error;
-        } else if (errorPayload.message && typeof errorPayload.message === 'string' && errorPayload.message.trim() !== '') {
-          errorMessage = errorPayload.message;
-        }
-      }
-    } catch (e) {
-      try {
-        const errorText = await response.text();
-        if (errorText && errorText.trim() !== '') {
-          errorMessage = errorText;
-        }
-      } catch (textError) {}
+  if (body) {
+    if (isFormData) { // Se for formData, o browser cuida do Content-Type
+      config.body = body as FormData;
+    } else {
+      headers['Content-Type'] = 'application/json';
+      config.body = JSON.stringify(body);
     }
-
-    if (!errorMessage) {
-      errorMessage = `API Error: ${response.status} ${response.statusText || ''}`.trim();
-    }
-    throw new Error(errorMessage);
   }
 
-  return response;
-}
-
-export async function uploadFile(
-  url: string, // url agora é o PATH da API, ex: /creatives
-  file: File,
-  additionalData?: Record<string, string>,
-  method: string = 'POST'
-): Promise<Response> {
-  const { token } = useAuthStore.getState();
-  const fullApiUrl = getApiUrl(url); // Constrói a URL completa
-
-  const formData = new FormData();
-  formData.append('file', file); 
-
-  if (additionalData) {
-    Object.entries(additionalData).forEach(([key, value]) => {
-      formData.append(key, value);
-    });
-  }
-
-  const headers: Record<string, string> = {};
-
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-
-  const response = await fetch(fullApiUrl, { // Usa fullApiUrl
-    method: method,
-    headers,
-    body: formData,
-  });
-
-  if (!response.ok) {
-    let errorMessage;
-    try {
-      const errorPayload = await response.json();
-      if (errorPayload && typeof errorPayload === 'object') {
-        if (errorPayload.error && typeof errorPayload.error === 'string' && errorPayload.error.trim() !== '') {
-          errorMessage = errorPayload.error;
-        } else if (errorPayload.message && typeof errorPayload.message === 'string' && errorPayload.message.trim() !== '') {
-          errorMessage = errorPayload.message;
-        }
-      }
-    } catch (e) {
-      try {
-        const errorText = await response.text();
-        if (errorText && errorText.trim() !== '') {
-          errorMessage = errorText;
-        }
-      } catch (textError) {}
-    }
-
-    if (!errorMessage) {
-      errorMessage = `Upload Error: ${response.status} ${response.statusText || ''}`.trim();
-    }
-    throw new Error(errorMessage);
-  }
-
-  return response;
+  return fetch(`${API_BASE_URL}${endpoint}`, config);
 }
