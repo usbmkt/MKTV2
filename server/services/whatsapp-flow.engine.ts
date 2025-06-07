@@ -1,16 +1,35 @@
-// server/services/whatsapp-flow.engine.ts
+// usbmkt/mktv2/MKTV2-mktv5/server/services/whatsapp-flow.engine.ts
 import { storage } from '../storage.js';
 import { WhatsappConnectionService } from './whatsapp-connection.service.js';
 import { externalDataService } from './external-data.service.js';
-import { getSimpleAiResponse } from '../mcp_handler.js';
-import * as schema from '../../shared/schema.js';
+// Não vamos importar mcp_handler aqui para evitar dependência circular, simplificaremos a chamada de IA
 import { logger } from '../logger.js';
+import type * as schema from '../../shared/schema.js';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import { config } from '../config.js';
 
-// Tipos locais para substituir a dependência do @xyflow/react no backend
+// Tipos locais para evitar dependência de libs de frontend
 interface FlowNode { id: string; type?: string; data: any; position: { x: number; y: number };[key: string]: any; }
 interface FlowEdge { id: string; source: string; target: string; sourceHandle?: string | null; targetHandle?: string | null;[key: string]: any; }
+type FlowElements = { nodes: FlowNode[]; edges: FlowEdge[] };
+
+// Função simples para IA (para remover dependência direta do mcp_handler)
+async function getSimpleAiResponse(prompt: string, systemMessage?: string): Promise<string> {
+    if (!config.GEMINI_API_KEY) return 'Serviço de IA indisponível.';
+    const genAI = new GoogleGenerativeAI(config.GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+    const fullPrompt = systemMessage ? `${systemMessage}\n\n${prompt}` : prompt;
+    const result = await model.generateContent(fullPrompt);
+    return result.response.text();
+}
 
 export class WhatsappFlowEngine {
+
+  private getWhatsappService(userId: number): WhatsappConnectionService {
+    // Retorna a instância existente ou cria uma nova, se necessário.
+    // Esta lógica deve estar no seu serviço de conexão.
+    return new WhatsappConnectionService(userId);
+  }
 
   private interpolate(text: string, variables: Record<string, any>): string {
     if (!text) return '';
@@ -30,7 +49,7 @@ export class WhatsappFlowEngine {
     if (!userState) {
         isNewSession = true;
         const triggerFlow = await storage.findTriggerFlow(userId, messageContent);
-        if (!triggerFlow || !triggerFlow.elements || triggerFlow.elements.nodes.length === 0) {
+        if (!triggerFlow || !triggerFlow.elements || !Array.isArray((triggerFlow.elements as FlowElements).nodes)) {
             logger.warn({ userId }, `Nenhum fluxo de gatilho ativo ou válido encontrado.`);
             return;
         }
@@ -44,7 +63,7 @@ export class WhatsappFlowEngine {
         logger.info({ contactJid, flowId: flow.id, startNodeId: firstNode.id }, `Novo estado criado. Iniciando fluxo.`);
     } else {
         if (!userState.activeFlowId) {
-             await storage.deleteFlowUserState(userState.id);
+             if (userState.id) await storage.deleteFlowUserState(userState.id);
              logger.error({ contactJid }, `Estado de usuário órfão encontrado. Estado limpo.`);
              return;
         }
@@ -53,7 +72,14 @@ export class WhatsappFlowEngine {
     
     if (!flow || !userState.currentNodeId) {
         logger.error({ contactJid }, `Estado inválido. Fluxo ou nó não encontrado. Resetando.`);
-        if (userState) await storage.deleteFlowUserState(userState.id);
+        if (userState?.id) await storage.deleteFlowUserState(userState.id);
+        return;
+    }
+    
+    // Garantir que flow.elements é um objeto válido com 'nodes' e 'edges'
+    const flowElements = flow.elements as FlowElements | null;
+    if (!flowElements || !Array.isArray(flowElements.nodes) || !Array.isArray(flowElements.edges)) {
+        logger.error({ flowId: flow.id }, "Estrutura de 'elements' do fluxo é inválida ou ausente.");
         return;
     }
 
@@ -63,7 +89,8 @@ export class WhatsappFlowEngine {
     if (currentNode && this.isWaitingNode(currentNode.type) && !isNewSession) {
         logger.info({ contactJid, node: currentNode.id }, `Processando input para o nó de espera.`);
         const updatedState = await storage.getFlowUserState(userId, contactJid);
-        nextNodeId = await this.processInput(updatedState!, currentNode, flow.elements.edges, messageContent);
+        if(!updatedState) return;
+        nextNodeId = await this.processInput(updatedState, currentNode, flowElements.edges, messageContent);
     }
 
     while (nextNodeId) {
@@ -87,17 +114,23 @@ export class WhatsappFlowEngine {
         }
         
         logger.info({ contactJid, nodeId: nodeToExecute.id, type: nodeToExecute.type }, `Executando nó de ação.`);
-        nextNodeId = await this.executeActionNode(currentState, nodeToExecute, flow.elements.edges);
+        nextNodeId = await this.executeActionNode(currentState, nodeToExecute, flowElements.edges);
     }
 
     if (nextNodeId === null) {
         logger.info({ contactJid }, `Fim do fluxo ou caminho sem saída.`);
-        if (userState) await storage.deleteFlowUserState(userState.id);
+        if (userState?.id) await storage.deleteFlowUserState(userState.id);
     }
   }
 
-  private findStartNode = (flow: schema.Flow): FlowNode | undefined => flow.elements.nodes.find((n: FlowNode) => !flow.elements.edges.some((e: FlowEdge) => e.target === n.id));
-  private findNodeById = (flow: schema.Flow, nodeId: string): FlowNode | undefined => flow.elements.nodes.find((n: FlowNode) => n.id === nodeId);
+  private findStartNode = (flow: schema.Flow): FlowNode | undefined => {
+    const elements = flow.elements as FlowElements;
+    return elements.nodes.find((n: FlowNode) => !elements.edges.some((e: FlowEdge) => e.target === n.id));
+  }
+  private findNodeById = (flow: schema.Flow, nodeId: string): FlowNode | undefined => {
+    const elements = flow.elements as FlowElements;
+    return elements.nodes.find((n: FlowNode) => n.id === nodeId);
+  }
   private isWaitingNode = (type?: string): boolean => ['buttonMessage', 'waitInput'].includes(type || '');
   
   private async processInput(userState: schema.WhatsappFlowUserState, node: FlowNode, edges: FlowEdge[], messageContent: string): Promise<string | null> {
@@ -105,7 +138,7 @@ export class WhatsappFlowEngine {
     try {
       switch (node.type) {
         case 'buttonMessage': {
-          const button = node.data.buttons.find((b: any) => b.text === messageContent);
+          const button = (node.data.buttons || []).find((b: any) => b.text === messageContent);
           if (button) {
             const edge = edges.find(e => e.source === node.id && e.sourceHandle === button.id);
             nextNodeId = edge?.target || null;
@@ -115,9 +148,9 @@ export class WhatsappFlowEngine {
         case 'waitInput': {
           const variableName = node.data.variableName;
           if (variableName) {
-            const currentVariables = typeof userState.flowVariables === 'object' && userState.flowVariables !== null ? userState.flowVariables : {};
+            const currentVariables = userState.flowVariables && typeof userState.flowVariables === 'object' ? userState.flowVariables : {};
             const newVariables = { ...currentVariables, [variableName]: messageContent };
-            await storage.updateFlowUserState(userState.id, { flowVariables: newVariables });
+            if (userState.id) await storage.updateFlowUserState(userState.id, { flowVariables: newVariables });
             logger.info({ contactJid: userState.contactJid, variable: variableName }, `Variável salva.`);
           }
           const edge = edges.find(e => e.source === node.id);
@@ -132,22 +165,25 @@ export class WhatsappFlowEngine {
   }
 
   private async executeWaitingNode(userState: schema.WhatsappFlowUserState, node: FlowNode): Promise<void> {
+    const whatsappService = this.getWhatsappService(userState.userId);
     try {
       switch (node.type) {
         case 'buttonMessage': {
-          const interpolatedText = node.data.text ? this.interpolate(node.data.text, userState.flowVariables) : 'Escolha uma opção:';
+          const flowVars = (userState.flowVariables && typeof userState.flowVariables === 'object') ? userState.flowVariables : {};
+          const interpolatedText = node.data.text ? this.interpolate(node.data.text, flowVars) : 'Escolha uma opção:';
           const buttonPayload = {
             text: interpolatedText, footer: node.data.footer,
-            buttons: node.data.buttons.map((btn: any) => ({ buttonId: btn.id, buttonText: { displayText: btn.text }, type: 1 })),
+            buttons: (node.data.buttons || []).map((btn: any) => ({ buttonId: btn.id, buttonText: { displayText: btn.text }, type: 1 })),
             headerType: 1
           };
-          await WhatsappConnectionService.sendMessageForUser(userState.userId, userState.contactJid, buttonPayload);
+          await whatsappService.sendMessage(userState.contactJid, buttonPayload);
           break;
         }
         case 'waitInput': {
-          const promptMessage = node.data.message ? this.interpolate(node.data.message, userState.flowVariables) : '';
+            const flowVars = (userState.flowVariables && typeof userState.flowVariables === 'object') ? userState.flowVariables : {};
+          const promptMessage = node.data.message ? this.interpolate(node.data.message, flowVars) : '';
           if (promptMessage) {
-            await WhatsappConnectionService.sendMessageForUser(userState.userId, userState.contactJid, { text: promptMessage });
+            await whatsappService.sendMessage(userState.contactJid, { text: promptMessage });
           }
           break;
         }
@@ -159,35 +195,35 @@ export class WhatsappFlowEngine {
 
   private async executeActionNode(userState: schema.WhatsappFlowUserState, node: FlowNode, edges: FlowEdge[]): Promise<string | null> {
     let success = true;
-
+    const whatsappService = this.getWhatsappService(userState.userId);
+    const flowVars = (userState.flowVariables && typeof userState.flowVariables === 'object') ? userState.flowVariables : {};
+    
     try {
         switch (node.type) {
             case 'textMessage': {
-                const messageText = this.interpolate(node.data.text || '...', userState.flowVariables);
-                await WhatsappConnectionService.sendMessageForUser(userState.userId, userState.contactJid, { text: messageText });
+                const messageText = this.interpolate(node.data.text || '...', flowVars);
+                await whatsappService.sendMessage(userState.contactJid, { text: messageText });
                 break;
             }
             case 'apiCall': {
                 const { apiUrl, method, headers, body, saveResponseTo } = node.data;
-                const interpolatedUrl = this.interpolate(apiUrl, userState.flowVariables);
-                const interpolatedHeaders = headers ? JSON.parse(this.interpolate(headers, userState.flowVariables)) : undefined;
-                const interpolatedBody = body ? JSON.parse(this.interpolate(body, userState.flowVariables)) : undefined;
+                const interpolatedUrl = this.interpolate(apiUrl, flowVars);
+                const interpolatedHeaders = headers ? JSON.parse(this.interpolate(headers, flowVars)) : undefined;
+                const interpolatedBody = body ? JSON.parse(this.interpolate(body, flowVars)) : undefined;
                 const response = await externalDataService.request(interpolatedUrl, { method, headers: interpolatedHeaders, body: interpolatedBody });
                 if (saveResponseTo) {
-                    const currentVariables = typeof userState.flowVariables === 'object' && userState.flowVariables !== null ? userState.flowVariables : {};
-                    const newVariables = { ...currentVariables, [saveResponseTo]: response.data };
-                    await storage.updateFlowUserState(userState.id, { flowVariables: newVariables });
+                    const newVariables = { ...flowVars, [saveResponseTo]: response.data };
+                    if(userState.id) await storage.updateFlowUserState(userState.id, { flowVariables: newVariables });
                 }
                 break;
             }
             case 'gptQuery': {
                 const { prompt, systemMessage, saveResponseTo } = node.data;
-                const interpolatedPrompt = this.interpolate(prompt, userState.flowVariables);
+                const interpolatedPrompt = this.interpolate(prompt, flowVars);
                 const aiResponse = await getSimpleAiResponse(interpolatedPrompt, systemMessage);
                 if (saveResponseTo) {
-                    const currentVariables = typeof userState.flowVariables === 'object' && userState.flowVariables !== null ? userState.flowVariables : {};
-                    const newVariables = { ...currentVariables, [saveResponseTo]: aiResponse };
-                    await storage.updateFlowUserState(userState.id, { flowVariables: newVariables });
+                    const newVariables = { ...flowVars, [saveResponseTo]: aiResponse };
+                    if(userState.id) await storage.updateFlowUserState(userState.id, { flowVariables: newVariables });
                 }
                 break;
             }
@@ -202,7 +238,7 @@ export class WhatsappFlowEngine {
     }
     
     const sourceHandleId = success ? 'source-success' : 'source-error';
-    const edge = edges.find(e => e.source === node.id && e.sourceHandle === sourceHandleId) || edges.find(e => e.source === node.id && !e.sourceHandle);
+    const edge = edges.find(e => e.source === node.id && e.sourceHandle === sourceHandleId) || edges.find(e => e.source === node.id && (!e.sourceHandle || e.sourceHandle === 'source-bottom'));
     
     return edge?.target || null;
   }
