@@ -1,4 +1,5 @@
-// server/services/whatsapp-connection.service.ts
+// usbmkt/mktv2/MKTV2-mktv5/server/services/whatsapp-connection.service.ts
+
 import makeWASocket, { DisconnectReason, useMultiFileAuthState, type WAMessage, type SocketConfig } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import qrcode from 'qrcode';
@@ -53,7 +54,8 @@ export class WhatsappConnectionService {
             const { connection, lastDisconnect, qr } = update;
 
             if (qr) {
-                qrcode.toDataURL(qr, (err, url) => {
+                // Correção: Adicionado tipos explícitos para 'err' e 'url'
+                qrcode.toDataURL(qr, (err: Error | null | undefined, url: string | undefined) => {
                     if (err) {
                         logger.error(err, 'Failed to generate QR code');
                         this.updateStatus({ status: 'disconnected', error: 'Falha ao gerar QR Code.' });
@@ -99,7 +101,6 @@ export class WhatsappConnectionService {
                     });
                     io.to(`user_${this.userId}`).emit('new_message', savedMessage);
                     logger.info({ from: contactNumber, text: messageText }, 'Received a new message');
-                    // TODO: Hook to Flow Engine here
                 }
             }
         });
