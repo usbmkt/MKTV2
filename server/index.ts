@@ -4,7 +4,7 @@ dotenv.config();
 
 import express, { type Request, Response, NextFunction } from "express";
 import { RouterSetup } from "./routes"; 
-import { setupVite, serveStatic, log as serverLog } from "./vite"; 
+import { serveStatic, log as serverLog } from "./vite"; // A função serveStatic ainda é útil
 
 const app = express();
 app.use(express.json()); 
@@ -37,6 +37,7 @@ app.use((req, res, next) => {
 (async () => {
   try {
     const server = await RouterSetup.registerRoutes(app); 
+    
     app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
       console.error("[GLOBAL_ERROR_HANDLER] Erro capturado:", err.message, err.stack ? `\nStack: ${err.stack}` : '');
       const status = err.status || err.statusCode || 500;
@@ -49,16 +50,20 @@ app.use((req, res, next) => {
     });
 
     serverLog(`Environment: NODE_ENV=${process.env.NODE_ENV}, app.get("env")=${app.get("env")}`, 'server-init');
-    if (process.env.NODE_ENV === "development") {
-      serverLog(`[ViteDev] Configurando Vite em modo de desenvolvimento...`, 'server-init');
-      await setupVite(app, server); 
-    } else {
+    
+    // Em desenvolvimento, o script `npm run dev` rodará o `tailwindcss --watch` e `tsx --watch` separadamente.
+    // Em produção, servimos os arquivos estáticos que foram gerados no build.
+    if (process.env.NODE_ENV !== "development") {
       serverLog(`[StaticServing] Configurando para servir arquivos estáticos em produção...`, 'server-init');
       serveStatic(app); 
     }
+
     const port = process.env.PORT || 5000;
     server.listen({ port, host: "0.0.0.0", }, () => {
       serverLog(`Servidor HTTP iniciado e escutando na porta ${port} em modo ${process.env.NODE_ENV || 'development'}`, 'server-init');
+      if (process.env.NODE_ENV === "development") {
+        serverLog('Ambiente de desenvolvimento: execute "npm run dev:css" em outro terminal para compilar o CSS em tempo real.', 'server-init');
+      }
     });
   } catch (error) {
     console.error("Falha crítica ao iniciar o servidor:", error);
