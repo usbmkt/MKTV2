@@ -1,9 +1,9 @@
-// server/logger.ts
-import pino from 'pino'; // <-- CORREÇÃO: Importação padrão
+// usbmkt/mktv2/MKTV2-mktv5/server/logger.ts
+import pino from 'pino';
 
 const isDevelopment = process.env.NODE_ENV === 'development';
 
-export const logger = pino({ // <-- CORREÇÃO: Usando a variável importada
+export const logger = pino({
   level: isDevelopment ? 'trace' : 'info',
   ...(isDevelopment && {
     transport: {
